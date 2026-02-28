@@ -104,8 +104,8 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
     if (validTypes.includes(typeParam.toUpperCase())) {
       type = typeParam.toUpperCase() as 'BADGE' | 'COSMETIC' | 'LOOTBOX';
     } else {
-      return res.status(400).json({ 
-        message: `Invalid type parameter. Must be one of: BADGE, COSMETIC, LOOTBOX, or ALL` 
+      return res.status(400).json({
+        success: false, message: `Invalid type parameter. Must be one of: BADGE, COSMETIC, LOOTBOX, or ALL`
       });
     }
   }
@@ -216,6 +216,7 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
       user: user
     });
     return res.status(401).json({
+      success: false,
       message: 'Unauthorized',
       debug: 'User ID not found in token',
       userObject: user
@@ -346,8 +347,9 @@ router.get('/my-listings', authMiddleware, asyncHandler(async (req: Request, res
   const userId = user?.sub || user?.userId || user?.id;
   
   if (!userId) {
-    return res.status(401).json({ 
-      message: 'Unauthorized', 
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized',
       debug: 'User ID not found in token',
     });
   }
@@ -440,8 +442,9 @@ router.get('/available-nfts', authMiddleware, asyncHandler(async (req: Request, 
   const userId = user?.sub || user?.userId || user?.id;
   
   if (!userId) {
-    return res.status(401).json({ 
-      message: 'Unauthorized', 
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized',
       debug: 'User ID not found in token',
     });
   }
@@ -527,7 +530,7 @@ router.get('/available-nfts', authMiddleware, asyncHandler(async (req: Request, 
 router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const request: CreateListingRequest = {
@@ -536,7 +539,7 @@ router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: 
   };
 
   if (!request.nftId || !request.amount || request.amount <= 0) {
-    return res.status(400).json({ message: 'nftId ve amount (pozitif sayı) gerekli' });
+    return res.status(400).json({ success: false, message: 'nftId ve amount (pozitif sayı) gerekli' });
   }
 
   const listing = await marketplaceService.createListing(userId, request);
@@ -613,7 +616,7 @@ router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: 
 router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const listingId = req.params.listingId;
@@ -622,7 +625,7 @@ router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req
   };
 
   if (!request.amount || request.amount <= 0) {
-    return res.status(400).json({ message: 'amount pozitif bir sayı olmalı' });
+    return res.status(400).json({ success: false, message: 'amount pozitif bir sayı olmalı' });
   }
 
   const listing = await marketplaceService.updateListingPrice(userId, listingId, request);
@@ -660,7 +663,7 @@ router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req
 router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const listingId = req.params.listingId;
@@ -727,7 +730,7 @@ router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: R
 router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const nftId = req.params.nftId;
@@ -824,7 +827,7 @@ router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res
 router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const nftId = req.params.nftId;
@@ -906,7 +909,7 @@ router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Reque
 router.post('/buy', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const request: BuyNFTRequest = {
@@ -914,7 +917,7 @@ router.post('/buy', authMiddleware, asyncHandler(async (req: Request, res: Respo
   };
 
   if (!request.listingId) {
-    return res.status(400).json({ message: 'listingId gerekli' });
+    return res.status(400).json({ success: false, message: 'listingId gerekli' });
   }
 
   const result = await marketplaceService.buyNFT(userId, request);

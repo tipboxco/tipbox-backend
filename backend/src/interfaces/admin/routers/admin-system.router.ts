@@ -91,7 +91,7 @@ router.post(
   validateBody(AdminCreateActionTypeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminCreateActionTypeInput;
 
@@ -141,7 +141,7 @@ router.patch(
   validateBody(AdminUpdateActionTypeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUpdateActionTypeInput;
@@ -181,7 +181,7 @@ router.delete(
   '/action-types/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -267,7 +267,7 @@ router.patch(
   validateBody(AdminUpdateSystemConfigSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminUpdateSystemConfigInput;
 

@@ -89,7 +89,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const cursor = req.query.cursor as string | undefined;
@@ -97,7 +97,7 @@ router.get(
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await exploreService.getHottestPosts(String(userId), { cursor, limit, search });
@@ -230,7 +230,7 @@ router.get(
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await exploreService.getWhatsNewsEvents({ cursor, limit, search });
@@ -304,7 +304,7 @@ router.get(
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await exploreService.getNewBrands({ cursor, limit, search });
@@ -370,7 +370,7 @@ router.get(
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await exploreService.getNewProducts({ cursor, limit });
@@ -460,7 +460,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const q = req.query.q as string | undefined;
@@ -469,15 +469,15 @@ router.get(
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
     if (!q || typeof q !== 'string' || q.trim().length === 0) {
-      return res.status(400).json({ message: 'Query parameter (q) is required' });
+      return res.status(400).json({ success: false, message: 'Query parameter (q) is required' });
     }
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     if (type !== 'hottest' && type !== 'news') {
-      return res.status(400).json({ message: 'Type must be either "hottest" or "news"' });
+      return res.status(400).json({ success: false, message: 'Type must be either "hottest" or "news"' });
     }
 
     const result = await exploreService.searchExplore(String(userId), q.trim(), { type, cursor, limit });

@@ -316,7 +316,7 @@ router.post(
   validateBody(AdminCreateNewsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminCreateNewsInput;
 
@@ -358,7 +358,7 @@ router.patch(
   validateBody(AdminUpdateNewsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUpdateNewsInput;
@@ -400,7 +400,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -517,7 +517,7 @@ router.delete(
   '/comments/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 

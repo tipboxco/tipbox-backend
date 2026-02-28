@@ -282,7 +282,7 @@ router.patch(
   validateBody(AdminAdjustWalletBalanceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminAdjustWalletBalanceInput;
@@ -571,7 +571,7 @@ router.post(
   '/transactions/:id/retry',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -625,7 +625,7 @@ router.post(
   '/transactions/:id/refund',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 

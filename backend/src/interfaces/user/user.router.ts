@@ -194,10 +194,10 @@ const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefine
 router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
   const profile = await userService.getSelfUserProfile(String(userId));
-  if (!profile) return res.status(404).json({ message: 'User not found' });
+  if (!profile) return res.status(404).json({ success: false, message: 'User not found' });
   return res.json(profile);
 }));
 
@@ -271,7 +271,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Debug: Request bilgilerini logla
@@ -294,6 +294,7 @@ router.post(
         files: req.files,
       });
       return res.status(400).json({ 
+        success: false,
         message: 'Avatar dosyası gerekli',
         debug: {
           contentType: req.headers['content-type'],
@@ -335,6 +336,7 @@ router.post(
       const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
       if (!allowedExtensions.includes(fileExtension)) {
         return res.status(400).json({ 
+          success: false,
           message: 'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF, WebP ve HEIC formatları desteklenmektedir.' 
         });
       }
@@ -462,7 +464,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Debug: Request bilgilerini logla
@@ -485,6 +487,7 @@ router.post(
         files: req.files,
       });
       return res.status(400).json({ 
+        success: false,
         message: 'Banner dosyası gerekli',
         debug: {
           contentType: req.headers['content-type'],
@@ -526,6 +529,7 @@ router.post(
       const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
       if (!allowedExtensions.includes(fileExtension)) {
         return res.status(400).json({ 
+          success: false,
           message: 'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF, WebP ve HEIC formatları desteklenmektedir.' 
         });
       }
@@ -609,26 +613,26 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) {
     logger.warn('[updateProfile] Unauthorized request - no userId found');
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const body = req.body || {};
   logger.info('[updateProfile] Request received', { userId, bodyKeys: Object.keys(body) });
 
   if (body.name && body.name.trim().length < 2) {
-    return res.status(400).json({ message: 'Name must be at least 2 characters long' });
+    return res.status(400).json({ success: false, message: 'Name must be at least 2 characters long' });
   }
 
   if (body.biography && body.biography.length > 500) {
-    return res.status(400).json({ message: 'Biography can be at most 500 characters' });
+    return res.status(400).json({ success: false, message: 'Biography can be at most 500 characters' });
   }
 
   if (body.badge && !Array.isArray(body.badge)) {
-    return res.status(400).json({ message: 'Badge field must be an array' });
+    return res.status(400).json({ success: false, message: 'Badge field must be an array' });
   }
 
   if (body.badge && body.badge.length > 3) {
-    return res.status(400).json({ message: 'Maximum 3 badges can be selected' });
+    return res.status(400).json({ success: false, message: 'Maximum 3 badges can be selected' });
   }
 
   try {
@@ -719,13 +723,13 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
 router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const viewerId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!viewerId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!viewerId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
   const targetUserId = req.params.id;
-  if (!targetUserId) return res.status(400).json({ message: 'User id is required' });
+  if (!targetUserId) return res.status(400).json({ success: false, message: 'User id is required' });
 
   const profile = await userService.getUserProfileForViewer(String(viewerId), String(targetUserId));
-  if (!profile) return res.status(404).json({ message: 'User not found' });
+  if (!profile) return res.status(404).json({ success: false, message: 'User not found' });
   return res.json(profile);
 }));
 
@@ -867,7 +871,7 @@ router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
 router.get('/suggested', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
   // Query parameters
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -978,11 +982,11 @@ router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => 
 router.delete('/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.removeTrust(authUserId, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Record not found' });
+  if (!ok) return res.status(404).json({ success: false, message: 'Record not found' });
   return res.status(204).end();
 }));
 
@@ -1017,13 +1021,13 @@ router.delete('/trusts/:targetUserId', asyncHandler(async (req: Request, res: Re
 router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   
   const { targetUserId } = req.body || {};
   const id = String(authUserId);
 
   if (!targetUserId || typeof targetUserId !== 'string') {
-    return res.status(400).json({ message: 'targetUserId is required and must be a string' });
+    return res.status(400).json({ success: false, message: 'targetUserId is required and must be a string' });
   }
   
   await userService.addTrust(id, targetUserId);
@@ -1214,7 +1218,7 @@ async function handleAchievementClaim(req: Request, res: Response): Promise<void
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) {
-    res.status(401).json({ message: 'Unauthorized' });
+    res.status(401).json({ success: false, message: 'Unauthorized' });
     return;
   }
   const badgeId = String(req.params.badgeId || req.query.badgeId || '').trim();
@@ -1335,7 +1339,7 @@ async function handleBridgeClaim(req: Request, res: Response): Promise<void> {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) {
-    res.status(401).json({ message: 'Unauthorized' });
+    res.status(401).json({ success: false, message: 'Unauthorized' });
     return;
   }
   const badgeId = String(req.params.badgeId || req.query.badgeId || '').trim();
@@ -1524,49 +1528,49 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   
   // Validation: Email zorunlu ve kontrolü (undefined/null kontrolü önce)
   if (email === undefined || email === null) {
-    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ success: false, message: 'Email adresi zorunludur ve boş olamaz.' });
   }
   
   if (typeof email !== 'string') {
-    return res.status(400).json({ error: { message: 'Email adresi string olmalıdır.' } });
+    return res.status(400).json({ success: false, message: 'Email adresi string olmalıdır.' });
   }
   
   if (email === '') {
-    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ success: false, message: 'Email adresi zorunludur ve boş olamaz.' });
   }
   
   // Email format kontrolü
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: { message: 'Geçerli bir email adresi giriniz.' } });
+    return res.status(400).json({ success: false, message: 'Geçerli bir email adresi giriniz.' });
   }
   
   // Validation: DisplayName zorunlu ve kontrolü
   if (displayName === undefined || displayName === null) {
-    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ success: false, message: 'DisplayName zorunludur ve boş olamaz.' });
   }
   
   if (typeof displayName !== 'string') {
-    return res.status(400).json({ error: { message: 'DisplayName string olmalıdır.' } });
+    return res.status(400).json({ success: false, message: 'DisplayName string olmalıdır.' });
   }
   
   if (displayName === '') {
-    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ success: false, message: 'DisplayName zorunludur ve boş olamaz.' });
   }
   
   // DisplayName minLength kontrolü (OpenAPI: minLength: 2)
   if (displayName.length < 2) {
-    return res.status(400).json({ error: { message: 'DisplayName must be at least 2 characters long.' } });
+    return res.status(400).json({ success: false, message: 'DisplayName must be at least 2 characters long.' });
   }
   
   // DisplayName maxLength kontrolü (OpenAPI: maxLength: 50)
   if (displayName.length > 50) {
-    return res.status(400).json({ error: { message: 'DisplayName can be at most 50 characters long.' } });
+    return res.status(400).json({ success: false, message: 'DisplayName can be at most 50 characters long.' });
   }
   
   // Bio maxLength kontrolü (OpenAPI: maxLength: 500)
   if (bio !== undefined && bio !== null && typeof bio === 'string' && bio.length > 500) {
-    return res.status(400).json({ error: { message: 'Bio can be at most 500 characters long.' } });
+    return res.status(400).json({ success: false, message: 'Bio can be at most 500 characters long.' });
   }
   
   // Tüm validation'lar geçildi, şimdi user oluştur
@@ -1594,7 +1598,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
         (error as { meta: { target?: unknown } }).meta?.target &&
         Array.isArray((error as { meta: { target: unknown[] } }).meta.target) &&
         (error as { meta: { target: string[] } }).meta.target.includes('email')) {
-      return res.status(409).json({ error: { message: 'This email address is already in use.' } });
+      return res.status(409).json({ success: false, message: 'This email address is already in use.' });
     }
     throw error;
   }
@@ -2103,6 +2107,7 @@ router.get('/username/check', asyncHandler(async (req: Request, res: Response) =
       error: error instanceof Error ? error.message : String(error),
     });
     return res.status(500).json({
+      success: false,
       isValid: false,
       isAvailable: false,
       message: 'An error occurred while checking username',
@@ -2191,6 +2196,7 @@ router.get('/username/suggestions', asyncHandler(async (req: Request, res: Respo
       error: error instanceof Error ? error.message : String(error),
     });
     return res.status(500).json({
+      success: false,
       suggestions: [],
       message: 'An error occurred while generating username suggestions',
     });
@@ -2271,6 +2277,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
       stack: error instanceof Error ? error.stack : undefined,
     });
     return res.status(500).json({
+      success: false,
       message: 'An error occurred while fetching category list',
     });
   }
@@ -2376,7 +2383,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id;
   const user = await userService.getUserById(id);
-  if (!user) return res.status(404).json({ message: 'User not found' });
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
   const response: UserResponse = {
     id: user.id,
     email: user.email ?? '',
@@ -2471,7 +2478,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
   const { id } = req.params;
   const card = await userService.getUserProfileCard(id);
   if (!card) {
-    return res.status(404).json({ message: 'User not found' });
+    return res.status(404).json({ success: false, message: 'User not found' });
   }
   return res.json(card);
 }));
@@ -2501,7 +2508,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
 router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const { id, targetUserId } = req.params;
   const ok = await userService.removeTrust(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Record not found' });
+  if (!ok) return res.status(404).json({ success: false, message: 'Record not found' });
   return res.status(204).send();
 }));
 
@@ -2533,9 +2540,9 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
 router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  if (authUserId !== id) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   await userService.blockUser(id, targetUserId);
   return res.status(204).send();
@@ -2569,12 +2576,12 @@ router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: R
 router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  if (authUserId !== id) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unblockUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Block record not found' });
+  if (!ok) return res.status(404).json({ success: false, message: 'Block record not found' });
   return res.status(204).send();
 }));
 
@@ -2628,14 +2635,14 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
 router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  if (authUserId !== id) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   const { category, description } = req.body || {};
   
   if (!category || typeof category !== 'string') {
-    return res.status(400).json({ message: 'Category is required' });
+    return res.status(400).json({ success: false, message: 'Category is required' });
   }
 
   try {
@@ -2644,12 +2651,12 @@ router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
     if (errorMessage.includes('zaten raporlanmış')) {
-      return res.status(409).json({ message: errorMessage });
+      return res.status(409).json({ success: false, message: errorMessage });
     }
     if (errorMessage.includes('not found')) {
-      return res.status(404).json({ message: errorMessage });
+      return res.status(404).json({ success: false, message: errorMessage });
     }
-    return res.status(400).json({ message: errorMessage });
+    return res.status(400).json({ success: false, message: errorMessage });
   }
 }));
 
@@ -2681,9 +2688,9 @@ router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: 
 router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  if (authUserId !== id) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   await userService.muteUser(id, targetUserId);
   return res.status(204).send();
@@ -2717,12 +2724,12 @@ router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Re
 router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  if (authUserId !== id) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unmuteUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Mute record not found' });
+  if (!ok) return res.status(404).json({ success: false, message: 'Mute record not found' });
   return res.status(204).send();
 }));
 
@@ -2831,7 +2838,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
 router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
-    return res.status(400).json({ message: 'Invalid user id format' });
+    return res.status(400).json({ success: false, message: 'Invalid user id format' });
   }
   const querySearch = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
   const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
@@ -3367,17 +3374,17 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ error: { message: 'Unauthorized' } });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: { message: 'Current password and new password are required' } });
+    return res.status(400).json({ success: false, message: 'Current password and new password are required' });
   }
 
   const result = await userService.changePassword(String(userId), currentPassword, newPassword);
   if (!result.success) {
-    return res.status(400).json({ error: { message: result.message || 'Password change failed' } });
+    return res.status(400).json({ success: false, message: result.message || 'Password change failed' });
   }
 
   return res.json(result);
@@ -3452,7 +3459,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ error: { message: 'Unauthorized' } });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
@@ -3460,7 +3467,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
     return res.json(settings);
   } catch (error) {
     if (error instanceof Error && error.message === 'User not found') {
-      return res.status(404).json({ error: { message: 'User not found' } });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
     throw error;
   }
@@ -3548,7 +3555,7 @@ router.put('/settings/notifications', asyncHandler(async (req: Request, res: Res
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const settings = req.body;
@@ -3608,7 +3615,7 @@ router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response)
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const settings = await userService.getPrivacySettings(String(userId));
@@ -3648,12 +3655,12 @@ router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response)
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const settings = req.body;
   if (!Array.isArray(settings)) {
-    return res.status(400).json({ message: 'Settings must be an array' });
+    return res.status(400).json({ success: false, message: 'Settings must be an array' });
   }
 
   const result = await userService.updatePrivacySettings(String(userId), settings);
@@ -3691,7 +3698,7 @@ router.get('/settings/support-session-price', asyncHandler(async (req: Request, 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const price = await userService.getSupportSessionPrice(String(userId));
@@ -3731,17 +3738,17 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { price } = req.body;
   if (!price || typeof price !== 'number') {
-    return res.status(400).json({ message: 'Price is required and must be a number' });
+    return res.status(400).json({ success: false, message: 'Price is required and must be a number' });
   }
 
   const result = await userService.updateSupportSessionPrice(String(userId), price);
   if (!result.success) {
-    return res.status(400).json({ error: { message: result.message || 'Notification settings update failed' } } );
+    return res.status(400).json({ success: false, message: result.message || 'Notification settings update failed' });
   }
 
   return res.json(result);
@@ -3783,7 +3790,7 @@ router.get('/settings/devices', asyncHandler(async (req: Request, res: Response)
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const devices = await userService.getConnectedDevices(String(userId));
@@ -3816,7 +3823,7 @@ router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, r
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { deviceId } = req.params;
@@ -3857,7 +3864,7 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const result = await userService.removeAllDevices(String(userId));
@@ -3890,7 +3897,7 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
 router.get('/settings/payment-dashboard', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const dashboard = await paymentDashboardService.getDashboard(String(userId));
   const response: PaymentDashboardResponse = {
     saved_cards: dashboard.saved_cards.map(toPaymentMethodResponse),
@@ -3937,10 +3944,10 @@ router.get('/settings/payment-dashboard', asyncHandler(async (req: Request, res:
 router.post('/settings/payment-methods', asyncHandler(async (req: Request<{}, {}, AddPaymentMethodRequest>, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const body = req.body;
   if (!body?.payment_token || !body?.card_alias) {
-    return res.status(400).json({ message: 'payment_token and card_alias are required' });
+    return res.status(400).json({ success: false, message: 'payment_token and card_alias are required' });
   }
   const card = await paymentMethodService.addCard(String(userId), {
     payment_token: body.payment_token,
@@ -3983,12 +3990,12 @@ router.post('/settings/payment-methods', asyncHandler(async (req: Request<{}, {}
 router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }, {}, UpdatePaymentMethodRequest>, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const { id } = req.params;
   const body = req.body;
-  if (!body?.card_alias) return res.status(400).json({ message: 'card_alias is required' });
+  if (!body?.card_alias) return res.status(400).json({ success: false, message: 'card_alias is required' });
   const card = await paymentMethodService.updateCardAlias(String(userId), id, body.card_alias);
-  if (!card) return res.status(404).json({ message: 'Payment method not found' });
+  if (!card) return res.status(404).json({ success: false, message: 'Payment method not found' });
   return res.json(toPaymentMethodResponse(card));
 }));
 
@@ -4019,17 +4026,17 @@ router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request<{
 router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const { id } = req.params;
   const result = await paymentMethodService.deleteCard(String(userId), id);
   if (!result.success) {
     if (result.errorCode === PAYMENT_ERROR_CODES.CARD_NOT_FOUND) {
-      return res.status(404).json({ message: 'Payment method not found', error_code: result.errorCode });
+      return res.status(404).json({ success: false, message: 'Payment method not found', error_code: result.errorCode });
     }
     if (result.errorCode === PAYMENT_ERROR_CODES.CARD_IN_USE_BY_SUBSCRIPTION) {
-      return res.status(409).json({ message: 'Card is in use by an active subscription', error_code: result.errorCode });
+      return res.status(409).json({ success: false, message: 'Card is in use by an active subscription', error_code: result.errorCode });
     }
-    return res.status(400).json({ message: 'Cannot delete card', error_code: result.errorCode });
+    return res.status(400).json({ success: false, message: 'Cannot delete card', error_code: result.errorCode });
   }
   return res.status(204).send();
 }));
@@ -4067,7 +4074,7 @@ router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request<
 router.get('/settings/invoices', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
   const sort_by = parseInvoiceSort(req.query.sort_by);
   const limit = parseLimit(req.query.limit);
   const offset = parseOffset(req.query.offset);
@@ -4097,13 +4104,13 @@ router.delete('/me', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
     const deleted = await userService.deleteUser(String(userId));
     if (!deleted) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
     return res.status(204).send();
   } catch (error) {
@@ -4175,7 +4182,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const data = await userService.getHighlightBadgeSelectionData(
@@ -4221,7 +4228,7 @@ router.put(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { badgeIds } = req.body;

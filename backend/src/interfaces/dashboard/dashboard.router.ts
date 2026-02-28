@@ -2392,9 +2392,8 @@ router.post('/clear-test-data', async (req: Request, res: Response) => {
     console.error('Clear test data error:', error);
     const errorMessage = getErrorMessage(error);
     const errorDetails = (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout;
-    return res.status(500).json({ 
-      error: errorMessage || 'Error occurred while clearing test data',
-      details: errorDetails
+    return res.status(500).json({
+      success: false, message: errorMessage || 'Error occurred while clearing test data'
     });
   }
 });
@@ -2421,9 +2420,8 @@ router.post('/clear-seed-data', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     console.error('Clear seed data error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while clearing seed data',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while clearing seed data'
     });
   }
 });
@@ -2450,9 +2448,8 @@ router.post('/generate-client', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     console.error('Prisma generate error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while generating Prisma Client',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while generating Prisma Client'
     });
   }
 });
@@ -2533,9 +2530,8 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     console.error('Docker stop error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while stopping containers',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while stopping containers'
     });
   }
 });
@@ -2580,9 +2576,8 @@ router.post('/docker/down', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     console.error('Docker down error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while removing containers',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while removing containers'
     });
   }
 });
@@ -2627,9 +2622,8 @@ router.post('/docker/start', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     console.error('Docker start error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while starting containers',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while starting containers'
     });
   }
 });
@@ -2646,7 +2640,7 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
     ];
 
     if (!containerName || !allowedContainers.includes(containerName)) {
-      return res.status(400).json({ error: 'Invalid container name' });
+      return res.status(400).json({ success: false, message: 'Invalid container name' });
     }
 
     // Ortam suffix'i ile container ismini oluştur
@@ -2663,8 +2657,7 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
   } catch (error: unknown) {
     console.error('Docker single container stop error:', error);
     return res.status(500).json({
-      error: getErrorMessage(error) || 'Error occurred while stopping container',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+      success: false, message: getErrorMessage(error) || 'Error occurred while stopping container'
     });
   }
 });
@@ -2680,7 +2673,7 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
     ];
 
     if (!containerName || !allowedContainers.includes(containerName)) {
-      return res.status(400).json({ error: 'Invalid container name' });
+      return res.status(400).json({ success: false, message: 'Invalid container name' });
     }
 
     // Ortam suffix'i ile container ismini oluştur
@@ -2697,8 +2690,7 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
   } catch (error: unknown) {
     console.error('Docker single container start error:', error);
     return res.status(500).json({
-      error: getErrorMessage(error) || 'Error occurred while starting container',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
+      success: false, message: getErrorMessage(error) || 'Error occurred while starting container'
     });
   }
 });
@@ -2771,13 +2763,13 @@ router.post('/data-management', async (req: Request, res: Response) => {
   const { command } = req.body;
 
   if (!command) {
-    return res.status(400).json({ error: 'Command is required' });
+    return res.status(400).json({ success: false, message: 'Command is required' });
   }
 
   // Only allow defined scripts to run
   const validCommands = ['db:seed', 'db:seed:all', 'db:reset', 'db:reset:all', 'db:reset:force'];
   if (!validCommands.includes(command)) {
-    return res.status(400).json({ error: 'Invalid command' });
+    return res.status(400).json({ success: false, message: 'Invalid command' });
   }
 
   try {
@@ -2931,10 +2923,8 @@ router.post('/data-management', async (req: Request, res: Response) => {
     return;
   } catch (error: unknown) {
     console.error('Data management error:', error);
-    return res.status(500).json({ 
-      error: getErrorMessage(error) || 'Error occurred while executing command',
-      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout,
-      progress: 0
+    return res.status(500).json({
+      success: false, message: getErrorMessage(error) || 'Error occurred while executing command'
     });
   }
 });

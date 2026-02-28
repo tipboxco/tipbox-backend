@@ -63,7 +63,7 @@ router.get(
     const product = await medusaService.getProductById(productId);
 
     if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+      return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
     return res.json(product);
@@ -207,7 +207,7 @@ router.get(
     const categoryId = req.query.categoryId as string;
 
     if (!categoryId) {
-      return res.status(400).json({ message: 'categoryId parameter is required' });
+      return res.status(400).json({ success: false, message: 'categoryId parameter is required' });
     }
 
     const searchQuery = req.query.searchQuery as string | undefined;
@@ -222,7 +222,7 @@ router.get(
             ? JSON.parse(req.query.metadataFilters)
             : req.query.metadataFilters;
       } catch (error) {
-        return res.status(400).json({ message: 'Invalid metadataFilters format' });
+        return res.status(400).json({ success: false, message: 'Invalid metadataFilters format' });
       }
     }
 

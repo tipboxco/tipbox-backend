@@ -109,7 +109,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const cursor = req.query.cursor as string | undefined;
@@ -118,7 +118,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const contextId = req.query.contextId as string | undefined;
 
   if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 200)) {
-    return res.status(400).json({ message: 'Limit must be between 1 and 200' });
+    return res.status(400).json({ success: false, message: 'Limit must be between 1 and 200' });
   }
 
   const feed = await feedService.getUserFeed(String(userId), {
@@ -280,7 +280,7 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const cursor = req.query.cursor as string | undefined;
@@ -288,7 +288,7 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   const limit = typeof limitParam === 'number' ? limitParam : 20;
 
   if (limit < 1 || limit > 50) {
-    return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
   }
 
   // Parse filters based on new UX: Interests - Tags - Category - Sort
@@ -384,18 +384,18 @@ router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { feedIds } = req.body;
 
   if (!feedIds || !Array.isArray(feedIds) || feedIds.length === 0) {
-    return res.status(400).json({ message: 'feedIds array is required' });
+    return res.status(400).json({ success: false, message: 'feedIds array is required' });
   }
 
   // Validation: Max 50 feed per request
   if (feedIds.length > 50) {
-    return res.status(400).json({ message: 'Maximum 50 feeds per request' });
+    return res.status(400).json({ success: false, message: 'Maximum 50 feeds per request' });
   }
 
   await feedService.markFeedAsSeen(feedIds);
@@ -430,7 +430,7 @@ router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) =>
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { feedId } = req.params;
@@ -464,7 +464,7 @@ router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Re
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { feedId } = req.params;
@@ -498,7 +498,7 @@ router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) =>
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { feedId } = req.params;
@@ -532,7 +532,7 @@ router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { feedId } = req.params;
@@ -578,7 +578,7 @@ router.get('/source-counts', asyncHandler(async (req: Request, res: Response) =>
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const counts = await feedService.getFeedSourceCounts(String(userId));

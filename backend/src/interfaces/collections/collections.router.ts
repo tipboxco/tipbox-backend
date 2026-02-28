@@ -145,7 +145,7 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const query = req.query as unknown as CollectionsListQuery;
@@ -318,7 +318,7 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { collectionId } = req.params;
@@ -331,7 +331,7 @@ router.get(
     );
 
     if (!result) {
-      return res.status(404).json({ message: 'Collection not found' });
+      return res.status(404).json({ success: false, message: 'Collection not found' });
     }
 
     return res.json(result);
@@ -392,12 +392,12 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const badgeId = req.params.badgeId;
     if (!badgeId) {
-      return res.status(400).json({ message: 'badgeId is required' });
+      return res.status(400).json({ success: false, message: 'badgeId is required' });
     }
 
     const prisma = getPrisma();
@@ -406,7 +406,7 @@ router.post(
       select: { id: true },
     });
     if (!badge) {
-      return res.status(404).json({ message: 'Badge not found' });
+      return res.status(404).json({ success: false, message: 'Badge not found' });
     }
 
     let remindAt: Date;
@@ -414,10 +414,10 @@ router.post(
     if (remindAtRaw && typeof remindAtRaw === 'string') {
       remindAt = new Date(remindAtRaw);
       if (Number.isNaN(remindAt.getTime())) {
-        return res.status(400).json({ message: 'remindAt must be a valid ISO date string' });
+        return res.status(400).json({ success: false, message: 'remindAt must be a valid ISO date string' });
       }
       if (remindAt <= new Date()) {
-        return res.status(400).json({ message: 'remindAt must be in the future' });
+        return res.status(400).json({ success: false, message: 'remindAt must be in the future' });
       }
     } else {
       remindAt = new Date();

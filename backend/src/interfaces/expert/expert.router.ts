@@ -73,7 +73,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     try {
@@ -88,7 +88,7 @@ router.get(
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return res.status(500).json({ message: 'Failed to get tips balance' });
+      return res.status(500).json({ success: false, message: 'Failed to get tips balance' });
     }
   })
 );
@@ -172,7 +172,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { description, category, tipsAmount } = req.body;
@@ -182,7 +182,7 @@ router.post(
 
     // Validation
     if (!description || typeof description !== 'string' || description.trim().length === 0) {
-      return res.status(400).json({ message: 'Description is required and must be a non-empty string' });
+      return res.status(400).json({ success: false, message: 'Description is required and must be a non-empty string' });
     }
 
     // Parse tipsAmount from string to number
@@ -190,7 +190,7 @@ router.post(
     if (tipsAmount !== undefined && tipsAmount !== null && tipsAmount !== '') {
       const parsed = parseFloat(String(tipsAmount));
       if (isNaN(parsed) || parsed < 0) {
-        return res.status(400).json({ message: 'Tips amount must be a non-negative number' });
+        return res.status(400).json({ success: false, message: 'Tips amount must be a non-negative number' });
       }
       parsedTipsAmount = parsed;
     }
@@ -206,8 +206,9 @@ router.post(
           const isVideo = file.mimetype.startsWith('video/');
           
           if (!isImage && !isVideo) {
-            return res.status(400).json({ 
-              message: `Unsupported file type: ${file.mimetype}. Only images and videos are allowed.` 
+            return res.status(400).json({
+              success: false,
+              message: `Unsupported file type: ${file.mimetype}. Only images and videos are allowed.`
             });
           }
 
@@ -264,8 +265,9 @@ router.post(
             error: error instanceof Error ? error.message : String(error),
           });
           
-          return res.status(500).json({ 
-            message: `Media upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+          return res.status(500).json({
+            success: false,
+            message: `Media upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`
           });
         }
       }
@@ -360,18 +362,18 @@ router.patch(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     const { tipsAmount } = req.body;
 
     if (!requestId) {
-      return res.status(400).json({ message: 'Request ID is required' });
+      return res.status(400).json({ success: false, message: 'Request ID is required' });
     }
 
     if (typeof tipsAmount !== 'number' || tipsAmount < 0) {
-      return res.status(400).json({ message: 'Tips amount must be a non-negative number' });
+      return res.status(400).json({ success: false, message: 'Tips amount must be a non-negative number' });
     }
 
     try {
@@ -382,13 +384,13 @@ router.patch(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
         if (error.message.includes('Cannot update')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -452,7 +454,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await expertService.getAnsweredExpertRequests();
@@ -547,19 +549,19 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
 
     if (!requestId) {
-      return res.status(400).json({ message: 'Request ID is required' });
+      return res.status(400).json({ success: false, message: 'Request ID is required' });
     }
 
     const result = await expertService.getExpertRequestDetail(requestId);
 
     if (!result) {
-      return res.status(404).json({ message: 'Request not found or not answered' });
+      return res.status(404).json({ success: false, message: 'Request not found or not answered' });
     }
 
     return res.json(result);
@@ -602,7 +604,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await expertService.getMyExpertRequests(userId);
@@ -639,7 +641,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await expertService.getMyAnsweredRequests(userId);
@@ -676,7 +678,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await expertService.getMyPendingRequests(userId);
@@ -785,18 +787,18 @@ router.post(
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     const { content } = req.body;
 
     if (!requestId) {
-      return res.status(400).json({ message: 'Request ID is required' });
+      return res.status(400).json({ success: false, message: 'Request ID is required' });
     }
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Content is required and must be a non-empty string' });
+      return res.status(400).json({ success: false, message: 'Content is required and must be a non-empty string' });
     }
 
     try {
@@ -807,10 +809,10 @@ router.post(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Cannot answer') || error.message.includes('own request')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -896,7 +898,7 @@ router.get(
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await expertService.getMyExpertAnswers(expertUserId);
@@ -956,14 +958,14 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     const { answerId } = req.body;
 
     if (!requestId) {
-      return res.status(400).json({ message: 'Request ID is required' });
+      return res.status(400).json({ success: false, message: 'Request ID is required' });
     }
 
     try {
@@ -974,13 +976,13 @@ router.post(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
         if (error.message.includes('Cannot accept') || error.message.includes('not been answered')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -1123,7 +1125,7 @@ router.post(
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
@@ -1134,10 +1136,10 @@ router.post(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Cannot accept') || error.message.includes('already answered')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -1206,7 +1208,7 @@ router.put(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
@@ -1221,13 +1223,13 @@ router.put(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('does not belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
         if (error.message.includes('PENDING status')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -1272,7 +1274,7 @@ router.delete(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
@@ -1283,13 +1285,13 @@ router.delete(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('does not belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
         if (error.message.includes('PENDING status')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;

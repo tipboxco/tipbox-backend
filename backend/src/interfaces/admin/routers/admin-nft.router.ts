@@ -382,7 +382,7 @@ router.post(
   validateBody(AdminCreateNFTSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminCreateNFTInput;
 
@@ -451,7 +451,7 @@ router.patch(
   validateBody(AdminUpdateNFTSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUpdateNFTInput;
@@ -491,7 +491,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -550,7 +550,7 @@ router.post(
   validateBody(AdminTransferNFTSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminTransferNFTInput;
@@ -778,7 +778,7 @@ router.patch(
   validateBody(AdminModerateListingSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminModerateListingInput;
@@ -942,7 +942,7 @@ router.post(
   validateBody(AdminUnlockLootboxSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUnlockLootboxInput;
@@ -994,7 +994,7 @@ router.delete(
   '/lootbox/:id/cancel',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 

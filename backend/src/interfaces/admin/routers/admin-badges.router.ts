@@ -203,7 +203,7 @@ router.post(
   validateBody(AdminAddCollectionBadgeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { badgeId: string };
     const collection = await prisma.badgeCollection.findUnique({ where: { id } });
@@ -234,7 +234,7 @@ router.delete(
   '/collections/:id/badges/:badgeId',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id, badgeId } = req.params;
     const collection = await prisma.badgeCollection.findUnique({ where: { id } });
     if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
@@ -262,7 +262,7 @@ router.post(
   validateBody(AdminCreateCollectionGoalSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id: collectionId } = req.params;
     const body = req.body as AdminCreateCollectionGoalInput;
     const collection = await prisma.badgeCollection.findUnique({ where: { id: collectionId } });
@@ -304,7 +304,7 @@ router.patch(
   validateBody(AdminUpdateCollectionGoalSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { collectionId, goalId } = req.params;
     const body = req.body as Partial<AdminCreateCollectionGoalInput>;
@@ -360,7 +360,7 @@ router.delete(
   '/collections/:collectionId/goals/:goalId',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { collectionId, goalId } = req.params;
 
@@ -426,7 +426,7 @@ router.post(
   validateBody(AdminCreateCollectionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as AdminCreateCollectionInput;
     const collection = await prisma.badgeCollection.create({
       data: {
@@ -480,7 +480,7 @@ router.patch(
   validateBody(AdminUpdateCollectionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as AdminUpdateCollectionInput;
     const collection = await prisma.badgeCollection.findUnique({ where: { id } });
@@ -537,7 +537,7 @@ router.delete(
   '/collections/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const collection = await prisma.badgeCollection.findUnique({ where: { id } });
     if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
@@ -814,7 +814,7 @@ router.post(
   validateBody(AdminCreateBadgeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as AdminCreateBadgeInput;
     const badge = await prisma.badge.create({
       data: {
@@ -866,7 +866,7 @@ router.patch(
   validateBody(AdminUpdateBadgeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as AdminUpdateBadgeInput;
     const badge = await prisma.badge.findUnique({ where: { id } });
@@ -921,7 +921,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const badge = await prisma.badge.findUnique({ where: { id } });
     if (!badge) throw new NotFoundError('Badge bulunamadı');

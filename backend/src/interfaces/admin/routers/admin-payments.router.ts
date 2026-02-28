@@ -255,7 +255,7 @@ router.post(
   validateBody(AdminCreateSubscriptionPlanSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminCreateSubscriptionPlanInput;
 
@@ -297,7 +297,7 @@ router.patch(
   validateBody(AdminUpdateSubscriptionPlanSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUpdateSubscriptionPlanInput;
@@ -337,7 +337,7 @@ router.delete(
   '/plans/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -385,7 +385,7 @@ router.put(
   validateBody(AdminReorderSubscriptionPlanSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const { displayOrder } = req.body as { displayOrder: number };
@@ -623,7 +623,7 @@ router.patch(
   '/subscriptions/:id/cancel',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 
@@ -670,7 +670,7 @@ router.patch(
   validateBody(AdminExtendSubscriptionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const { days } = req.body as AdminExtendSubscriptionInput;
@@ -914,7 +914,7 @@ router.patch(
   validateBody(AdminUpdateInvoiceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
     const body = req.body as AdminUpdateInvoiceInput;
@@ -957,7 +957,7 @@ router.post(
   '/invoices/:id/resend',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { id } = req.params;
 

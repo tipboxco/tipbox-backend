@@ -281,7 +281,7 @@ router.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as { imageUrl?: string; avatarId?: string; isActive?: boolean };
 
     const user = await prisma.user.findUnique({ where: { id } });
@@ -392,7 +392,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { imageUrl } = req.body as { imageUrl: string };
 
     const user = await prisma.user.findUnique({ where: { id } });
@@ -611,7 +611,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as { badgeId: string; isVisible?: boolean; displayOrder?: number; visibility?: string };
 
     const user = await prisma.user.findUnique({ where: { id } });
@@ -704,7 +704,7 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const { id, userBadgeId } = req.params;
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const userBadge = await prisma.userBadge.findFirst({
       where: { id: userBadgeId, userId: id },
@@ -1427,7 +1427,7 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const body = req.body as { email?: string; status?: string | null; emailVerified?: boolean };
 
@@ -1526,7 +1526,7 @@ router.put(
     const { id } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const { roles } = req.body as { roles: string[] };
 
@@ -1606,7 +1606,7 @@ router.patch(
     const { id: targetUserId } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const body = (req.body || {}) as { reason?: string };
     const reason = typeof body.reason === 'string' ? body.reason : 'Admin ban';
@@ -1686,7 +1686,7 @@ router.patch(
     const { id: targetUserId } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const user = await prisma.user.findUnique({ where: { id: targetUserId } });
@@ -1989,7 +1989,7 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const { resolved, adminNote } = req.body as { resolved: boolean; adminNote?: string };
 
@@ -2237,7 +2237,7 @@ router.patch(
     const { recordId } = req.params;
     const adminId = req.user?.id;
     if (!adminId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const body = req.body as { reviewStatus?: string; reviewResult?: string; reviewReason?: string };
 

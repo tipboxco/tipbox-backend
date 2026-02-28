@@ -88,7 +88,7 @@ router.get(
       const parsed = parseInt(limit, 10);
       if (!Number.isNaN(parsed)) {
         if (parsed < 1 || parsed > 50) {
-          return res.status(400).json({ message: 'limit must be between 1 and 50' });
+          return res.status(400).json({ success: false, message: 'limit must be between 1 and 50' });
         }
         limitPerType = parsed;
       }

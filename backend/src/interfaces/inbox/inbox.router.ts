@@ -227,7 +227,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     let limit: number | undefined;
@@ -259,7 +259,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // UUID format validation for userId
@@ -267,9 +267,10 @@ router.get(
     const userIdStr = String(userId).trim();
     if (!uuidRegex.test(userIdStr)) {
       logger.error(`Invalid userId format in GET /inbox: ${userIdStr}`, { userId, userPayload });
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: 'Invalid user ID format',
-        details: `userId must be a valid UUID format, received: ${userIdStr}` 
+        details: `userId must be a valid UUID format, received: ${userIdStr}`
       });
     }
 
@@ -363,7 +364,7 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // UUID format validation for senderId
@@ -371,9 +372,10 @@ router.post(
     const senderIdStr = String(senderId);
     if (!uuidRegex.test(senderIdStr)) {
       logger.error(`Invalid senderId format: ${senderIdStr}`, { senderId, userPayload });
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: 'Invalid sender ID format',
-        details: `senderId must be a valid UUID format, received: ${senderIdStr}` 
+        details: `senderId must be a valid UUID format, received: ${senderIdStr}`
       });
     }
 
@@ -395,22 +397,23 @@ router.post(
     }
 
     if (!recipientUserId || typeof recipientUserId !== 'string') {
-      return res.status(400).json({ message: 'recipientUserId is required' });
+      return res.status(400).json({ success: false, message: 'recipientUserId is required' });
     }
 
     // UUID format validation for recipientUserId
     const recipientUserIdStr = String(recipientUserId).trim();
     if (!uuidRegex.test(recipientUserIdStr)) {
       logger.error(`Invalid recipientUserId format: ${recipientUserIdStr}`, { recipientUserId, body: req.body });
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: 'recipientUserId must be a valid UUID format',
-        details: `Received: ${recipientUserIdStr}` 
+        details: `Received: ${recipientUserIdStr}`
       });
     }
 
     // Mesaj veya media en az biri olmalı
     if ((!message || message.trim() === '') && !file) {
-      return res.status(400).json({ message: 'message or media is required' });
+      return res.status(400).json({ success: false, message: 'message or media is required' });
     }
 
     try {
@@ -491,7 +494,7 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
       if (errorMessage.includes('not found') || errorMessage.includes('User not found')) {
-        return res.status(404).json({ message: 'Recipient user not found' });
+        return res.status(404).json({ success: false, message: 'Recipient user not found' });
       }
       logger.error('Send message error:', error);
       throw error;
@@ -556,17 +559,17 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const { recipientId } = req.body || {};
     if (!recipientId || typeof recipientId !== 'string') {
-      return res.status(400).json({ message: 'recipientId is required' });
+      return res.status(400).json({ success: false, message: 'recipientId is required' });
     }
 
     // Kullanıcı kontrolü
     const recipient = await userRepo.findById(recipientId);
     if (!recipient) {
-      return res.status(404).json({ message: 'Recipient user not found' });
+      return res.status(404).json({ success: false, message: 'Recipient user not found' });
     }
 
     // Thread oluştur veya mevcut thread'i al
@@ -640,25 +643,25 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { threadId } = req.params;
     if (!threadId) {
-      return res.status(400).json({ message: 'threadId is required' });
+      return res.status(400).json({ success: false, message: 'threadId is required' });
     }
 
     try {
       // Thread erişim kontrolü
       const hasAccess = await messagingService.validateThreadAccess(threadId, String(userId));
       if (!hasAccess) {
-        return res.status(403).json({ message: 'User is not a participant of this thread' });
+        return res.status(403).json({ success: false, message: 'User is not a participant of this thread' });
       }
 
       // Thread'i getir
       const thread = await messagingService.getThreadById(threadId);
       if (!thread) {
-        return res.status(404).json({ message: 'Thread not found' });
+        return res.status(404).json({ success: false, message: 'Thread not found' });
       }
 
       return res.status(200).json({
@@ -777,7 +780,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Parse status filter
@@ -929,67 +932,67 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { senderUserId, recipientUserId, type, message, amount, status, timestamp } = req.body as SupportRequestCreate;
     
     // Validate required fields
     if (!senderUserId || typeof senderUserId !== 'string') {
-      return res.status(400).json({ message: 'senderUserId is required' });
+      return res.status(400).json({ success: false, message: 'senderUserId is required' });
     }
     
     // Security check: senderUserId must match JWT token
     if (String(senderId) !== String(senderUserId)) {
-      return res.status(403).json({ message: 'senderUserId does not match authenticated user' });
+      return res.status(403).json({ success: false, message: 'senderUserId does not match authenticated user' });
     }
     
     if (!recipientUserId || typeof recipientUserId !== 'string') {
-      return res.status(400).json({ message: 'recipientUserId is required' });
+      return res.status(400).json({ success: false, message: 'recipientUserId is required' });
     }
     
     if (!type || typeof type !== 'string') {
-      return res.status(400).json({ message: 'type is required' });
+      return res.status(400).json({ success: false, message: 'type is required' });
     }
     
     const supportType = type.toUpperCase();
     if (supportType !== 'GENERAL' && supportType !== 'TECHNICAL' && supportType !== 'PRODUCT') {
-      return res.status(400).json({ message: 'type must be one of: GENERAL, TECHNICAL, PRODUCT' });
+      return res.status(400).json({ success: false, message: 'type must be one of: GENERAL, TECHNICAL, PRODUCT' });
     }
     
     if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ message: 'message is required' });
+      return res.status(400).json({ success: false, message: 'message is required' });
     }
     
     if (!amount || typeof amount !== 'string') {
-      return res.status(400).json({ message: 'amount is required and must be a string' });
+      return res.status(400).json({ success: false, message: 'amount is required and must be a string' });
     }
     
     const numericAmount = Number(amount);
     if (Number.isNaN(numericAmount) || numericAmount < 0) {
-      return res.status(400).json({ message: 'amount must be a valid number string' });
+      return res.status(400).json({ success: false, message: 'amount must be a valid number string' });
     }
     
     if (!status || typeof status !== 'string') {
-      return res.status(400).json({ message: 'status is required' });
+      return res.status(400).json({ success: false, message: 'status is required' });
     }
     
     const requestStatus = status.toLowerCase();
     if (requestStatus !== 'pending' && requestStatus !== 'accepted' && requestStatus !== 'rejected') {
-      return res.status(400).json({ message: 'status must be one of: pending, accepted, rejected' });
+      return res.status(400).json({ success: false, message: 'status must be one of: pending, accepted, rejected' });
     }
     
     // Note: Backend will set status to PENDING regardless of what's sent, but we validate it
     // The actual status is managed by the backend (PENDING initially)
     
     if (!timestamp || typeof timestamp !== 'string') {
-      return res.status(400).json({ message: 'timestamp is required' });
+      return res.status(400).json({ success: false, message: 'timestamp is required' });
     }
     
     // Validate timestamp format
     const timestampDate = new Date(timestamp);
     if (isNaN(timestampDate.getTime())) {
-      return res.status(400).json({ message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
+      return res.status(400).json({ success: false, message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
     }
 
     await supportRequestService.createSupportRequest(String(senderId), {
@@ -1065,12 +1068,12 @@ router.post(
     const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!expertUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     try {
@@ -1080,13 +1083,13 @@ router.post(
     } catch (error: unknown) {
       logger.error(`Accept support request error: requestId=${requestId}, expertUserId=${expertUserId}`, error);
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only the recipient')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only pending')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1127,12 +1130,12 @@ router.post(
     const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!expertUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     try {
@@ -1140,13 +1143,13 @@ router.post(
       return res.status(200).json({ message: 'Support request rejected' });
     } catch (error: any) {
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only the recipient')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only pending')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1187,12 +1190,12 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     try {
@@ -1200,13 +1203,13 @@ router.post(
       return res.status(200).json({ message: 'Support request cancelled' });
     } catch (error: any) {
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only the sender')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only pending')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1274,22 +1277,22 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     const { rating, comment } = req.body;
 
     if (!rating || typeof rating !== 'number') {
-      return res.status(400).json({ message: 'rating is required and must be a number' });
+      return res.status(400).json({ success: false, message: 'rating is required and must be a number' });
     }
 
     if (rating < 1 || rating > 5) {
-      return res.status(400).json({ message: 'rating must be between 1 and 5' });
+      return res.status(400).json({ success: false, message: 'rating must be between 1 and 5' });
     }
 
     try {
@@ -1300,16 +1303,16 @@ router.post(
       });
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'not part of this support request')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only accepted support requests can be closed')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'already closed')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1377,22 +1380,22 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     const { rating, comment } = req.body;
 
     if (!rating || typeof rating !== 'number') {
-      return res.status(400).json({ message: 'rating is required and must be a number' });
+      return res.status(400).json({ success: false, message: 'rating is required and must be a number' });
     }
 
     if (rating < 1 || rating > 5) {
-      return res.status(400).json({ message: 'rating must be between 1 and 5' });
+      return res.status(400).json({ success: false, message: 'rating must be between 1 and 5' });
     }
 
     try {
@@ -1403,19 +1406,19 @@ router.post(
       });
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'not part of this support request')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only awaiting_completion support requests can be finalized')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Other user has not closed the request yet')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'already closed')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1482,29 +1485,29 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { requestId } = req.params;
     if (!requestId) {
-      return res.status(400).json({ message: 'requestId is required' });
+      return res.status(400).json({ success: false, message: 'requestId is required' });
     }
 
     const { reason, description } = req.body;
 
     if (!reason || typeof reason !== 'string') {
-      return res.status(400).json({ message: 'reason is required and must be a string' });
+      return res.status(400).json({ success: false, message: 'reason is required and must be a string' });
     }
 
     // Validate reason is one of the valid categories
     const validReasons = ['SPAM', 'HARASSMENT', 'SCAM'];
     const normalizedReason = reason.toUpperCase();
     if (!validReasons.includes(normalizedReason)) {
-      return res.status(400).json({ message: `reason must be one of: ${validReasons.join(', ')}` });
+      return res.status(400).json({ success: false, message: `reason must be one of: ${validReasons.join(', ')}` });
     }
 
     if (description && typeof description === 'string' && description.length > 500) {
-      return res.status(400).json({ message: 'description must be 500 characters or less' });
+      return res.status(400).json({ success: false, message: 'description must be 500 characters or less' });
     }
 
     try {
@@ -1517,16 +1520,16 @@ router.post(
       return res.status(200).end();
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
-        return res.status(404).json({ message: getErrorMessage(error) });
+        return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only participants can report')) {
-        return res.status(403).json({ message: getErrorMessage(error) });
+        return res.status(403).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'zaten raporlanmış') || errorMessageIncludes(error, 'already reported')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Invalid report category')) {
-        return res.status(400).json({ message: getErrorMessage(error) });
+        return res.status(400).json({ success: false, message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1622,31 +1625,31 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { recipientUserId, message, amount, timestamp } = req.body as SendTipsCreate;
 
     if (!recipientUserId || typeof recipientUserId !== 'string') {
-      return res.status(400).json({ message: 'recipientUserId is required' });
+      return res.status(400).json({ success: false, message: 'recipientUserId is required' });
     }
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ message: 'message is required' });
+      return res.status(400).json({ success: false, message: 'message is required' });
     }
 
     const numericAmount = Number(amount);
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
-      return res.status(400).json({ message: 'amount must be a positive number' });
+      return res.status(400).json({ success: false, message: 'amount must be a positive number' });
     }
 
     if (!timestamp || typeof timestamp !== 'string') {
-      return res.status(400).json({ message: 'timestamp is required' });
+      return res.status(400).json({ success: false, message: 'timestamp is required' });
     }
 
     const timestampDate = new Date(timestamp);
     if (isNaN(timestampDate.getTime())) {
-      return res.status(400).json({ message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
+      return res.status(400).json({ success: false, message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
     }
 
     try {
@@ -1818,28 +1821,28 @@ router.post(
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { threadId, recipientUserId, messageType, sharedPost, message } = req.body;
 
     // Validate messageType
     if (messageType !== 'shared-post') {
-      return res.status(400).json({ message: 'messageType must be "shared-post"' });
+      return res.status(400).json({ success: false, message: 'messageType must be "shared-post"' });
     }
 
     // Validate sharedPost
     if (!sharedPost || typeof sharedPost !== 'object') {
-      return res.status(400).json({ message: 'sharedPost is required' });
+      return res.status(400).json({ success: false, message: 'sharedPost is required' });
     }
 
     if (!sharedPost.postId || typeof sharedPost.postId !== 'string') {
-      return res.status(400).json({ message: 'sharedPost.postId is required' });
+      return res.status(400).json({ success: false, message: 'sharedPost.postId is required' });
     }
 
     // threadId veya recipientUserId'den biri zorunlu
     if (!threadId && !recipientUserId) {
-      return res.status(400).json({ message: 'Either threadId or recipientUserId is required' });
+      return res.status(400).json({ success: false, message: 'Either threadId or recipientUserId is required' });
     }
 
     try {
@@ -1849,13 +1852,13 @@ router.post(
       if (threadId) {
         const thread = await messagingService.getThreadById(threadId);
         if (!thread) {
-          return res.status(404).json({ message: 'Thread not found' });
+          return res.status(404).json({ success: false, message: 'Thread not found' });
         }
 
         // Thread erişim kontrolü
         const hasAccess = await messagingService.validateThreadAccess(threadId, String(senderId));
         if (!hasAccess) {
-          return res.status(403).json({ message: 'User is not a participant of this thread' });
+          return res.status(403).json({ success: false, message: 'User is not a participant of this thread' });
         }
 
         // Karşı tarafın ID'sini bul
@@ -1863,7 +1866,7 @@ router.post(
       }
 
       if (!targetRecipientId) {
-        return res.status(400).json({ message: 'Could not determine recipient' });
+        return res.status(400).json({ success: false, message: 'Could not determine recipient' });
       }
 
       // Shared post gönder (thread yoksa oluşturulur)
@@ -1882,10 +1885,10 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
       if (errorMessage.includes('trust list') || errorMessage.includes('Share is only allowed')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       if (errorMessage.includes('not found') || errorMessage.includes('User not found') || errorMessage.includes('Post not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       logger.error('Share post error:', error);
       throw error;
@@ -1940,12 +1943,12 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
     if (!messageId) {
-      return res.status(400).json({ message: 'messageId is required' });
+      return res.status(400).json({ success: false, message: 'messageId is required' });
     }
 
     try {
@@ -2138,12 +2141,12 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     let { threadId } = req.params;
     if (!threadId) {
-      return res.status(400).json({ message: 'threadId is required' });
+      return res.status(400).json({ success: false, message: 'threadId is required' });
     }
 
     // URL encoding sorunlarını düzelt (tırnak işaretleri, boşluklar vb.)
@@ -2152,9 +2155,10 @@ router.get(
     // UUID format kontrolü
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(threadId)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: 'Invalid threadId format',
-        details: `threadId must be a valid UUID format, received: ${threadId}` 
+        details: `threadId must be a valid UUID format, received: ${threadId}`
       });
     }
 
@@ -2264,14 +2268,14 @@ router.put(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
     const { message } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return res.status(400).json({ message: 'message is required and must be a non-empty string' });
+      return res.status(400).json({ success: false, message: 'message is required and must be a non-empty string' });
     }
     try {
       await messagingService.updateMessage(String(userId), messageId, message.trim());
@@ -2279,13 +2283,13 @@ router.put(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       if (message.includes('Forbidden') || message.includes('does not own')) {
-        return res.status(403).json({ message: 'You are not allowed to update this message' });
+        return res.status(403).json({ success: false, message: 'You are not allowed to update this message' });
       }
       if (message.includes('5 minutes')) {
-        return res.status(400).json({ message: 'Message can only be updated within 5 minutes of sending' });
+        return res.status(400).json({ success: false, message: 'Message can only be updated within 5 minutes of sending' });
       }
       throw error;
     }
@@ -2355,7 +2359,7 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { threadId } = req.params;
@@ -2366,10 +2370,10 @@ router.delete(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Thread not found')) {
-        return res.status(404).json({ message: 'Thread not found' });
+        return res.status(404).json({ success: false, message: 'Thread not found' });
       }
       if (message.includes('Forbidden') || message.includes('not part of')) {
-        return res.status(403).json({ message: 'You are not part of this thread' });
+        return res.status(403).json({ success: false, message: 'You are not part of this thread' });
       }
       throw error;
     }
@@ -2420,14 +2424,14 @@ router.patch(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
     const { message } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ message: 'message is required' });
+      return res.status(400).json({ success: false, message: 'message is required' });
     }
 
     try {
@@ -2443,13 +2447,13 @@ router.patch(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       if (message.includes('Forbidden') || message.includes('own messages')) {
-        return res.status(403).json({ message: 'You can only edit your own messages' });
+        return res.status(403).json({ success: false, message: 'You can only edit your own messages' });
       }
       if (message.includes('15 minutes')) {
-        return res.status(400).json({ message: 'Message cannot be edited after 15 minutes' });
+        return res.status(400).json({ success: false, message: 'Message cannot be edited after 15 minutes' });
       }
       throw error;
     }
@@ -2500,7 +2504,7 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
@@ -2514,10 +2518,10 @@ router.delete(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       if (message.includes('Forbidden') || message.includes('own messages')) {
-        return res.status(403).json({ message: 'You can only delete your own messages' });
+        return res.status(403).json({ success: false, message: 'You can only delete your own messages' });
       }
       throw error;
     }
@@ -2556,7 +2560,7 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
@@ -2570,10 +2574,10 @@ router.delete(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       if (message.includes('Forbidden') || message.includes('own messages')) {
-        return res.status(403).json({ message: 'You can only delete your own messages' });
+        return res.status(403).json({ success: false, message: 'You can only delete your own messages' });
       }
       throw error;
     }
@@ -2622,14 +2626,14 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
     const { emoji } = req.body;
 
     if (!emoji || typeof emoji !== 'string' || emoji.trim() === '') {
-      return res.status(400).json({ message: 'emoji is required' });
+      return res.status(400).json({ success: false, message: 'emoji is required' });
     }
 
     try {
@@ -2643,10 +2647,10 @@ router.post(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       if (message.includes('Already reacted')) {
-        return res.status(400).json({ message: 'Already reacted with this emoji' });
+        return res.status(400).json({ success: false, message: 'Already reacted with this emoji' });
       }
       throw error;
     }
@@ -2682,7 +2686,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId } = req.params;
@@ -2696,7 +2700,7 @@ router.get(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       throw error;
     }
@@ -2741,7 +2745,7 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { messageId, reactionId } = req.params;
@@ -2752,11 +2756,11 @@ router.delete(
     const reaction = await reactionRepo.findById(reactionId);
 
     if (!reaction) {
-      return res.status(404).json({ message: 'Reaction not found' });
+      return res.status(404).json({ success: false, message: 'Reaction not found' });
     }
 
     if (reaction.userId !== String(userId)) {
-      return res.status(403).json({ message: 'You can only remove your own reactions' });
+      return res.status(403).json({ success: false, message: 'You can only remove your own reactions' });
     }
 
     try {
@@ -2769,7 +2773,7 @@ router.delete(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Message not found')) {
-        return res.status(404).json({ message: 'Message not found' });
+        return res.status(404).json({ success: false, message: 'Message not found' });
       }
       throw error;
     }
@@ -2825,14 +2829,14 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { threadId } = req.params;
     const { q, limit = 50, offset = 0 } = req.query;
 
     if (!q || typeof q !== 'string' || q.trim().length === 0) {
-      return res.status(400).json({ message: 'Query parameter (q) is required' });
+      return res.status(400).json({ success: false, message: 'Query parameter (q) is required' });
     }
 
     try {
@@ -2862,10 +2866,10 @@ router.get(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (errorMessageIncludes(error, 'not found') || errorMessageIncludes(error, 'Thread not found')) {
-        return res.status(404).json({ message: 'Thread not found' });
+        return res.status(404).json({ success: false, message: 'Thread not found' });
       }
       if (errorMessageIncludes(error, 'Forbidden') || errorMessageIncludes(error, 'not part of')) {
-        return res.status(403).json({ message: 'Access denied' });
+        return res.status(403).json({ success: false, message: 'Access denied' });
       }
       throw error;
     }
@@ -2927,7 +2931,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { threadId } = req.params;
@@ -2935,7 +2939,7 @@ router.post(
     const file = (req as any).file;
 
     if (!file) {
-      return res.status(400).json({ message: 'Media file is required' });
+      return res.status(400).json({ success: false, message: 'Media file is required' });
     }
 
     // Validate media type
@@ -2956,7 +2960,7 @@ router.post(
     }
 
     if (!validMediaTypes.includes(detectedMediaType)) {
-      return res.status(400).json({ message: 'Invalid mediaType. Must be one of: image, video, audio, file' });
+      return res.status(400).json({ success: false, message: 'Invalid mediaType. Must be one of: image, video, audio, file' });
     }
 
     try {
@@ -3021,10 +3025,10 @@ router.post(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message.includes('not found') || message.includes('Thread not found')) {
-        return res.status(404).json({ message: 'Thread not found' });
+        return res.status(404).json({ success: false, message: 'Thread not found' });
       }
       if (message.includes('Forbidden') || message.includes('not part of')) {
-        return res.status(403).json({ message: 'Access denied' });
+        return res.status(403).json({ success: false, message: 'Access denied' });
       }
       logger.error('Media upload error:', error);
       throw error;

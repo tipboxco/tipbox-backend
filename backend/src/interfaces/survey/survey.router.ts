@@ -70,7 +70,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await brandService.getSurveyQuestions(surveyId, userId);
@@ -143,11 +143,11 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     if (!answerId) {
-      return res.status(400).json({ error: 'answerId is required' });
+      return res.status(400).json({ success: false, message: 'answerId is required' });
     }
 
     const result = await brandService.submitSurveyAnswer(surveyId, questionId, userId, answerId);
@@ -207,7 +207,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await brandService.completeSurvey(surveyId, userId);

@@ -42,9 +42,9 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     await interactionService.likePost(userId, postId);
 
@@ -78,9 +78,9 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     await interactionService.unlikePost(userId, postId);
 
@@ -116,9 +116,9 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     const favorite = await interactionService.favoritePost(userId, postId);
 
@@ -153,9 +153,9 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     await interactionService.unfavoritePost(userId, postId);
 
@@ -250,13 +250,13 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
     const { comment, parentId } = req.body;
 
     if (!comment) {
-      return res.status(400).json({ message: 'Comment text is required' });
+      return res.status(400).json({ success: false, message: 'Comment text is required' });
     }
 
     const createdComment = await interactionService.createComment(
@@ -305,16 +305,17 @@ router.get(
   '/posts/:postId/comments',
   asyncHandler(async (req: Request, res: Response) => {
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
     const limit = parseInt(req.query.limit as string) || 50;
     const sortBy = (req.query.sortBy as 'newest' | 'oldest' | 'popular') || 'newest';
 
     // Validate sortBy parameter
     if (!['newest', 'oldest', 'popular'].includes(sortBy)) {
-      return res.status(400).json({ 
-        message: 'Invalid sortBy parameter. Must be: newest, oldest, or popular' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid sortBy parameter. Must be: newest, oldest, or popular'
       });
     }
 
@@ -374,7 +375,7 @@ router.put(
     const { comment } = req.body;
 
     if (!comment || typeof comment !== 'string' || comment.trim().length === 0) {
-      return res.status(400).json({ message: 'comment is required and must be a non-empty string' });
+      return res.status(400).json({ success: false, message: 'comment is required and must be a non-empty string' });
     }
 
     try {
@@ -386,13 +387,13 @@ router.put(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
         if (error.message.includes('15 minutes')) {
-          return res.status(400).json({ message: error.message });
+          return res.status(400).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -539,13 +540,14 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
     const { shareType, platform } = req.body;
 
     if (!shareType || !Object.values(ShareType).includes(shareType)) {
       return res.status(400).json({
+        success: false,
         message: 'Valid shareType is required (INTERNAL_REPOST or EXTERNAL_SHARE)',
       });
     }
@@ -616,13 +618,13 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     const { toUserId, message } = req.body;
     if (!toUserId || typeof toUserId !== 'string') {
-      return res.status(400).json({ message: 'toUserId is required' });
+      return res.status(400).json({ success: false, message: 'toUserId is required' });
     }
 
     try {
@@ -639,8 +641,8 @@ router.post(
       });
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (msg.includes('trust list')) return res.status(400).json({ message: msg });
-      if (msg.includes('not found') || msg.includes('Post not found')) return res.status(404).json({ message: msg });
+      if (msg.includes('trust list')) return res.status(400).json({ success: false, message: msg });
+      if (msg.includes('not found') || msg.includes('Post not found')) return res.status(404).json({ success: false, message: msg });
       throw err;
     }
   })
@@ -682,9 +684,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const rawPostId = req.params.postId?.trim();
-    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
     const postId = await postService.resolvePostId(rawPostId);
-    if (!postId) return res.status(404).json({ message: 'Post not found' });
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
 
     const status = await interactionService.getUserInteractionStatus(userId, postId);
 

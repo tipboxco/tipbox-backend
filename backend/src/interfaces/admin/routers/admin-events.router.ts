@@ -359,7 +359,7 @@ router.post(
   validateBody(AdminAddEventBadgeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id: eventId } = req.params;
     const body = req.body as { badgeId: string; rank: number; displayOrder?: number | null };
     const event = await prisma.event.findUnique({ where: { id: eventId } });
@@ -401,7 +401,7 @@ router.patch(
   validateBody(AdminUpdateEventBadgeSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id: eventId, eventBadgeId } = req.params;
     const body = req.body as { rank?: number; displayOrder?: number | null; enabled?: boolean };
     const event = await prisma.event.findUnique({ where: { id: eventId } });
@@ -447,7 +447,7 @@ router.delete(
   '/:id/badges/:eventBadgeId',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id: eventId, eventBadgeId } = req.params;
     const existing = await prisma.eventBadge.findFirst({ where: { id: eventBadgeId, eventId } });
     if (!existing) throw new NotFoundError('Event badge bulunamadı');
@@ -553,7 +553,7 @@ router.post(
   validateBody(AdminCreateEventSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as {
       title: string;
       description?: string | null;
@@ -630,7 +630,7 @@ router.patch(
   validateBody(AdminUpdateEventSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as {
       title?: string;
@@ -706,7 +706,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const event = await prisma.event.findUnique({ where: { id } });
     if (!event) throw new NotFoundError('Event bulunamadı');

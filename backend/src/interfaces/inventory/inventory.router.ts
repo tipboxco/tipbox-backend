@@ -87,14 +87,14 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const body = req.body as CreateInventoryRequest;
     const errors: string[] = [];
 
     if (body.userId && body.userId !== userId) {
-      return res.status(403).json({ message: 'Payload userId does not match authenticated user' });
+      return res.status(403).json({ success: false, message: 'Payload userId does not match authenticated user' });
     }
 
     if (!body.productId || typeof body.productId !== 'string') {
@@ -152,7 +152,7 @@ router.post(
     }
 
     if (errors.length > 0) {
-      return res.status(400).json({ message: 'Validation failed', errors });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors });
     }
 
     // Resolve option IDs (name to UUID conversion - supports both UUID and string names)
@@ -174,6 +174,7 @@ router.post(
       if (!selectedPurposeId) missingFields.push('selectedPurposeId');
       
       return res.status(400).json({
+        success: false,
         message: 'Failed to resolve experience option IDs',
         missingFields,
         hint: 'Sent values for duration/location/purpose must match an option name or UUID. Use GET /posts/experience/options to see available options.',
@@ -269,7 +270,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await inventoryService.getUserInventoryList(userId);
@@ -331,14 +332,14 @@ router.patch(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { inventoryId } = req.params;
     const { hasOwned, experienceSummary } = req.body;
 
     if (!inventoryId) {
-      return res.status(400).json({ message: 'Inventory ID is required' });
+      return res.status(400).json({ success: false, message: 'Inventory ID is required' });
     }
 
     try {
@@ -350,10 +351,10 @@ router.patch(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -405,13 +406,13 @@ router.delete(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { inventoryId } = req.params;
 
     if (!inventoryId) {
-      return res.status(400).json({ message: 'Inventory ID is required' });
+      return res.status(400).json({ success: false, message: 'Inventory ID is required' });
     }
 
     try {
@@ -424,10 +425,10 @@ router.delete(
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
+          return res.status(404).json({ success: false, message: error.message });
         }
         if (error.message.includes('Unauthorized') || error.message.includes('belong')) {
-          return res.status(403).json({ message: error.message });
+          return res.status(403).json({ success: false, message: error.message });
         }
       }
       throw error;
@@ -572,12 +573,12 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
     if (!query) {
-      return res.status(400).json({ message: 'Search query (q) is required' });
+      return res.status(400).json({ success: false, message: 'Search query (q) is required' });
     }
 
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
@@ -597,21 +598,21 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { productId, experienceText } = req.body;
 
     if (!productId || typeof productId !== 'string') {
-      return res.status(400).json({ message: 'productId is required' });
+      return res.status(400).json({ success: false, message: 'productId is required' });
     }
 
     if (!experienceText || typeof experienceText !== 'string') {
-      return res.status(400).json({ message: 'experienceText is required' });
+      return res.status(400).json({ success: false, message: 'experienceText is required' });
     }
 
     if (experienceText.trim().length < 10) {
-      return res.status(400).json({ message: 'experienceText must be at least 10 characters' });
+      return res.status(400).json({ success: false, message: 'experienceText must be at least 10 characters' });
     }
 
     const result = await inventoryService.splitExperienceWithAI(userId, productId, experienceText);
@@ -664,7 +665,7 @@ router.post(
     const currentUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!currentUserId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { userId, all } = req.body;

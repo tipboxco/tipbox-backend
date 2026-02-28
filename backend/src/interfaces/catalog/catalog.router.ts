@@ -118,7 +118,7 @@ router.get(
     
     // Limit kontrolü - max 50, ama 100'e kadar kabul et (frontend 100 gönderiyor)
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 100)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
 
     const subCategories = await catalogService.getSubCategoriesByCategoryId(categoryId, {
@@ -204,7 +204,7 @@ router.get(
     
     // Limit kontrolü - max 50, ama 100'e kadar kabul et (frontend 100 gönderiyor)
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 100)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
 
     const productGroups = await catalogService.getProductGroupsBySubCategoryId(subCategoryId, {
@@ -295,7 +295,7 @@ router.get(
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const products = await catalogService.getProductsByProductGroupId(productGroupId, search, {
@@ -397,7 +397,7 @@ router.get(
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const posts = await catalogService.getSubCategoryPosts(subCategoryId, userId, {
@@ -502,7 +502,7 @@ router.get(
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const posts = await catalogService.getProductGroupPosts(productGroupId, userId, {
@@ -692,14 +692,14 @@ router.get(
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
     
     if (!search || search.length === 0) {
-      return res.status(400).json({ message: 'Search parameter is required' });
+      return res.status(400).json({ success: false, message: 'Search parameter is required' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await catalogService.searchProductsGlobally(search, {
@@ -791,7 +791,7 @@ router.get(
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await catalogService.getContextPosts(contextId, userId, {
@@ -826,7 +826,7 @@ router.get(
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const posts = await catalogService.getProductPosts(productId, userId, {

@@ -209,7 +209,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
@@ -268,7 +268,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const event = await eventService.getLimitedTimeEvent(String(userId));
@@ -335,14 +335,14 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const myEvents = await eventService.getMyActiveEvents(String(userId), {
@@ -409,14 +409,14 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const activeEvents = await eventService.getActiveEvents(userId, {
@@ -483,14 +483,14 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const upcomingEvents = await eventService.getUpcomingEvents(userId, {
@@ -538,13 +538,13 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     const eventDetail = await eventService.getEventDetail(eventId, userId);
@@ -650,20 +650,20 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const eventPosts = await eventService.getEventPosts(eventId, userId, {
@@ -772,20 +772,20 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const eventBadges = await eventService.getEventBadgesWithProgress(
@@ -839,13 +839,13 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     try {
@@ -854,13 +854,13 @@ router.post(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (hasErrorMessage(error, 'Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ success: false, message: 'Event not found' });
       }
       if (errorMessageIncludes(error, 'already joined') || errorMessageIncludes(error, 'not started') || errorMessageIncludes(error, 'ended') || errorMessageIncludes(error, 'not published')) {
         return res.status(400).json({ message });
       }
       logger.error(`Error joining event ${eventId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -901,13 +901,13 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     try {
@@ -916,10 +916,10 @@ router.post(
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (hasErrorMessage(error, 'Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ success: false, message: 'Event not found' });
       }
       logger.error(`Error leaving event ${eventId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -956,13 +956,13 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     try {
@@ -970,10 +970,10 @@ router.get(
       return res.json(progress);
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ success: false, message: 'Event not found' });
       }
       logger.error(`Error getting event progress ${eventId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -1018,19 +1018,19 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
 
     if (limitParam < 1 || limitParam > 100) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
 
     try {
@@ -1038,10 +1038,10 @@ router.get(
       return res.json(leaderboard);
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ success: false, message: 'Event not found' });
       }
       logger.error(`Error getting event leaderboard ${eventId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -1117,13 +1117,13 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const eventId = req.params.eventId;
 
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     try {
@@ -1131,10 +1131,10 @@ router.get(
       return res.json(requirements);
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ success: false, message: 'Event not found' });
       }
       logger.error(`Error getting event requirements ${eventId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -1233,7 +1233,8 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ 
+      return res.status(401).json({
+        success: false,
         error: 'Unauthorized',
         message: 'Invalid or missing authentication token',
         statusCode: 401
@@ -1244,7 +1245,8 @@ router.get(
 
     // Validate IDs
     if (!eventId || !badgeId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         error: 'Bad Request',
         message: 'Invalid eventId or badgeId format',
         statusCode: 400
@@ -1258,7 +1260,8 @@ router.get(
       const message = getErrorMessage(error);
       
       if (errorMessageIncludes(error, 'Badge not found')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: 'Not Found',
           message: 'Badge not found',
           statusCode: 404
@@ -1266,7 +1269,8 @@ router.get(
       }
       
       if (errorMessageIncludes(error, 'Event not found')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: 'Not Found',
           message: 'Event not found',
           statusCode: 404
@@ -1274,7 +1278,8 @@ router.get(
       }
       
       if (errorMessageIncludes(error, 'does not belong to this event')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: 'Not Found',
           message: 'Badge does not belong to this event',
           statusCode: 404
@@ -1282,7 +1287,8 @@ router.get(
       }
       
       logger.error(`Error getting event badge detail ${badgeId} for event ${eventId}:`, error);
-      return res.status(500).json({ 
+      return res.status(500).json({
+        success: false,
         error: 'Internal Server Error',
         message: 'An unexpected error occurred',
         statusCode: 500
@@ -1392,7 +1398,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const q = req.query.q as string | undefined;
@@ -1401,15 +1407,15 @@ router.get(
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
     if (!q || typeof q !== 'string' || q.trim().length === 0) {
-      return res.status(400).json({ message: 'Query parameter (q) is required' });
+      return res.status(400).json({ success: false, message: 'Query parameter (q) is required' });
     }
 
     if (limit < 1 || limit > 50) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     if (type !== 'community' && type !== 'achievement') {
-      return res.status(400).json({ message: 'Type must be either "community" or "achievement"' });
+      return res.status(400).json({ success: false, message: 'Type must be either "community" or "achievement"' });
     }
 
     const result = await eventService.searchEvents(q.trim(), { type, cursor, limit });

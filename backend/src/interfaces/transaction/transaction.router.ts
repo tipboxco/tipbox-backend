@@ -65,17 +65,17 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
   const fromUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!fromUserId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { recipientId, amount, message } = req.body;
 
   if (!recipientId) {
-    return res.status(400).json({ message: 'recipientId is required' });
+    return res.status(400).json({ success: false, message: 'recipientId is required' });
   }
 
   if (!amount || amount <= 0) {
-    return res.status(400).json({ message: 'Amount must be greater than 0' });
+    return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
   }
 
   // recipientId = alıcı kullanıcı id; servis wallet tablosundan alıcının wallet'ını bulur,
@@ -87,7 +87,7 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
     reason: message || undefined
   });
 
-  return res.json({
+  const tipData = {
     id: result.transaction.id,
     actionType: result.transaction.actionType,
     status: result.transaction.status,
@@ -98,7 +98,8 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
     metadata: result.transaction.metadata,
     provider: result.transaction.provider,
     createdAt: result.transaction.createdAt.toISOString(),
-  });
+  };
+  return res.json({ success: true, data: tipData, ...tipData });
 }));
 
 /**
@@ -131,19 +132,20 @@ router.post('/:transactionId/cancel', asyncHandler(async (req: Request, res: Res
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   const { transactionId } = req.params;
   if (!transactionId) {
-    return res.status(400).json({ message: 'transactionId is required' });
+    return res.status(400).json({ success: false, message: 'transactionId is required' });
   }
   const transaction = await transactionService.cancelTipSend(transactionId, String(userId));
-  return res.json({
+  const cancelData = {
     id: transaction.id,
     status: transaction.status,
     errorMessage: transaction.errorMessage ?? undefined,
     message: 'Transaction cancelled',
-  });
+  };
+  return res.json({ success: true, data: cancelData, ...cancelData });
 }));
 
 /**
@@ -206,16 +208,16 @@ router.post('/nft-transfer', asyncHandler(async (req: Request, res: Response) =>
   const fromUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!fromUserId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { nftId, recipientId, message } = req.body;
 
   if (!nftId || typeof nftId !== 'string') {
-    return res.status(400).json({ message: 'nftId is required' });
+    return res.status(400).json({ success: false, message: 'nftId is required' });
   }
   if (!recipientId || typeof recipientId !== 'string') {
-    return res.status(400).json({ message: 'recipientId is required' });
+    return res.status(400).json({ success: false, message: 'recipientId is required' });
   }
 
   const result = await transactionService.transferNFT({
@@ -225,14 +227,14 @@ router.post('/nft-transfer', asyncHandler(async (req: Request, res: Response) =>
     message: typeof message === 'string' ? message : undefined,
   });
 
-  return res.json({
-    success: true,
+  const nftData = {
     nftId: result.nftId,
     fromUserId: result.fromUserId,
     toUserId: result.toUserId,
     nftTransactionId: result.nftTransactionId,
     transferredAt: result.transferredAt.toISOString(),
-  });
+  };
+  return res.json({ success: true, data: nftData, ...nftData });
 }));
 
 /**
@@ -262,7 +264,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const cursor = req.query.cursor as string | undefined;
@@ -338,14 +340,15 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
     })
   );
 
-  return res.json({
+  const historyData = {
     items: enrichedItems,
     pagination: {
       cursor: result.cursor || null,
       hasMore: result.hasMore,
-      limit
-    }
-  });
+      limit,
+    },
+  };
+  return res.json({ success: true, data: historyData, ...historyData });
 }));
 
 /**
@@ -362,7 +365,7 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   // Cache kontrolü - Transaction history asla cache'lenmemeli
@@ -372,13 +375,14 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
 
   const grouped = await transactionService.getUserTransactionHistoryGrouped(String(userId));
 
-  return res.json({
+  const groupedData = {
     today: grouped.today.map(tx => tx.toJSON()),
     yesterday: grouped.yesterday.map(tx => tx.toJSON()),
     lastWeek: grouped.lastWeek.map(tx => tx.toJSON()),
     lastMonth: grouped.lastMonth.map(tx => tx.toJSON()),
-    older: grouped.older.map(tx => tx.toJSON())
-  });
+    older: grouped.older.map(tx => tx.toJSON()),
+  };
+  return res.json({ success: true, data: groupedData, ...groupedData });
 }));
 
 /**
@@ -406,7 +410,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 
   const transaction = await transactionService.getTransactionById(id);
 
-  return res.json({
+  const txData = {
     id: transaction.id,
     actionType: transaction.actionType,
     status: transaction.status,
@@ -419,8 +423,9 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     errorMessage: transaction.errorMessage,
     createdAt: transaction.createdAt.toISOString(),
     confirmedAt: transaction.confirmedAt?.toISOString() || null,
-    failedAt: transaction.failedAt?.toISOString() || null
-  });
+    failedAt: transaction.failedAt?.toISOString() || null,
+  };
+  return res.json({ success: true, data: txData, ...txData });
 }));
 
 export default router;

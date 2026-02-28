@@ -211,14 +211,14 @@ router.get(
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
     
     if (!search || search.length === 0) {
-      return res.status(400).json({ message: 'Search parameter is required' });
+      return res.status(400).json({ success: false, message: 'Search parameter is required' });
     }
 
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     
     if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
     }
 
     const result = await brandService.searchBrandsGlobally(search, {
@@ -330,7 +330,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const result = await brandService.followBrand(brandId, userId);
     return res.json(result);
@@ -380,7 +380,7 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
     const result = await brandService.leaveBrand(brandId, userId);
     return res.json(result);
@@ -1554,7 +1554,7 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const stats = await brandService.getBrandStats(brandId, userId);
@@ -2168,19 +2168,19 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Brand ve product kontrolü
     const brand = await brandService.getBrandProductDetail(brandId, productId).catch(() => null);
     if (!brand) {
-      return res.status(404).json({ message: 'Brand or product not found' });
+      return res.status(404).json({ success: false, message: 'Brand or product not found' });
     }
 
     // News detayını getir
     const news = await newsService.getNewsById(newsId, userId);
     if (!news) {
-      return res.status(404).json({ message: 'News not found' });
+      return res.status(404).json({ success: false, message: 'News not found' });
     }
 
     return res.json(news);

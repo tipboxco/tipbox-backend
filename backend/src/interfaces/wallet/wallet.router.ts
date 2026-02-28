@@ -78,7 +78,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   // Wallet yoksa Thirdweb ile oturum açıp DB'ye otomatik kaydet
@@ -160,12 +160,12 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const activeWallet = await walletService.getActiveWallet(String(userId));
   if (!activeWallet) {
-    return res.status(404).json({ message: 'No active wallet found' });
+    return res.status(404).json({ success: false, message: 'No active wallet found' });
   }
 
   const response: WalletResponse = {
@@ -250,18 +250,18 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { publicAddress, provider }: ConnectWalletRequest = req.body;
 
   // Validation
   if (!walletService.validateWalletAddress(publicAddress)) {
-    return res.status(400).json({ message: 'Invalid wallet address format' });
+    return res.status(400).json({ success: false, message: 'Invalid wallet address format' });
   }
 
   if (!Object.values(WalletProvider).includes(provider as WalletProvider)) {
-    return res.status(400).json({ message: 'Invalid wallet provider' });
+    return res.status(400).json({ success: false, message: 'Invalid wallet provider' });
   }
 
   const wallet = await walletService.connectWallet(String(userId), publicAddress, provider as WalletProvider);
@@ -336,7 +336,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
 
   const wallet = await walletService.disconnectWallet(walletId);
   if (!wallet) {
-    return res.status(404).json({ message: 'Wallet not found' });
+    return res.status(404).json({ success: false, message: 'Wallet not found' });
   }
 
   const response: WalletResponse = {
@@ -409,7 +409,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
 
   const wallet = await walletService.switchActiveWallet(walletId);
   if (!wallet) {
-    return res.status(404).json({ message: 'Wallet not found' });
+    return res.status(404).json({ success: false, message: 'Wallet not found' });
   }
 
   const response: WalletResponse = {
@@ -455,7 +455,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
   const deleted = await walletService.removeWallet(walletId);
   if (!deleted) {
-    return res.status(404).json({ message: 'Wallet not found' });
+    return res.status(404).json({ success: false, message: 'Wallet not found' });
   }
 
   return res.status(204).send();
@@ -500,7 +500,7 @@ router.get('/nfts', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   await walletService.ensureWalletForUser(String(userId));
@@ -659,14 +659,14 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const cursor = req.query.cursor as string | undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
   if (limit < 1 || limit > 50) {
-    return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
   }
 
   // Cache kontrolü - Transaction history asla cache'lenmemeli
@@ -757,6 +757,7 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
     });
   } catch (error) {
     return res.status(500).json({
+      success: false,
       message: 'Failed to get transactions',
       error: error instanceof Error ? error.message : String(error),
     });
@@ -797,7 +798,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -808,6 +809,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   const wallet = await walletService.getPreferredWalletForBalance(String(userId));
   if (!wallet) {
     return res.status(404).json({
+      success: false,
       message: 'No wallet found',
       balance: 0,
       currency: 'TIPS',
@@ -916,7 +918,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   // Check if wallet already exists
@@ -942,12 +944,14 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   } catch (err: any) {
     if (err instanceof ThirdwebNotConfiguredError) {
       return res.status(503).json({
+        success: false,
         message: err.message,
         code: err.code,
       });
     }
     if (err instanceof ThirdwebWalletAuthFailedError) {
       return res.status(400).json({
+        success: false,
         message: err.message,
         code: err.code,
       });
@@ -1036,7 +1040,7 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   // Cache kontrolü - Wallet info asla cache'lenmemeli
@@ -1046,7 +1050,7 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
 
   const wallet = await walletService.getActiveWallet(String(userId));
   if (!wallet) {
-    return res.status(404).json({ message: 'Wallet not found' });
+    return res.status(404).json({ success: false, message: 'Wallet not found' });
   }
 
   const balanceInfo = await walletService.getUserBalance(String(userId));
@@ -1122,7 +1126,7 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const sdk = getThirdwebSdkService();
@@ -1268,7 +1272,7 @@ router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
@@ -1276,6 +1280,7 @@ router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) 
     return res.json(summary);
   } catch (error) {
     return res.status(500).json({
+      success: false,
       message: 'Failed to get reward summary',
       error: error instanceof Error ? error.message : String(error),
     });
@@ -1332,7 +1337,7 @@ router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
@@ -1340,6 +1345,7 @@ router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response
     return res.json(rewards.map((r) => r.toDTO()));
   } catch (error) {
     return res.status(500).json({
+      success: false,
       message: 'Failed to get claimable rewards',
       error: error instanceof Error ? error.message : String(error),
     });
@@ -1376,7 +1382,7 @@ router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res:
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { sourceType } = req.params;
@@ -1389,6 +1395,7 @@ router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res:
     return res.json(rewards.map((r) => r.toDTO()));
   } catch (error) {
     return res.status(500).json({
+      success: false,
       message: 'Failed to get rewards by source type',
       error: error instanceof Error ? error.message : String(error),
     });
@@ -1438,7 +1445,7 @@ router.post('/rewards/claim/:rewardId', asyncHandler(async (req: Request, res: R
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   const { rewardId } = req.params;
@@ -1508,7 +1515,7 @@ router.post('/rewards/claim-all', asyncHandler(async (req: Request, res: Respons
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
@@ -1557,7 +1564,7 @@ router.get('/rewards/history', asyncHandler(async (req: Request, res: Response) 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
   try {
@@ -1565,6 +1572,7 @@ router.get('/rewards/history', asyncHandler(async (req: Request, res: Response) 
     return res.json(history.map((r) => r.toDTO()));
   } catch (error) {
     return res.status(500).json({
+      success: false,
       message: 'Failed to get claim history',
       error: error instanceof Error ? error.message : String(error),
     });

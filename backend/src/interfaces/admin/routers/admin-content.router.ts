@@ -352,7 +352,7 @@ router.post(
   validateBody(AdminContentPostCreateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const body = req.body as AdminContentPostCreateInput;
 
@@ -499,7 +499,7 @@ router.patch(
   validateBody(AdminContentPostUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as {
       title?: string;
@@ -598,7 +598,7 @@ router.delete(
   '/posts/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const post = await prisma.contentPost.findUnique({ where: { id } });
     if (!post) throw new NotFoundError('Post bulunamadı');
@@ -811,7 +811,7 @@ router.patch(
   validateBody(AdminContentCommentUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { comment?: string };
     const comment = await prisma.contentComment.findUnique({ where: { id } });
@@ -878,7 +878,7 @@ router.delete(
   '/comments/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const comment = await prisma.contentComment.findUnique({ where: { id } });
     if (!comment) throw new NotFoundError('Yorum bulunamadı');
@@ -1030,7 +1030,7 @@ router.post(
   validateBody(AdminFeedHighlightCreateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as { postId: string; reason: string };
     const post = await prisma.contentPost.findUnique({ where: { id: body.postId } });
     if (!post) throw new NotFoundError('Post bulunamadı');
@@ -1083,7 +1083,7 @@ router.patch(
   validateBody(AdminFeedHighlightUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { reason?: string };
     const existing = await prisma.feedHighlight.findUnique({ where: { id } });
@@ -1136,7 +1136,7 @@ router.delete(
   '/feed-highlights/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const existing = await prisma.feedHighlight.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Feed highlight bulunamadı');
@@ -1281,7 +1281,7 @@ router.post(
   validateBody(AdminTrendingCreateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as { postId: string; trendPeriod: string; score?: number };
     const post = await prisma.contentPost.findUnique({ where: { id: body.postId } });
     if (!post) throw new NotFoundError('Post bulunamadı');
@@ -1340,7 +1340,7 @@ router.patch(
   validateBody(AdminTrendingUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { score?: number; trendPeriod?: string };
     const existing = await prisma.trendingPost.findUnique({ where: { id } });
@@ -1397,7 +1397,7 @@ router.delete(
   '/trending/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const existing = await prisma.trendingPost.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Trending post bulunamadı');
@@ -1499,7 +1499,7 @@ router.post(
   validateBody(AdminTopCommunityChoiceCreateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const body = req.body as { postId: string; reason?: string | null; badgeLabel: string };
     const post = await prisma.contentPost.findUnique({ where: { id: body.postId } });
     if (!post) throw new NotFoundError('Post bulunamadı');
@@ -1551,7 +1551,7 @@ router.patch(
   validateBody(AdminTopCommunityChoiceUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { reason?: string | null; badgeLabel?: string };
     const existing = await prisma.topCommunityChoice.findUnique({ where: { id } });
@@ -1607,7 +1607,7 @@ router.delete(
   '/top-community-choices/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const existing = await prisma.topCommunityChoice.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Top community choice bulunamadı');
@@ -1767,7 +1767,7 @@ router.patch(
   validateBody(AdminManualReviewFlagUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
     const body = req.body as { status?: string };
     const flag = await prisma.manualReviewFlag.findUnique({ where: { id } });

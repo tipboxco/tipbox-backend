@@ -87,17 +87,17 @@ router.get(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
     if (!newsId) {
-      return res.status(400).json({ message: 'newsId is required' });
+      return res.status(400).json({ success: false, message: 'newsId is required' });
     }
 
     const news = await newsService.getNewsById(newsId, userId);
     if (!news) {
-      return res.status(404).json({ message: 'News not found' });
+      return res.status(404).json({ success: false, message: 'News not found' });
     }
 
     return res.json(news);
@@ -133,7 +133,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -147,13 +147,13 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       if (errorMessage.includes('already liked')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error liking news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -183,7 +183,7 @@ router.delete(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -197,10 +197,10 @@ router.delete(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not liked')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error unliking news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -246,14 +246,14 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
     const { comment, parentId } = req.body;
 
     if (!comment || typeof comment !== 'string' || comment.trim().length === 0) {
-      return res.status(400).json({ message: 'Comment is required' });
+      return res.status(400).json({ success: false, message: 'Comment is required' });
     }
 
     try {
@@ -265,10 +265,10 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       logger.error(`Error adding comment to news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -309,7 +309,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -333,7 +333,7 @@ router.get(
       });
     } catch (error) {
       logger.error(`Error getting comments for news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -368,7 +368,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { commentId } = req.params;
@@ -382,13 +382,13 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       if (errorMessage.includes('already liked')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error liking comment ${commentId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -423,7 +423,7 @@ router.delete(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { commentId } = req.params;
@@ -437,10 +437,10 @@ router.delete(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not liked')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error unliking comment ${commentId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -484,7 +484,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -492,6 +492,7 @@ router.post(
 
     if (!shareType || !Object.values(ShareType).includes(shareType)) {
       return res.status(400).json({
+        success: false,
         message: 'Valid shareType is required (INTERNAL_REPOST or EXTERNAL_SHARE)',
       });
     }
@@ -505,13 +506,13 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       if (errorMessage.includes('already shared')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error sharing news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -541,7 +542,7 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -555,13 +556,13 @@ router.post(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not found')) {
-        return res.status(404).json({ message: errorMessage });
+        return res.status(404).json({ success: false, message: errorMessage });
       }
       if (errorMessage.includes('already favorited')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error favoriting news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );
@@ -591,7 +592,7 @@ router.delete(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { newsId } = req.params;
@@ -605,10 +606,10 @@ router.delete(
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('not favorited')) {
-        return res.status(400).json({ message: errorMessage });
+        return res.status(400).json({ success: false, message: errorMessage });
       }
       logger.error(`Error unfavoriting news ${newsId}:`, error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
   })
 );

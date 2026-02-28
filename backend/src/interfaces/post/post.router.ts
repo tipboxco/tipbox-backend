@@ -227,7 +227,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -243,6 +243,7 @@ router.post(
 
     if (!request.contextType || !request.contextId || !request.description) {
       return res.status(400).json({
+        success: false,
         message: 'contextType, contextId, and description are required',
       });
     }
@@ -289,7 +290,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -311,6 +312,7 @@ router.post(
       !request.benefitCategory
     ) {
       return res.status(400).json({
+        success: false,
         message:
           'contextType, contextId, description, and benefitCategory are required',
       });
@@ -361,7 +363,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -385,6 +387,7 @@ router.post(
 
     if (!request.contextType || !request.contextId || !request.description) {
       return res.status(400).json({
+        success: false,
         message: 'contextType, contextId, and description are required',
       });
     }
@@ -423,7 +426,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const boostOptions = await postService.getBoostOptions();
@@ -464,7 +467,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const result = await postService.getBoostPrice();
@@ -509,7 +512,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -530,6 +533,7 @@ router.post(
       
       if (!selectedProduct1 || !selectedProduct2) {
         return res.status(400).json({
+          success: false,
           message: 'selectedProduct1 and selectedProduct2 are required',
         });
       }
@@ -541,6 +545,7 @@ router.post(
       
       if (!product1IdOrExternalId || !product2IdOrExternalId) {
         return res.status(400).json({
+          success: false,
           message: 'Both products must have an id, productId, or externalId field',
         });
       }
@@ -559,6 +564,7 @@ router.post(
           error: errorMessage 
         });
         return res.status(400).json({
+          success: false,
           message: errorMessage,
         });
       }
@@ -591,6 +597,7 @@ router.post(
         } catch (e) {
           logger.warn('Failed to parse products JSON', { products: productsInput, error: e });
           return res.status(400).json({
+            success: false,
             message: 'products field must be a valid JSON array',
           });
         }
@@ -609,6 +616,7 @@ router.post(
             bodyKeys: Object.keys(req.body),
           });
           return res.status(400).json({
+            success: false,
             message: `products must be an array, got: ${typeof productsInput}`,
           });
         }
@@ -637,12 +645,14 @@ router.post(
         const errorMessage = error instanceof Error ? error.message : 'Invalid product format';
         logger.error('Failed to resolve product IDs', { error: errorMessage });
         return res.status(400).json({
+          success: false,
           message: errorMessage,
         });
       }
     }
     else {
       return res.status(400).json({
+        success: false,
         message: 'Either products array or selectedProduct1/selectedProduct2 must be provided',
       });
     }
@@ -650,6 +660,7 @@ router.post(
     // Validate products array structure
     if (!Array.isArray(products) || products.length === 0) {
       return res.status(400).json({
+        success: false,
         message: 'products must be a non-empty array',
       });
     }
@@ -658,6 +669,7 @@ router.post(
     const selectedProducts = products.filter((p) => p.isSelected);
     if (selectedProducts.length < 2) {
       return res.status(400).json({
+        success: false,
         message: 'At least 2 products must be selected for comparison',
       });
     }
@@ -678,18 +690,21 @@ router.post(
 
     if (!request.contextType) {
       return res.status(400).json({
+        success: false,
         message: 'contextType is required and must be "product"',
         field: 'contextType',
       });
     }
     if (!request.contextId || String(request.contextId).trim() === '') {
       return res.status(400).json({
+        success: false,
         message: 'contextId is required (product id for context)',
         field: 'contextId',
       });
     }
     if (!request.description) {
       return res.status(400).json({
+        success: false,
         message: 'description is required (or postText, body, content)',
         field: 'description',
       });
@@ -774,7 +789,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -787,6 +802,7 @@ router.post(
         experience = JSON.parse(experience);
       } catch (e) {
         return res.status(400).json({
+          success: false,
           message: 'experience field must be a valid JSON array or object',
         });
       }
@@ -802,6 +818,7 @@ router.post(
     const hasPurpose = rawPurposeId != null && String(rawPurposeId).trim() !== '';
     if (!hasDuration || !hasLocation || !hasPurpose) {
       return res.status(400).json({
+        success: false,
         message: 'duration, location and purpose are required. Send selectedDurationId, selectedLocationId (localization), selectedPurposeId (or legacy names: step1Duration, selectedLocation, selectedPurpose).',
         fields: {
           duration: !hasDuration ? 'missing' : 'provided',
@@ -830,6 +847,7 @@ router.post(
     const hasIsOwnedField = req.body.isOwned !== undefined && req.body.isOwned !== null;
     if (!hasStatusField && !hasIsOwnedField) {
       return res.status(400).json({
+        success: false,
         message: 'status or isOwned is required. You must indicate whether the product is in your inventory (I owned) or you only tried it (I tried). Send status: "own"|"tested"|"tried" or isOwned: true|false.',
         field: 'status',
         allowedValues: { status: ['own', 'tested', 'tried'], isOwned: [true, false] },
@@ -876,6 +894,7 @@ router.post(
         !request.selectedLocationId ||
         !request.selectedPurposeId;
       const body: Record<string, unknown> = {
+        success: false,
         message:
           'Required fields: contextType, contextId, selectedDurationId (duration), selectedLocationId (location), selectedPurposeId (purpose), content, experience (array), status, experienceSnippetId. Sent values for duration/location/purpose must match an option name or UUID.',
         received: {
@@ -908,6 +927,7 @@ router.post(
     // status zorunlu ve sadece 'own' (I owned) veya 'tested' (I tried) kabul et
     if (!request.status || !Object.values(ExperienceStatus).includes(request.status as ExperienceStatus)) {
       return res.status(400).json({
+        success: false,
         message: 'status is required and must be "own" (I owned) or "tested" (I tried). It indicates whether the product is in the user\'s inventory or was only tried.',
         field: 'status',
         allowedValues: [ExperienceStatus.OWN, ExperienceStatus.TEST],
@@ -965,7 +985,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const userId = userPayload.id || userPayload.userId || userPayload.sub;
@@ -977,11 +997,11 @@ router.post(
     };
 
     if (!request.content) {
-      return res.status(400).json({ message: 'content is required' });
+      return res.status(400).json({ success: false, message: 'content is required' });
     }
 
     if (!request.productId) {
-      return res.status(400).json({ message: 'productId is required' });
+      return res.status(400).json({ success: false, message: 'productId is required' });
     }
 
     const result = await postService.splitExperience(request);
@@ -1041,7 +1061,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const options = await postService.getExperienceOptions();
@@ -1106,12 +1126,12 @@ router.patch(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const postId = req.params.postId;
     if (!postId) {
-      return res.status(400).json({ message: 'postId is required' });
+      return res.status(400).json({ success: false, message: 'postId is required' });
     }
 
     const enabled = req.body.enabled === true || req.body.enabled === 'true';
@@ -1153,18 +1173,18 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ success: false, message: 'id is required' });
     }
 
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const post = await postService.getPostById(id, userId ? String(userId) : undefined);
     if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
     return res.json(post);
@@ -1268,17 +1288,17 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { id: rawPostId } = req.params;
     if (!rawPostId) {
-      return res.status(400).json({ message: 'Post ID is required' });
+      return res.status(400).json({ success: false, message: 'Post ID is required' });
     }
 
     const postId = await postService.resolvePostId(rawPostId.trim());
     if (!postId) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
     const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
@@ -1289,7 +1309,7 @@ router.get(
     });
 
     if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
+      return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
     // Pagination parametreleri
@@ -1479,24 +1499,24 @@ router.delete(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ success: false, message: 'id is required' });
     }
 
     try {
       const deleted = await postService.deletePost(String(userId), id.trim());
       if (!deleted) {
-        return res.status(404).json({ message: 'Post not found' });
+        return res.status(404).json({ success: false, message: 'Post not found' });
       }
       return res.status(204).send();
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (error instanceof Error && message.startsWith('Forbidden')) {
-        return res.status(403).json({ message: 'You are not allowed to delete this post' });
+        return res.status(403).json({ success: false, message: 'You are not allowed to delete this post' });
       }
       throw error;
     }
@@ -1543,7 +1563,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     // Process images (from files or URLs)
@@ -1561,6 +1581,7 @@ router.post(
 
     if (!request.experiencePostId || !request.content) {
       return res.status(400).json({
+        success: false,
         message: 'experiencePostId and content are required. contextType/contextId are optional (derived from experience post when missing).',
       });
     }
@@ -1571,6 +1592,7 @@ router.post(
     } catch (err: any) {
       if (err?.message === 'LEGACY_INVENTORY_NO_POST') {
         return res.status(400).json({
+          success: false,
           message: 'This is a legacy inventory item without an associated experience post',
           code: 'LEGACY_INVENTORY_NO_POST',
           hint: 'Update posts can only be created for experience posts. This inventory item was created before the new post system and does not have a corresponding post. Please create a new experience post for this product first.',
@@ -1578,6 +1600,7 @@ router.post(
       }
       if (err?.message === 'Experience post not found') {
         return res.status(404).json({
+          success: false,
           message: err.message,
           code: 'EXPERIENCE_POST_NOT_FOUND',
           hint: 'experiencePostId must be the experience post id (ULID, 26 chars from post detail or feed item id). If opening from bookmarks, use the post id from the item (item.id), not the bookmark id.',
@@ -1585,6 +1608,7 @@ router.post(
       }
       if (err?.message?.includes('legacy inventory-based reviews')) {
         return res.status(400).json({
+          success: false,
           message: err.message,
           code: 'LEGACY_REVIEW_NOT_SUPPORTED',
           hint: 'Update posts cannot be created for old inventory-based reviews. The review must be a ContentPost (experience post). Please create a new experience post for this product first.',
@@ -1644,12 +1668,12 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { productId } = req.params;
     if (!productId) {
-      return res.status(400).json({ message: 'productId is required' });
+      return res.status(400).json({ success: false, message: 'productId is required' });
     }
 
     const reviews = await postService.getUserProductReviews(
@@ -1695,7 +1719,7 @@ router.post(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const request: SplitExperienceRequest = {
@@ -1706,12 +1730,14 @@ router.post(
 
     if (!request.productId || !request.content) {
       return res.status(400).json({
+        success: false,
         message: 'productId and content are required',
       });
     }
 
     if (request.content.trim().length < 10) {
       return res.status(400).json({
+        success: false,
         message: 'content must be at least 10 characters',
       });
     }
@@ -1782,12 +1808,12 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
     if (!query) {
-      return res.status(400).json({ message: 'Search query (q) is required' });
+      return res.status(400).json({ success: false, message: 'Search query (q) is required' });
     }
 
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
@@ -1915,12 +1941,12 @@ router.post(
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Authentication required' });
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
     const eventId = req.params.eventId;
     if (!eventId) {
-      return res.status(400).json({ message: 'Event ID is required' });
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
     }
 
     // Validate required fields before processing images
@@ -1936,45 +1962,51 @@ router.post(
     }
 
     if (!body || !contextType) {
-      return res.status(400).json({ 
-        message: 'body and contextType are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'body and contextType are required'
       });
     }
 
     // contextId OR inventoryId gerekli (en az biri)
     if (!contextId && !inventoryId) {
-      return res.status(400).json({ 
-        message: 'Either contextId or inventoryId is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Either contextId or inventoryId is required'
       });
     }
 
     // Validate body - must not be empty after trim
     const trimmedBody = typeof body === 'string' ? body.trim() : '';
     if (trimmedBody.length === 0) {
-      return res.status(400).json({ 
-        message: 'body must be at least 1 character' 
+      return res.status(400).json({
+        success: false,
+        message: 'body must be at least 1 character'
       });
     }
 
     // Validate body length (max 2000 chars)
     if (trimmedBody.length > 2000) {
-      return res.status(400).json({ 
-        message: 'body must be at most 2000 characters' 
+      return res.status(400).json({
+        success: false,
+        message: 'body must be at most 2000 characters'
       });
     }
 
     // Validate contextType
     if (contextType !== 'product' && contextType !== 'sub_category') {
-      return res.status(400).json({ 
-        message: "contextType must be 'product' or 'sub_category'" 
+      return res.status(400).json({
+        success: false,
+        message: "contextType must be 'product' or 'sub_category'"
       });
     }
 
     // Validate image count
     const files = Array.isArray(req.files) ? req.files : [];
     if (files.length > 10) {
-      return res.status(400).json({ 
-        message: 'Maximum 10 images allowed' 
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 10 images allowed'
       });
     }
 
@@ -2014,7 +2046,8 @@ router.post(
       
       // Parse error message to return appropriate response
       if (message.includes('Event not found')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: {
             code: 'EVENT_NOT_FOUND',
             message: 'Event not found'
@@ -2023,7 +2056,8 @@ router.post(
       }
       
       if (message.includes('must join this event')) {
-        return res.status(403).json({ 
+        return res.status(403).json({
+          success: false,
           error: {
             code: 'NOT_JOINED',
             message: 'You must join this event before sharing a post'
@@ -2033,7 +2067,8 @@ router.post(
 
       // ✅ YENİ: Inventory not found error
       if (message.includes('Inventory item not found')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: {
             code: 'INVENTORY_NOT_FOUND',
             message: message
@@ -2043,7 +2078,8 @@ router.post(
 
       // ✅ YENİ: Inventory ownership error
       if (message.includes('does not belong to you')) {
-        return res.status(403).json({ 
+        return res.status(403).json({
+          success: false,
           error: {
             code: 'INVENTORY_FORBIDDEN',
             message: message
@@ -2052,7 +2088,8 @@ router.post(
       }
       
       if (message.includes('does not exist or has been deleted')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: {
             code: 'CONTEXT_NOT_FOUND',
             message: message // User-friendly message from service
@@ -2061,7 +2098,8 @@ router.post(
       }
       
       if (message.includes('not found') || message.includes('does not exist')) {
-        return res.status(404).json({ 
+        return res.status(404).json({
+          success: false,
           error: {
             code: 'CONTEXT_NOT_FOUND',
             message: 'Product or sub-category not found'
@@ -2070,7 +2108,8 @@ router.post(
       }
       
       // Generic error response
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: message || 'Failed to create post'
       });
     }
