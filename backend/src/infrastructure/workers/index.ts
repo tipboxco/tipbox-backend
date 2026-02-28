@@ -77,9 +77,6 @@ class WorkerManager {
       logger.info('TransactionProcessor started');
 
       logger.info('All workers started successfully');
-
-      // Graceful shutdown handlers
-      this.setupGracefulShutdown();
     } catch (error) {
       logger.error('Failed to start workers:', error);
       process.exit(1);
@@ -111,9 +108,11 @@ class WorkerManager {
   }
 
   /**
-   * Graceful shutdown işleyicilerini kurar
+   * Graceful shutdown işleyicilerini kurar.
+   * Sadece standalone çalışırken çağrılmalı.
+   * server.ts üzerinden çalışırken, server.ts kendi signal handler'larını kurar.
    */
-  private setupGracefulShutdown(): void {
+  public setupGracefulShutdown(): void {
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       
@@ -144,15 +143,15 @@ class WorkerManager {
   }
 }
 
-// Worker manager'ı başlat
-const workerManager = new WorkerManager();
-
-// Eğer bu dosya doğrudan çalıştırılıyorsa worker'ları başlat
+// Eğer bu dosya doğrudan çalıştırılıyorsa worker'ları başlat + graceful shutdown kur
 if (require.main === module) {
-  workerManager.startAll().catch((error) => {
-    logger.error('Failed to start worker manager:', error);
-    process.exit(1);
-  });
+  const standaloneManager = new WorkerManager();
+  standaloneManager.startAll()
+    .then(() => standaloneManager.setupGracefulShutdown())
+    .catch((error) => {
+      logger.error('Failed to start worker manager:', error);
+      process.exit(1);
+    });
 }
 
 export default WorkerManager;
