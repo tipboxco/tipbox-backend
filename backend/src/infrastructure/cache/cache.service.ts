@@ -206,6 +206,70 @@ export class CacheService {
   }
 
   /**
+   * SET NX (Set if Not eXists) ile atomik lock mekanizması.
+   * Cache stampede koruması için distributed lock olarak kullanılır.
+   * @param key - Lock anahtarı
+   * @param value - Lock değeri
+   * @param ttlInSeconds - Lock TTL (saniye)
+   * @returns true = lock alındı, false = zaten var
+   */
+  public async setNX(key: string, value: string, ttlInSeconds: number): Promise<boolean> {
+    if (isCacheDisabled) {
+      return true; // Cache kapalıysa lock'a gerek yok, devam et
+    }
+
+    if (this.isCircuitBreakerOpen()) {
+      return true; // Circuit breaker açıksa lock'a gerek yok, devam et
+    }
+
+    if (!this.client || !this.isConnected) {
+      return true; // Bağlantı yoksa lock'a gerek yok, devam et
+    }
+
+    try {
+      const result = await this.withTimeout(
+        this.client.set(key, value, { NX: true, EX: ttlInSeconds })
+      );
+      this.recordSuccess();
+      return result === 'OK';
+    } catch (error) {
+      logger.error(`Error setting NX cache key ${key}:`, error);
+      this.recordError();
+      return true; // Hata durumunda lock'a gerek yok, devam et
+    }
+  }
+
+  /**
+   * Key'in kalan TTL değerini döndürür (saniye cinsinden).
+   * withCacheAndRefresh için background refresh zamanlamasında kullanılır.
+   * @param key - Cache anahtarı
+   * @returns TTL saniye (-1: TTL yok, -2: key yok, null: hata/devre dışı)
+   */
+  public async ttl(key: string): Promise<number | null> {
+    if (isCacheDisabled) {
+      return null;
+    }
+
+    if (this.isCircuitBreakerOpen()) {
+      return null;
+    }
+
+    if (!this.client || !this.isConnected) {
+      return null;
+    }
+
+    try {
+      const result = await this.withTimeout(this.client.ttl(key));
+      this.recordSuccess();
+      return result;
+    } catch (error) {
+      logger.error(`Error getting TTL for cache key ${key}:`, error);
+      this.recordError();
+      return null;
+    }
+  }
+
+  /**
    * Belirtilen anahtarı ve verisini cache'ten siler
    * @param key - Silinecek cache anahtarı
    * @returns Silinen key sayısı (0 veya 1)

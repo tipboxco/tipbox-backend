@@ -1,5 +1,5 @@
 import { CacheService } from './cache.service';
-import { CACHE_KEYS } from './cache-keys';
+import { CACHE_KEYS, CACHE_PATTERNS } from './cache-keys';
 import logger from '../logger/logger';
 
 const cacheService = CacheService.getInstance();
@@ -43,6 +43,8 @@ export async function invalidatePostCache(postId: string): Promise<void> {
     const keysToDelete = [
       CACHE_KEYS.POST(postId),
       CACHE_KEYS.POST_COMMENTS(postId),
+      CACHE_KEYS.POST_LIKES(postId),
+      CACHE_KEYS.POST_STATS(postId),
     ];
 
     for (const key of keysToDelete) {
@@ -56,6 +58,106 @@ export async function invalidatePostCache(postId: string): Promise<void> {
     });
   } catch (error) {
     logger.error('Error invalidating post cache', { error, postId });
+  }
+}
+
+/**
+ * Post etkileşim cache'ini invalidate eder (like, comment, share, favorite)
+ * Kullanım: Post'a like/unlike, comment, share, favorite yapıldığında
+ */
+export async function invalidatePostInteractionCache(postId: string): Promise<void> {
+  try {
+    const keysToDelete = [
+      CACHE_KEYS.POST_LIKES(postId),
+      CACHE_KEYS.POST_STATS(postId),
+      CACHE_KEYS.POST_COMMENTS(postId),
+    ];
+
+    for (const key of keysToDelete) {
+      await cacheService.del(key);
+    }
+
+    logger.info({
+      message: 'Post interaction cache invalidated',
+      postId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating post interaction cache', { error, postId });
+  }
+}
+
+/**
+ * Wallet cache'ini invalidate eder
+ * Kullanım: Wallet balance güncellendiğinde, wallet connect/disconnect edildiğinde
+ */
+export async function invalidateWalletCache(userId: string): Promise<void> {
+  try {
+    await cacheService.delPattern(CACHE_PATTERNS.WALLET_USER(userId));
+
+    logger.info({
+      message: 'Wallet cache invalidated',
+      userId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating wallet cache', { error, userId });
+  }
+}
+
+/**
+ * Badge/gamification cache'ini invalidate eder
+ * Kullanım: Kullanıcıya badge verildiğinde, claim edildiğinde, visibility güncellendiğinde
+ */
+export async function invalidateBadgeCache(userId: string): Promise<void> {
+  try {
+    await cacheService.del(CACHE_KEYS.USER_PROFILE(userId));
+
+    logger.info({
+      message: 'Badge cache invalidated',
+      userId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating badge cache', { error, userId });
+  }
+}
+
+/**
+ * DM/Support request cache'ini invalidate eder
+ * Kullanım: Support request durumu değiştiğinde
+ */
+export async function invalidateDMCache(userId: string, threadId?: string): Promise<void> {
+  try {
+    await cacheService.del(CACHE_KEYS.DM_UNREAD_COUNT(userId));
+    await cacheService.del(CACHE_KEYS.NOTIFICATION_UNREAD_COUNT(userId));
+
+    if (threadId) {
+      await cacheService.del(CACHE_KEYS.DM_THREAD(threadId));
+      await cacheService.delPattern(CACHE_PATTERNS.DM_THREAD_ALL(threadId));
+    }
+
+    logger.info({
+      message: 'DM cache invalidated',
+      userId,
+      threadId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating DM cache', { error, userId, threadId });
+  }
+}
+
+/**
+ * Trust score cache'ini invalidate eder
+ * Kullanım: Kullanıcının trust score'u güncellendiğinde
+ */
+export async function invalidateTrustScoreCache(userId: string): Promise<void> {
+  try {
+    await cacheService.del(CACHE_KEYS.USER_TRUST_SCORE(userId));
+
+    logger.info({
+      message: 'Trust score cache invalidated',
+      userId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating trust score cache', { error, userId });
   }
 }
 
