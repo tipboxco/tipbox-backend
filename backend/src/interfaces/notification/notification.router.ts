@@ -3,8 +3,10 @@ import { NotificationService } from '../../application/notification/notification
 import { PushTokenService, PushTokenUserNotFoundError } from '../../application/notification/push-token.service';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQuery } from './notification.dto';
+import { RegisterPushTokenSchema, UpdateNotificationSettingsSchema } from './notification.schemas';
 import { authMiddleware } from '../auth/auth.middleware';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
+import { validateBody } from '../../infrastructure/middleware/validation.middleware';
 import logger from '../../infrastructure/logger/logger';
 import { parseQueryInt, parseQueryBoolean } from '../../infrastructure/utils/query-parser';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
@@ -1942,11 +1944,11 @@ router.get('/settings', authMiddleware, asyncHandler(async (req: Request, res: R
  *       500:
  *         description: Server error
  */
-router.put('/settings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+router.put('/settings', authMiddleware, validateBody(UpdateNotificationSettingsSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    
+
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
@@ -2009,23 +2011,16 @@ router.put('/settings', authMiddleware, asyncHandler(async (req: Request, res: R
  *       500:
  *         description: Server error
  */
-router.post('/push-token', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+router.post('/push-token', authMiddleware, validateBody(RegisterPushTokenSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    
+
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const { token, deviceType }: RegisterPushTokenDto = req.body;
-
-    if (!token || !deviceType) {
-      return res.status(400).json({
-        success: false,
-        message: 'Token and deviceType are required',
-      });
-    }
 
     const pushToken = await pushTokenService.registerPushToken(userId, token, deviceType);
 

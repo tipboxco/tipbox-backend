@@ -28,6 +28,11 @@ declare global {
       token?: string;
 
       /**
+       * Request trace ID - request-logger middleware tarafından eklenir
+       */
+      traceId?: string;
+
+      /**
        * Auth0 OIDC middleware (express-openid-connect)
        */
       oidc?: {

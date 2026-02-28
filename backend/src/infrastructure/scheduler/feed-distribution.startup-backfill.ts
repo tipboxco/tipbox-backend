@@ -45,74 +45,83 @@ export async function maybeBackfillFeedOnStartup(): Promise<void> {
       queue: queueStats,
     });
 
-    // TÜM postları al (seed sonrası/boş feed recovery için)
-    const posts = await prisma.contentPost.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        userId: true,
-        mainCategoryId: true,
-        subCategoryId: true,
-        productGroupId: true,
-        productId: true,
-        likesCount: true,
-        commentsCount: true,
-        viewsCount: true,
-        sharesCount: true,
-        isBoosted: true,
-        boostedUntil: true,
-        createdAt: true,
-      },
-    });
-
-    if (posts.length === 0) return;
-
+    // Postları batch halinde al (bellek taşmasını önle)
+    const BATCH_SIZE = 500;
     let successCount = 0;
     let errorCount = 0;
+    let offset = 0;
+    let totalProcessed = 0;
 
-    for (const post of posts) {
-      try {
-        const postData = {
-          mainCategoryId: post.mainCategoryId,
-          subCategoryId: post.subCategoryId,
-          productGroupId: post.productGroupId,
-          productId: post.productId,
-          likesCount: post.likesCount,
-          commentsCount: post.commentsCount,
-          viewsCount: post.viewsCount,
-          sharesCount: post.sharesCount,
-          isBoosted: post.isBoosted,
-          boostedUntil: post.boostedUntil,
-          createdAt: post.createdAt,
-        };
+    while (totalProcessed < postCount) {
+      const posts = await prisma.contentPost.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: BATCH_SIZE,
+        select: {
+          id: true,
+          userId: true,
+          mainCategoryId: true,
+          subCategoryId: true,
+          productGroupId: true,
+          productId: true,
+          likesCount: true,
+          commentsCount: true,
+          viewsCount: true,
+          sharesCount: true,
+          isBoosted: true,
+          boostedUntil: true,
+          createdAt: true,
+        },
+      });
 
-        await scheduler.queueFeedDistribution(post.id, post.userId, postData, 'fast');
+      if (posts.length === 0) break;
 
-        successCount++;
-        if (successCount % 100 === 0) {
-          logger.info({
-            message: 'Feed startup backfill progress',
-            queued: successCount,
-            total: posts.length,
-          });
-        }
-      } catch (error) {
-        errorCount++;
-        if (errorCount <= 5) {
-          logger.error({
-            message: 'Feed startup backfill: failed to queue job for post',
-            postId: post.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      for (const post of posts) {
+        try {
+          const postData = {
+            mainCategoryId: post.mainCategoryId,
+            subCategoryId: post.subCategoryId,
+            productGroupId: post.productGroupId,
+            productId: post.productId,
+            likesCount: post.likesCount,
+            commentsCount: post.commentsCount,
+            viewsCount: post.viewsCount,
+            sharesCount: post.sharesCount,
+            isBoosted: post.isBoosted,
+            boostedUntil: post.boostedUntil,
+            createdAt: post.createdAt,
+          };
+
+          await scheduler.queueFeedDistribution(post.id, post.userId, postData, 'fast');
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          if (errorCount <= 5) {
+            logger.error({
+              message: 'Feed startup backfill: failed to queue job for post',
+              postId: post.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
+
+      totalProcessed += posts.length;
+      offset += BATCH_SIZE;
+
+      logger.info({
+        message: 'Feed startup backfill batch progress',
+        queued: successCount,
+        processed: totalProcessed,
+        totalPosts: postCount,
+      });
     }
 
     logger.info({
       message: 'Feed startup backfill completed (jobs enqueued)',
       queued: successCount,
       failed: errorCount,
-      totalPosts: posts.length,
+      totalPosts: totalProcessed,
     });
   } catch (error) {
     logger.error({

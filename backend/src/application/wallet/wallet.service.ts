@@ -291,7 +291,9 @@ export class WalletService {
       await this.walletRepo.setBalance(walletId, balance, lockedBalance);
 
       // Cache invalidation
-      invalidateWalletCache(wallet.userId).catch(() => {});
+      invalidateWalletCache(wallet.userId).catch((err) => {
+        logger.warn('Failed to invalidate wallet cache', { error: err instanceof Error ? err.message : String(err) });
+      });
 
       logger.info({
         walletId,
@@ -315,7 +317,9 @@ export class WalletService {
     const wallet = await this.walletRepo.findById(walletId);
     const result = await this.walletRepo.setBalance(walletId, balance, lockedBalance);
     if (wallet) {
-      invalidateWalletCache(wallet.userId).catch(() => {});
+      invalidateWalletCache(wallet.userId).catch((err) => {
+        logger.warn('Failed to invalidate wallet cache', { error: err instanceof Error ? err.message : String(err) });
+      });
     }
     return result;
   }

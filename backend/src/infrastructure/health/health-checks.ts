@@ -9,7 +9,7 @@ export interface HealthCheckResult {
   status: 'healthy' | 'unhealthy' | 'degraded';
   responseTime?: number;
   message?: string;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 export interface SystemHealth {
@@ -52,12 +52,13 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
       responseTime,
       message: 'Database connection is healthy',
     };
-  } catch (error: any) {
-    logger.error('Database health check failed', { error: error.message });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Database health check failed', { error: errorMessage });
     return {
       status: 'unhealthy',
       responseTime: Date.now() - startTime,
-      message: error.message || 'Database connection failed',
+      message: errorMessage || 'Database connection failed',
     };
   }
 }
@@ -78,18 +79,11 @@ export async function checkRedisHealth(): Promise<HealthCheckResult> {
       };
     }
     
-    // Basit bir set/get ile Redis'i test et
-    const testKey = 'health:check:' + Date.now();
-    const testValue = { check: true, timestamp: Date.now() };
-    
-    await cacheService.set(testKey, testValue, 10); // 10 saniye TTL
-    const retrieved = await cacheService.get(testKey);
-    
-    // Cleanup
-    await cacheService.del(testKey);
-    
+    // PING komutu ile Redis'i test et
+    await cacheService.ping();
+
     const responseTime = Date.now() - startTime;
-    
+
     // Response time'a göre status belirle
     if (responseTime > 500) {
       return {
@@ -98,26 +92,19 @@ export async function checkRedisHealth(): Promise<HealthCheckResult> {
         message: 'Redis responding slowly',
       };
     }
-    
-    if (!retrieved) {
-      return {
-        status: 'degraded',
-        responseTime,
-        message: 'Redis get/set test failed',
-      };
-    }
-    
+
     return {
       status: 'healthy',
       responseTime,
       message: 'Redis connection is healthy',
     };
-  } catch (error: any) {
-    logger.error('Redis health check failed', { error: error.message });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Redis health check failed', { error: errorMessage });
     return {
       status: 'unhealthy',
       responseTime: Date.now() - startTime,
-      message: error.message || 'Redis connection failed',
+      message: errorMessage || 'Redis connection failed',
     };
   }
 }

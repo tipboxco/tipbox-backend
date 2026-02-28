@@ -1,7 +1,13 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { seedTokenMiddleware } from '../../infrastructure/middleware/seed-token.middleware';
 import { listSeeds, runSeed, runSingleSeed, SeedLogChunk, SeedItem } from '../../application/seed/seed.service';
+import { validateBody } from '../../infrastructure/middleware/validation.middleware';
 import logger from '../../infrastructure/logger/logger';
+
+const RunSeedSchema = z.object({
+  seed_id: z.string().min(1).optional(),
+});
 
 const router = Router();
 
@@ -51,6 +57,7 @@ router.get(
 router.post(
   '/run',
   seedTokenMiddleware,
+  validateBody(RunSeedSchema),
   async (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
@@ -59,8 +66,7 @@ router.post(
 
     const cwd = process.cwd();
     const seeds: SeedItem[] = listSeeds(cwd);
-    const body = (req.body || {}) as { seed_id?: string };
-    const seedId = typeof body.seed_id === 'string' ? body.seed_id : undefined;
+    const { seed_id: seedId } = req.body as z.infer<typeof RunSeedSchema>;
 
     const send = (chunk: SeedLogChunk | { type: 'seeds'; seeds: SeedItem[] }) => {
       res.write(JSON.stringify(chunk) + '\n');

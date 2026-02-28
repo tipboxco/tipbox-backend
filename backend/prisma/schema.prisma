@@ -319,6 +319,9 @@ model LoginAttempt {
   attemptedAt DateTime           @default(now()) @map("attempted_at")
   user        User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([ipAddress, attemptedAt])
+  @@index([status, attemptedAt])
   @@map("login_attempts")
 }
 
@@ -332,6 +335,8 @@ model PasswordResetToken {
   updatedAt DateTime @updatedAt @map("updated_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([isUsed, expiresAt])
   @@map("password_reset_tokens")
 }
 
@@ -376,6 +381,8 @@ model Category {
   badgeCollections BadgeCollection[]
 
   @@index([parentId])
+  @@index([isActive])
+  @@index([level])
   @@map("categories")
 }
 
@@ -448,6 +455,9 @@ model Product {
   category           Category?           @relation(fields: [categoryId], references: [id])
   group              ProductGroup?       @relation(fields: [groupId], references: [id])
 
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([createdAt])
   @@map("products")
 }
 
@@ -518,7 +528,7 @@ model ContentPost {
   userId               String                    @map("user_id") @db.Uuid
   type                 ContentPostType
   title                String
-  body                 String
+  body                 String                    @db.Text
   mainCategoryId       String?                   @map("main_category_id") @db.Uuid
   subCategoryId        String?                   @map("sub_category_id") @db.Uuid
   categoryId           String?                   @map("category_id")
@@ -634,8 +644,8 @@ model PostComparison {
   updatedAt         DateTime              @updatedAt @map("updated_at")
   scores            PostComparisonScore[]
   post              ContentPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
-  product1          Product               @relation("ComparisonProduct1", fields: [product1Id], references: [id])
-  product2          Product               @relation("ComparisonProduct2", fields: [product2Id], references: [id])
+  product1          Product               @relation("ComparisonProduct1", fields: [product1Id], references: [id], onDelete: Restrict)
+  product2          Product               @relation("ComparisonProduct2", fields: [product2Id], references: [id], onDelete: Restrict)
 
   @@map("post_comparisons")
 }
@@ -723,7 +733,7 @@ model ContentComment {
   postId     String               @map("post_id") @db.VarChar(26)
   userId     String               @map("user_id") @db.Uuid
   parentId   String?              @map("parent_id") @db.VarChar(26)
-  comment    String
+  comment    String               @db.Text
   isAnswer   Boolean              @map("is_answer")
   createdAt  DateTime             @default(now()) @map("created_at")
   updatedAt  DateTime             @updatedAt @map("updated_at")
@@ -1105,7 +1115,7 @@ model BridgePost {
   id        String   @id @db.VarChar(26)
   brandId   String   @map("brand_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  content   String
+  content   String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
@@ -1245,7 +1255,7 @@ model News {
   id             String         @id @default(uuid()) @db.Uuid
   brandId        String         @map("brand_id") @db.Uuid
   title          String
-  content        String
+  content        String         @db.Text
   bannerImageUrl String?        @map("banner_image_url")
   source         String         @default("tipbox")
   author         String?
@@ -1714,6 +1724,7 @@ model DMThread {
 
   @@index([userOneId])
   @@index([userTwoId])
+  @@index([userOneId, userTwoId])
   @@index([isSupportThread])
   @@index([lastMessageAt])
   @@map("dm_threads")
@@ -1723,7 +1734,7 @@ model DMMessage {
   id        String           @id @default(uuid()) @db.Uuid
   threadId  String           @map("thread_id") @db.Uuid
   senderId  String           @map("sender_id") @db.Uuid
-  message   String
+  message   String           @db.Text
   sentAt    DateTime         @default(now()) @map("sent_at")
   isRead    Boolean          @map("is_read")
   createdAt DateTime         @default(now()) @map("created_at")
@@ -2053,7 +2064,7 @@ model ExpertAnswer {
   id           String        @id @default(uuid()) @db.Uuid
   requestId    String        @map("request_id") @db.Uuid
   expertUserId String        @map("expert_user_id") @db.Uuid
-  content      String
+  content      String        @db.Text
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   expertUser   User          @relation(fields: [expertUserId], references: [id], onDelete: Cascade)

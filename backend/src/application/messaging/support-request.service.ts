@@ -339,8 +339,12 @@ export class SupportRequestService {
     }
 
     // Cache invalidation - her iki kullanıcının DM cache'ini temizle
-    invalidateDMCache(senderId, dmThreadId ?? undefined).catch(() => {});
-    invalidateDMCache(payload.recipientUserId, dmThreadId ?? undefined).catch(() => {});
+    invalidateDMCache(senderId, dmThreadId ?? undefined).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(payload.recipientUserId, dmThreadId ?? undefined).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request created from ${senderId} to ${payload.recipientUserId}, socket events emitted`);
   }
@@ -514,8 +518,12 @@ export class SupportRequestService {
     }
 
     // Cache invalidation
-    invalidateDMCache(request.fromUserId, supportThread.id).catch(() => {});
-    invalidateDMCache(request.toUserId, supportThread.id).catch(() => {});
+    invalidateDMCache(request.fromUserId, supportThread.id).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId, supportThread.id).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} accepted by ${expertUserId}, thread ${supportThread.id} created`);
 
@@ -562,8 +570,12 @@ export class SupportRequestService {
     socketHandler.sendMessageToUser(request.toUserId, 'support_request_cancelled', cancelledEvent);
 
     // Cache invalidation
-    invalidateDMCache(request.fromUserId).catch(() => {});
-    invalidateDMCache(request.toUserId).catch(() => {});
+    invalidateDMCache(request.fromUserId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} cancelled by ${requesterId}`);
   }
@@ -630,8 +642,12 @@ export class SupportRequestService {
     }
 
     // Cache invalidation
-    invalidateDMCache(request.fromUserId).catch(() => {});
-    invalidateDMCache(request.toUserId).catch(() => {});
+    invalidateDMCache(request.fromUserId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} rejected by ${expertUserId}`);
   }
@@ -723,8 +739,12 @@ export class SupportRequestService {
 
     // Cache invalidation
     const closeThreadId = (request as unknown as { threadId?: string }).threadId;
-    invalidateDMCache(request.fromUserId, closeThreadId).catch(() => {});
-    invalidateDMCache(request.toUserId, closeThreadId).catch(() => {});
+    invalidateDMCache(request.fromUserId, closeThreadId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId, closeThreadId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} closed by ${userId} with rating ${rating}, status: AWAITING_COMPLETION (waiting for finalize)`);
   }
@@ -822,8 +842,12 @@ export class SupportRequestService {
 
     // Cache invalidation
     const finalizeThreadId = (request as unknown as { threadId?: string }).threadId;
-    invalidateDMCache(request.fromUserId, finalizeThreadId).catch(() => {});
-    invalidateDMCache(request.toUserId, finalizeThreadId).catch(() => {});
+    invalidateDMCache(request.fromUserId, finalizeThreadId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId, finalizeThreadId).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} finalized by ${userId} with rating ${rating}, status: COMPLETED`);
   }
@@ -1032,8 +1056,12 @@ export class SupportRequestService {
     socketHandler.sendMessageToUser(request.toUserId, 'support_request_reported', reportEvent);
 
     // Cache invalidation
-    invalidateDMCache(request.fromUserId, requestThreadId ?? undefined).catch(() => {});
-    invalidateDMCache(request.toUserId, requestThreadId ?? undefined).catch(() => {});
+    invalidateDMCache(request.fromUserId, requestThreadId ?? undefined).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
+    invalidateDMCache(request.toUserId, requestThreadId ?? undefined).catch((err) => {
+      logger.warn('Failed to invalidate DM cache', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info(`Support request ${requestId} reported by ${reporterId} with category ${normalizedCategory}, status set to COMPLETED, thread closed`);
   }

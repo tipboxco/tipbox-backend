@@ -6,6 +6,36 @@ import { verifyJwt } from './jwt.helper';
 
 const cacheService = CacheService.getInstance();
 
+// In-memory fallback: Redis çalışmadığında bile yakın zamanda blacklist'e eklenen token'ları hatırla
+const MEMORY_BLACKLIST_MAX_SIZE = 10_000;
+const memoryBlacklist = new Map<string, number>(); // token → expiry timestamp (ms)
+
+function addToMemoryBlacklist(token: string, ttlSeconds: number): void {
+  // Expired entry'leri temizle (lazy cleanup)
+  if (memoryBlacklist.size >= MEMORY_BLACKLIST_MAX_SIZE) {
+    const now = Date.now();
+    for (const [key, expiry] of memoryBlacklist) {
+      if (expiry <= now) memoryBlacklist.delete(key);
+    }
+    // Hala doluysa en eski entry'leri sil
+    if (memoryBlacklist.size >= MEMORY_BLACKLIST_MAX_SIZE) {
+      const keysToDelete = Array.from(memoryBlacklist.keys()).slice(0, 1000);
+      for (const key of keysToDelete) memoryBlacklist.delete(key);
+    }
+  }
+  memoryBlacklist.set(token, Date.now() + ttlSeconds * 1000);
+}
+
+function isInMemoryBlacklist(token: string): boolean {
+  const expiry = memoryBlacklist.get(token);
+  if (expiry === undefined) return false;
+  if (expiry <= Date.now()) {
+    memoryBlacklist.delete(token);
+    return false;
+  }
+  return true;
+}
+
 /**
  * Token'ı blacklist'e ekler
  * @param token - Blacklist'e eklenecek JWT token
@@ -34,16 +64,19 @@ export async function blacklistToken(token: string, expiresIn?: number): Promise
       }
     }
     
+    // Memory fallback'e de ekle (Redis çökerse token hala reddedilsin)
+    addToMemoryBlacklist(token, ttl);
+
     const key = CACHE_KEYS.TOKEN_BLACKLIST(token);
     await cacheService.set(key, '1', ttl);
-    
-    logger.info('Token blacklisted', { 
+
+    logger.info('Token blacklisted', {
       tokenPrefix: token.substring(0, 20),
-      ttl 
+      ttl
     });
   } catch (error) {
     logger.error('Failed to blacklist token', { error });
-    // Hata durumunda throw etme, graceful degradation
+    // Redis hata verse bile memory fallback'e eklendi, güvenli taraftayız
   }
 }
 
@@ -58,10 +91,9 @@ export async function isTokenBlacklisted(token: string): Promise<boolean> {
     const result = await cacheService.get(key);
     return result !== null;
   } catch (error) {
-    logger.error('Failed to check token blacklist', { error });
-    // Hata durumunda güvenli tarafta kal - token'ı geçerli say
-    // Cache çalışmıyorsa tüm kullanıcıları logout etmek istemeyiz
-    return false;
+    logger.error('Failed to check token blacklist via Redis, falling back to memory', { error });
+    // Redis çalışmıyorsa in-memory fallback'i kontrol et (fail-secure)
+    return isInMemoryBlacklist(token);
   }
 }
 

@@ -9,6 +9,7 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { AuthService } from '../../application/auth/auth.service';
 import { validateBody } from '../../infrastructure/middleware/validation.middleware';
 import { LoginSchema, RegisterSchema } from '../auth/auth.schemas';
+import { authRateLimiter, loginRateLimiter } from '../../infrastructure/middleware/rate-limit.middleware';
 import axios from 'axios';
 
 const router = Router();
@@ -397,7 +398,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * Google OAuth login - Expo uygulaması için
  * Dinamik host bazlı redirect destekler
  */
-router.get('/google', asyncHandler(async (req: Request, res: Response) => {
+router.get('/google', authRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const redirectUrl = req.query.redirect_url as string | undefined;
   const tokenEndpoint = buildTokenEndpoint(redirectUrl);
   const callbackUrl = getCallbackUrl(req);
@@ -435,7 +436,7 @@ router.get('/google', asyncHandler(async (req: Request, res: Response) => {
  * Expo mobil için Google OAuth - Deep link destekli
  * GET /auth0/mobile/google?redirect_url=tipbox://auth/callback
  */
-router.get('/mobile/google', asyncHandler(async (req: Request, res: Response) => {
+router.get('/mobile/google', authRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const redirectUrl = req.query.redirect_url as string;
   const baseUrl = getBaseUrl(req);
   const callbackUrl = getCallbackUrl(req);
@@ -482,7 +483,7 @@ router.get('/mobile/google', asyncHandler(async (req: Request, res: Response) =>
 /**
  * Email/Password ile giriş (API-based)
  */
-router.post('/email', validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/email', loginRateLimiter, validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const config = getAuth0Config();
 
@@ -586,7 +587,7 @@ router.post('/email', validateBody(LoginSchema), asyncHandler(async (req: Reques
 /**
  * Email/Password ile kayıt (API-based)
  */
-router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/register', authRateLimiter, validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
   const config = getAuth0Config();
   if (!config.isValid) {

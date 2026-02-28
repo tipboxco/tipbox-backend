@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../auth/auth.middleware';
 import { requireRole } from '../../infrastructure/middleware/rbac.middleware';
+import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { cacheMetrics } from '../../infrastructure/cache/cache-metrics';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import {
@@ -99,7 +100,7 @@ router.delete(
   '/invalidate/user/:userId',
   authMiddleware,
   requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     
     await invalidateUserCache(userId);
@@ -114,7 +115,7 @@ router.delete(
       success: true,
       message: `User cache invalidated for userId: ${userId}`,
     });
-  }
+  })
 );
 
 /**
@@ -139,7 +140,7 @@ router.delete(
   '/invalidate/post/:postId',
   authMiddleware,
   requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
     
     await invalidatePostCache(postId);
@@ -154,7 +155,7 @@ router.delete(
       success: true,
       message: `Post cache invalidated for postId: ${postId}`,
     });
-  }
+  })
 );
 
 /**
@@ -179,7 +180,7 @@ router.delete(
   '/invalidate/feed/:userId',
   authMiddleware,
   requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     
     await invalidateUserFeedCache(userId);
@@ -194,7 +195,7 @@ router.delete(
       success: true,
       message: `Feed cache invalidated for userId: ${userId}`,
     });
-  }
+  })
 );
 
 /**
@@ -213,19 +214,19 @@ router.delete(
   '/invalidate/trending',
   authMiddleware,
   requireRole('ADMIN'),
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     await invalidateTrendingCache();
-    
+
     logger.info({
       message: 'Trending cache invalidated by admin',
       adminId: req.user?.id,
     });
-    
+
     return res.json({
       success: true,
       message: 'Trending cache invalidated',
     });
-  }
+  })
 );
 
 /**

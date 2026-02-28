@@ -158,6 +158,23 @@ export class InboxSocketService {
         logger.error('Error in typing_stop handler:', error);
       }
     });
+
+    // Disconnect handler - typing göstergelerini temizle
+    socket.on('disconnect', () => {
+      // Socket'in join ettiği thread room'larından typing durumunu temizle
+      const rooms = Array.from(socket.rooms);
+      for (const room of rooms) {
+        if (room.startsWith('thread:')) {
+          const threadId = room.replace('thread:', '');
+          socket.to(room).emit('user_typing', {
+            threadId,
+            userId,
+            isTyping: false,
+          });
+        }
+      }
+      logger.info(`Inbox socket disconnected for user ${userId} (socket: ${socket.id})`);
+    });
   }
 }
 

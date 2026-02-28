@@ -1,6 +1,7 @@
 import { PaymentMethod } from '../../domain/payment/payment-method.entity';
 import { PaymentMethodPrismaRepository } from '../../infrastructure/repositories/payment-method-prisma.repository';
 import { UserSubscriptionPrismaRepository } from '../../infrastructure/repositories/user-subscription-prisma.repository';
+import logger from '../../infrastructure/logger/logger';
 
 export const PAYMENT_ERROR_CODES = {
   CARD_IN_USE_BY_SUBSCRIPTION: 'CARD_IN_USE_BY_SUBSCRIPTION',
@@ -27,10 +28,18 @@ export class PaymentMethodService {
   ) {}
 
   async addCard(userId: string, input: AddCardInput): Promise<PaymentMethod> {
-    const last4 = input.last4 ?? '4242';
-    const brand = input.brand ?? 'Visa';
+    const last4 = input.last4 ?? '0000';
+    const brand = input.brand ?? 'Unknown';
     const expiry_month = input.expiry_month ?? 12;
     const expiry_year = input.expiry_year ?? new Date().getFullYear() + 2;
+
+    if (!input.last4 || !input.brand) {
+      logger.warn('addCard called with missing card details, using placeholder defaults', {
+        userId,
+        hasLast4: !!input.last4,
+        hasBrand: !!input.brand,
+      });
+    }
     const cards = await this.paymentMethodRepo.findByUserId(userId);
     const isDefault = cards.length === 0;
     return this.paymentMethodRepo.create({

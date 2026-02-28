@@ -74,48 +74,38 @@ async function startServer() {
       logger.info({ message: `Server accessible at http://localhost:${PORT} and http://<your-ip>:${PORT}` });
     });
 
-    // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      logger.info('SIGTERM received, shutting down gracefully');
-      
-      // Worker'ları durdur
-      await workerManager.stopAll();
-      
-      httpServer.close(() => {
-        logger.info('HTTP server closed');
-      });
-      
-      // Prisma bağlantısını kapat
-      await prisma.$disconnect();
-      logger.info('Prisma disconnected');
-      
-      // Cache ve queue servislerini kapat
-      await cacheService.disconnect();
-      await queueProvider.closeAllQueues();
-      await RedisConfigManager.getInstance().disconnect();
-      process.exit(0);
-    });
+    // Graceful shutdown - tek handler, duplicate risk yok
+    let isShuttingDown = false;
+    const gracefulShutdown = async (signal: string) => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
 
-    process.on('SIGINT', async () => {
-      logger.info('SIGINT received, shutting down gracefully');
-      
-      // Worker'ları durdur
-      await workerManager.stopAll();
-      
-      httpServer.close(() => {
-        logger.info('HTTP server closed');
-      });
-      
-      // Prisma bağlantısını kapat
-      await prisma.$disconnect();
-      logger.info('Prisma disconnected');
-      
-      // Cache ve queue servislerini kapat
-      await cacheService.disconnect();
-      await queueProvider.closeAllQueues();
-      await RedisConfigManager.getInstance().disconnect();
+      logger.info(`${signal} received, shutting down gracefully`);
+
+      try {
+        await workerManager.stopAll();
+
+        httpServer.close(() => {
+          logger.info('HTTP server closed');
+        });
+
+        await prisma.$disconnect();
+        logger.info('Prisma disconnected');
+
+        await cacheService.disconnect();
+        await queueProvider.closeAllQueues();
+        await RedisConfigManager.getInstance().disconnect();
+      } catch (shutdownError) {
+        logger.error('Error during graceful shutdown', {
+          error: shutdownError instanceof Error ? shutdownError.message : String(shutdownError),
+        });
+      }
+
       process.exit(0);
-    });
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   } catch (error) {
     logger.error('Failed to start server:', error);

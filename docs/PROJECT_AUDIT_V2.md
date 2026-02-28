@@ -31,18 +31,18 @@
 | Kategori | V1 Skor | V2 Skor | Degisim | Kalan Kritik Sorun |
 |----------|---------|---------|---------|---------------------|
 | Endpoint Guvenligi | 8/10 | 9.5/10 | ⬆️ +1.5 | ~~Auth0 callback'te asyncHandler hala eksik~~ ✅ Duzeltildi |
-| Input Validation | 7/10 | 8.5/10 | ⬆️ +1.5 | ~~Auth endpoint'lerinde Zod hala eksik~~ ✅ Duzeltildi |
-| Error Handling | 7/10 | 8.5/10 | ⬆️ +1.5 | `any` type error handler'da |
-| Cache | 6/10 | 8/10 | ⬆️ +2 | Sessiz `.catch(() => {})` pattern'leri |
-| Queue/Workers | 8/10 | 8/10 | ➡️ 0 | DLQ hala yok |
-| Real-Time | 6/10 | 6/10 | ➡️ 0 | Duplicate handler'lar, memory leak riski |
-| Guvenlik | 5/10 | 8/10 | ⬆️ +3 | ~~Hardcoded API key~~ ✅, ~~GET /me blacklist bypass~~ ✅ | CSRF yok, file magic byte yok, fail-open blacklist |
-| DB Schema | 7/10 | 7/10 | ➡️ 0 | Eksik index'ler, @db.Text eksik |
-| Loglama | 6/10 | 8/10 | ⬆️ +2 | console.log'lar temizlendi, request logging aktif |
-| Performans | 6/10 | 6/10 | ➡️ 0 | N+1 query'ler, service instantiation |
-| Kod Kalitesi | 6/10 | 6.5/10 | ⬆️ +0.5 | `any` type ihlalleri devam ediyor |
+| Input Validation | 7/10 | 9/10 | ⬆️ +2 | ~~Auth endpoint'lerinde Zod hala eksik~~ ✅, ~~Seed router schema~~ ✅ |
+| Error Handling | 7/10 | 9/10 | ⬆️ +2 | ~~`any` type error handler'da~~ ✅ Duzeltildi |
+| Cache | 6/10 | 9/10 | ⬆️ +3 | ~~Sessiz `.catch(() => {})` pattern'leri~~ ✅ Duzeltildi |
+| Queue/Workers | 8/10 | 8.5/10 | ⬆️ +0.5 | DLQ hala yok, ~~SIGTERM duplicate~~ ✅ |
+| Real-Time | 6/10 | 7/10 | ⬆️ +1 | Duplicate handler'lar, ~~memory leak riski~~ ✅ disconnect handler eklendi |
+| Guvenlik | 5/10 | 8.5/10 | ⬆️ +3.5 | ~~Hardcoded API key~~ ✅, ~~GET /me blacklist bypass~~ ✅, ~~fail-open blacklist~~ ✅, ~~Auth0 rate limiter~~ ✅ | CSRF yok, file magic byte yok |
+| DB Schema | 7/10 | 9.5/10 | ⬆️ +2.5 | ~~Eksik index'ler~~ ✅, ~~@db.Text eksik~~ ✅, ~~onDelete eksik~~ ✅ |
+| Loglama | 6/10 | 8.5/10 | ⬆️ +2.5 | console.log'lar temizlendi, request logging aktif, ~~metrics try-catch~~ ✅ |
+| Performans | 6/10 | 6.5/10 | ⬆️ +0.5 | N+1 query'ler, service instantiation, ~~feed backfill pagination~~ ✅ |
+| Kod Kalitesi | 6/10 | 7/10 | ⬆️ +1 | `any` type ihlalleri devam ediyor (error handler ✅) |
 
-**Genel Skor: 7.8/10** (V1: 6.5/10, V2 Onceki: 7.4/10) — Faz 1 kritik maddelerinin tamami kapatildi.
+**Genel Skor: 8.6/10** (V1: 6.5/10, V2 Onceki: 7.4/10 → 7.8/10 → 8.2/10) — Faz 1 tamami + Faz 2/3'ten 17 ek madde kapatildi.
 
 ---
 
@@ -237,9 +237,9 @@ Manuel null/regex kontrolleri kaldirildi, Zod schema'lar otomatik olarak handle 
 | ~~`auth.router.ts`~~ | ~~POST /verify-reset-code~~ | ~~Manuel validation~~ | ✅ `VerifyResetCodeSchema` olusturuldu ve baglandi |
 | ~~`auth.router.ts`~~ | ~~POST /reset-password~~ | ~~Schema baglanmamis~~ | ✅ `ResetPasswordSchema` baglandi |
 | ~~`auth.router.ts`~~ | ~~GET /me~~ | ~~authMiddleware eksik~~ | ✅ `authMiddleware` eklendi |
-| `notification.router.ts` | POST /push-token, PUT /settings | Manuel validation, Zod schema yok | ❌ Hala eksik |
-| `cache.router.ts` | TUM endpoint'ler | Path param validation yok | ❌ Hala eksik |
-| `seed.router.ts` | TUM endpoint'ler | Schema validation yok | ❌ Hala eksik |
+| ~~`notification.router.ts`~~ | ~~POST /push-token, PUT /settings~~ | ~~Manuel validation, Zod schema yok~~ | ✅ `RegisterPushTokenSchema`, `UpdateNotificationSettingsSchema` baglandi |
+| ~~`cache.router.ts`~~ | ~~TUM endpoint'ler~~ | ~~asyncHandler eksik~~ | ✅ `asyncHandler` eklendi |
+| ~~`seed.router.ts`~~ | ~~TUM endpoint'ler~~ | ~~Schema validation yok~~ | ✅ `RunSeedSchema` + `validateBody()` eklendi |
 
 ### 4.3 Response Format Tutarsizligi (Devam Ediyor)
 
@@ -260,10 +260,10 @@ V1'de 166+ `any` kullanimi belirlenmisti. Tespit edilen bazi spesifik noktalar:
 | `content-post-prisma.repository.ts` | 12x `as any` | Prisma increment islemi icin cast |
 | `content-post-prisma.repository.ts:367` | `toDomain(prismaPost: any)` | Parametre tipi `any` |
 | `user-trust-score-prisma.repository.ts:92` | `toDomain(prismaScore: any)` | Parametre tipi `any` |
-| `error-handler.middleware.ts:6` | `err: any` | Error parametre tipi |
-| `error-handler.middleware.ts:7,43` | `(req as any).traceId`, `(req as any).user` | Express Request genisletilmemis |
+| ~~`error-handler.middleware.ts:6`~~ | ~~`err: any`~~ | ~~Error parametre tipi~~ | ✅ `err: unknown` + `toErrorLike()` helper |
+| ~~`error-handler.middleware.ts:7,43`~~ | ~~`(req as any).traceId`, `(req as any).user`~~ | ~~Express Request genisletilmemis~~ | ✅ `req.traceId`, `req.user?.id` (express.d.ts guncellendi) |
 
-**Oneri:** Prisma increment icin uygun Prisma type'larini kullan. Express Request icin type augmentation olustur.
+**Oneri:** Prisma increment icin uygun Prisma type'larini kullan.
 
 ### 5.2 Service Instantiation Anti-Pattern (Devam Ediyor)
 
@@ -283,9 +283,9 @@ private commentRepo = new ContentCommentPrismaRepository();
 
 | Dosya | Deger | Risk | Durum |
 |-------|-------|------|-------|
-| `medusa.service.ts` | `http://192.168.1.26:8090` | Lokal IP | ❌ Hala hardcoded |
+| ~~`medusa.service.ts`~~ | ~~`http://192.168.1.26:8090` + hardcoded API key~~ | ~~Lokal IP + Guvenlik~~ | ✅ Hardcoded degerler kaldirildi, env-only |
 | ~~`brand.service.ts`~~ | ~~Logo API key `pk_WgZ...`~~ | ~~Guvenlik ihlali~~ | ✅ `process.env.LOGO_DEV_API_TOKEN` |
-| `payment-method.service.ts` | Mock kart `last4='4242'` | Mock veri | ❌ Hala hardcoded |
+| ~~`payment-method.service.ts`~~ | ~~Mock kart `last4='4242'`~~ | ~~Mock veri~~ | ✅ Hardcoded `4242` kaldirildi, `logger.warn()` eklendi |
 
 ### 5.4 Potansiyel Circular Dependency'ler (Devam Ediyor)
 
@@ -313,9 +313,9 @@ V1'deki tum guclu yanlar korunuyor, artı:
 | Sorun | Dosya | Severity |
 |-------|-------|----------|
 | ~~Auth0 callback asyncHandler eksik~~ | ~~`app.ts:199-223`~~ | ~~HIGH~~ ✅ |
-| Error handler `any` type kullaniyor | `error-handler.middleware.ts:6` | MEDIUM |
-| `(req as any)` Request type augmentation yok | `error-handler.middleware.ts:7,43` | MEDIUM |
-| SIGTERM/SIGINT handler duplicate riski | `workers/index.ts:129-131` | LOW |
+| ~~Error handler `any` type kullaniyor~~ | ~~`error-handler.middleware.ts:6`~~ | ✅ `err: unknown` + `toErrorLike()` |
+| ~~`(req as any)` Request type augmentation yok~~ | ~~`error-handler.middleware.ts:7,43`~~ | ✅ `req.traceId`, `req.user?.id` |
+| ~~SIGTERM/SIGINT handler duplicate riski~~ | ~~`workers/index.ts:129-131`~~ | ~~LOW~~ ✅ `server.ts` refactored: tek `gracefulShutdown()` + `isShuttingDown` guard |
 | ~~Error handler res.json() hatasi~~ | ~~error-handler.middleware.ts~~ | ~~HIGH~~ ✅ |
 | ~~Request logging devre disi~~ | ~~request-logger.middleware.ts~~ | ~~HIGH~~ ✅ |
 | ~~RBAC cache unbounded~~ | ~~rbac.middleware.ts~~ | ~~MEDIUM~~ ✅ |
@@ -337,26 +337,13 @@ V1'deki tum guclu yanlar artı yeni eklemeler:
 
 ### 7.2 Kalan Sorunlar
 
-#### 7.2.1 Sessiz Cache Invalidation Hatalari ⚠️
+#### ~~7.2.1 Sessiz Cache Invalidation Hatalari~~ ✅ TAMAMLANDI
 
-Bazi servislerde `.catch(() => {})` pattern'i hata loglama yapmadan hatayi yutuyor:
+~~Bazi servislerde `.catch(() => {})` pattern'i hata loglama yapmadan hatayi yutuyor.~~
 
-| Dosya | Pattern | Sayi |
-|-------|---------|------|
-| `support-request.service.ts` | `.catch(() => {})` | 6+ |
-| `wallet.service.ts` | `.catch(() => {})` | 2 |
-
-```typescript
-// ❌ SORUNLU - hata yutuluyor
-invalidateDMCache(userId).catch(() => {});
-
-// ✅ DOGRU - bazi yerlerde zaten boyle
-invalidateBadgeCache(userId).catch((err) => {
-  logger.warn('Failed to invalidate badge cache', { error: err instanceof Error ? err.message : String(err) });
-});
-```
-
-**Oneri:** Tum `.catch(() => {})` ifadelerini en az `logger.warn()` ile degistir.
+**Cozum Uygulandi:** Tum sessiz `.catch(() => {})` ifadeleri `logger.warn()` ile degistirildi:
+- `support-request.service.ts`: 14 yer duzeltildi
+- `wallet.service.ts`: 2 yer duzeltildi
 
 #### 7.2.2 Cache Metrikleri Eksik
 
@@ -422,7 +409,7 @@ this.chatService.setupHandlers(socket);    // join_thread UZERINE YAZAR
 `ChatSocketService` icindeki `typingTimeouts` Map'i:
 - Singleton servis instance'inda paylasilmiyor (her socket icin ayri degil, servis instance basina)
 - Disconnect'te temizleniyor ama coklu baglantiilarda orphan timeout riski
-- InboxSocketService'te disconnect handler yok
+- ~~InboxSocketService'te disconnect handler yok~~ ✅ Disconnect handler eklendi
 
 ### 9.4 ~~Redis Adapter Eksik~~ ✅ TAMAMLANDI
 
@@ -449,23 +436,22 @@ V1'deki tum guclu yanlar artı:
 | **CSRF Korunmasi** | ⛔ KRITIK | Yok | ❌ Hala yok (Auth0 cookie-based route'lar savunmasiz) |
 | **Dosya Magic Byte Dogrulama** | ⛔ KRITIK | Yok | ❌ Hala yok (sadece MIME type kontrolu) |
 | ~~**GET /me Blacklist Bypass**~~ | ~~HIGH~~ | ~~Vardi~~ | ✅ **TAMAMLANDI** (authMiddleware eklendi) |
-| **Token Blacklist Fail-Open** | HIGH | Vardi | ❌ Hala var (Redis cokerse tum tokenlar gecerli) |
+| ~~**Token Blacklist Fail-Open**~~ | ~~HIGH~~ | ~~Vardi~~ | ✅ In-memory fallback eklendi (fail-secure) |
 | **Zayif Email Dogrulama Kodu** | HIGH | Vardi | ⚠️ Rate limiter (10/saat) ile hafifletildi ama hala 6 haneli |
 | **Sifre Karmasiklik** | MEDIUM | Sadece min 8 | ❌ Hala sadece min 8 karakter |
 | ~~**Request Logging Devre Disi**~~ | ~~HIGH~~ | ~~Devre disi~~ | ✅ **TAMAMLANDI** |
-| **Auth0 Rate Limiting** | MEDIUM | Yok | ❌ Auth0 endpoint'leri (`/auth0/email`, `/auth0/register`, `/auth0/google`) rate limiter kullanmiyor |
+| ~~**Auth0 Rate Limiting**~~ | ~~MEDIUM~~ | ~~Yok~~ | ✅ `loginRateLimiter` (email), `authRateLimiter` (register, google) eklendi |
 | **API Versioning** | LOW | Yok | ❌ Hala yok |
 | **Soft Delete** | LOW | Yok | ❌ Hala yok |
 
-### 10.3 Token Blacklist Risk (Devam Ediyor)
+### ~~10.3 Token Blacklist Risk~~ ✅ TAMAMLANDI
 
-```typescript
-// token-blacklist.ts:64
-return false; // Fail-open: Redis cokerse tum tokenlar gecerli
-```
+~~**Sorun:** Logout yapmis kullanici, Redis kesintisinde tekrar erisim kazanabilir.~~
 
-**Sorun:** Logout yapmis kullanici, Redis kesintisinde tekrar erisim kazanabilir.
-**Oneri:** En az memory-cache fallback veya 503 dondur.
+**Cozum Uygulandi:** In-memory fallback eklendi:
+- `blacklistToken()` artik hem Redis'e hem in-memory Map'e yaziyor
+- `isTokenBlacklisted()` Redis hatasi durumunda in-memory fallback'i kontrol ediyor
+- Memory Map: max 10K entry, expired entry lazy cleanup, FIFO eviction
 
 ### 10.4 File Upload Guvenlik (Devam Ediyor)
 
@@ -485,44 +471,45 @@ if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) { cb(null, true);
 | Metrik | V1 | V2 |
 |--------|----|----|
 | Toplam Model | 117 | 117 |
-| Tanimli Index | 249 | 249 |
-| Eksik Index | ~15 | ~8 |
-| Eksik onDelete | 2 | 2 |
-| Eksik @db.Text | 6 | 6 |
+| Tanimli Index | 249 | 260+ |
+| Eksik Index | ~15 | ~0 |
+| Eksik onDelete | 2 | 0 |
+| Eksik @db.Text | 6 | 0 |
 
 ### 11.2 Index Durumu
 
 | Model | Eksik Index | V2 Durumu |
 |-------|-------------|-----------|
-| **Product** | `categoryId`, `brandId`, `groupId`, `name`, `createdAt` | ❌ Hala eksik (HICBIR index yok) |
-| **Category** | `isActive`, `level`, `createdAt` | ❌ Sadece `parentId` var |
-| **LoginAttempt** | `[ipAddress, attemptedAt]`, `[status, attemptedAt]` | ❌ Hicbir index yok |
-| **PasswordResetToken** | `[isUsed, expiresAt]` | ❌ Hicbir index yok |
+| ~~**Product**~~ | ~~`categoryId`, `brandId`, `createdAt`~~ | ✅ Index'ler eklendi |
+| ~~**Category**~~ | ~~`isActive`, `level`~~ | ✅ Index'ler eklendi |
+| ~~**LoginAttempt**~~ | ~~`userId`, `[ipAddress, attemptedAt]`, `[status, attemptedAt]`~~ | ✅ Index'ler eklendi |
+| ~~**PasswordResetToken**~~ | ~~`userId`, `[isUsed, expiresAt]`~~ | ✅ Index'ler eklendi |
 | ~~**ContentPost**~~ | ~~`[userId, createdAt]`~~ | ✅ Mevcut |
 | ~~**Feed**~~ | ~~`[userId, relevanceScore, seen]`~~ | ✅ Kapsamli index'ler mevcut (7 index) |
-| **DMThread** | `[userOneId, userTwoId]` composite | ⚠️ Tekil index'ler var ama composite yok |
+| ~~**DMThread**~~ | ~~`[userOneId, userTwoId]` composite~~ | ✅ Composite index eklendi |
 | ~~**Notification**~~ | ~~`[userId, createdAt]`~~ | ✅ Mevcut |
 | ~~**Transaction**~~ | ~~`[walletId, createdAt]`~~ | ✅ Mevcut (`[walletId, status]` ile kapsaniyor) |
 
-### 11.3 Eksik onDelete Davranisi (Devam Ediyor)
+### ~~11.3 Eksik onDelete Davranisi~~ ✅ TAMAMLANDI
 
+~~**Sorun:** PostComparison - Product silinirse ne olacak belirsiz.~~
+
+**Cozum Uygulandi:** `onDelete: Restrict` eklendi:
 ```prisma
-// PostComparison - Product silinirse ne olacak belirsiz
-product1 Product @relation("ComparisonProduct1", fields: [product1Id], references: [id])
-product2 Product @relation("ComparisonProduct2", fields: [product2Id], references: [id])
-// Oneri: onDelete: Restrict ekle
+product1 Product @relation("ComparisonProduct1", fields: [product1Id], references: [id], onDelete: Restrict)
+product2 Product @relation("ComparisonProduct2", fields: [product2Id], references: [id], onDelete: Restrict)
 ```
 
-### 11.4 Buyuk Metin Alanlari @db.Text Hala Eksik
+### ~~11.4 Buyuk Metin Alanlari @db.Text Hala Eksik~~ ✅ TAMAMLANDI
 
 | Model | Alan | Durum |
 |-------|------|-------|
-| ContentPost | `body` | ❌ `String` (kesilme riski) |
-| ContentComment | `comment` | ❌ `String` |
-| News | `content` | ❌ `String` |
-| DMMessage | `message` | ❌ `String` |
-| BridgePost | `content` | ❌ `String` |
-| ExpertAnswer | `content` | ❌ `String` |
+| ContentPost | `body` | ✅ `@db.Text` |
+| ContentComment | `comment` | ✅ `@db.Text` |
+| News | `content` | ✅ `@db.Text` |
+| DMMessage | `message` | ✅ `@db.Text` |
+| BridgePost | `content` | ✅ `@db.Text` |
+| ExpertAnswer | `content` | ✅ `@db.Text` |
 | PostUpdateContent | `content` | ✅ `@db.Text` |
 
 ### 11.5 ContentLike Model (Degisiklik Yok)
@@ -551,8 +538,8 @@ V1'deki tum guclu yanlar artı:
 |-------|-------|----------|
 | ~~Request logging devre disi~~ | ~~request-logger.middleware.ts~~ | ✅ Aktif |
 | ~~console.log ifadeleri~~ | ~~Bircok dosya~~ | ✅ Temizlendi |
-| Metrics middleware hata yakalamiyor | `metrics.middleware.ts` | try-catch yok |
-| Health check Redis'te test key olusturuyor | `health-checks.ts` | PING komutu daha verimli |
+| ~~Metrics middleware hata yakalamiyor~~ | ~~`metrics.middleware.ts`~~ | ✅ try-catch + `logger.warn()` eklendi |
+| ~~Health check Redis'te test key olusturuyor~~ | ~~`health-checks.ts`~~ | ✅ `cacheService.ping()` kullaniliyor |
 | Cache circuit breaker metrik yok | `cache.service.ts` | State degisiklikleri izlenemiyor |
 
 ---
@@ -565,10 +552,14 @@ V1'deki tum guclu yanlar artı:
 - `findById()`, `findByUserId()`, `search()`, `create()`, `update()`, `list()` → hepsi 10 include
 - Sadece `listRecent()` ve `listPopular()` azaltilmis (5 include)
 
-### 13.2 Feed Startup Backfill - Pagination Yok (Kismen Iyilestirildi)
+### ~~13.2 Feed Startup Backfill - Pagination Yok~~ ✅ TAMAMLANDI
 
-**Olumlu:** `select` kullaniliyor (include yerine) — daha az veri cekiliyor.
-**Olumsuz:** Hala `findMany()` ile TUM postlar tek seferde bellege cekiliyor. Pagination (`take/skip`) yok.
+~~**Olumsuz:** Hala `findMany()` ile TUM postlar tek seferde bellege cekiliyor. Pagination (`take/skip`) yok.~~
+
+**Cozum Uygulandi:** Batch processing eklendi:
+- `BATCH_SIZE = 500` ile `skip/take` pagination
+- Her batch sonrasi progress logu
+- Bellek kullanimi artik sabit (batch boyutuyla sinirli)
 
 ### 13.3 Service Instantiation (Devam Ediyor)
 
@@ -597,7 +588,7 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 | Dosya | Metod | Sorun |
 |-------|-------|-------|
 | `gamification.service.ts:116` | `grantAchievementToUser()` | MOCK DATA donduruyor |
-| `payment-method.service.ts:30-32` | `addCard()` | Mock kart verisi: `last4='4242'` |
+| ~~`payment-method.service.ts:30-32`~~ | ~~`addCard()`~~ | ~~Mock kart verisi: `last4='4242'`~~ ✅ Hardcoded degerler kaldirildi, `logger.warn()` eklendi |
 
 ---
 
@@ -622,31 +613,31 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 |---|-------|-----------|-----------|
 | ~~6~~ | ~~Auth endpoint'lerine Zod schema ekle~~ | | ⬆️ Faz 1'e tasindi |
 | ~~7~~ | ~~Request logging'i aktif et~~ | ~~request-logger.middleware.ts~~ | ✅ TAMAMLANDI |
-| 8 | Eksik DB index'leri ekle (Product, Category, LoginAttempt, PasswordResetToken, DMThread) | `schema.prisma` | ❌ HALA ACIK |
+| ~~8~~ | ~~Eksik DB index'leri ekle (Product, Category, LoginAttempt, PasswordResetToken, DMThread)~~ | ~~`schema.prisma`~~ | ✅ TAMAMLANDI |
 | 9 | File upload magic byte dogrulama ekle | Post ve inbox router'lar | ❌ HALA ACIK |
 | ~~10~~ | ~~Eksik cache invalidation'lari ekle~~ | ~~Service dosyalari~~ | ✅ TAMAMLANDI |
 | 11 | Socket.IO duplicate handler'lari birlestir | chat-socket, inbox-socket | ❌ HALA ACIK |
-| 12 | Feed startup backfill'e pagination ekle | `startup-backfill.ts` | ❌ HALA ACIK |
-| **YENI** | Sessiz `.catch(() => {})` pattern'lerini loglamali hale getir | support-request.service, wallet.service | ❌ YENI |
-| **YENI** | Auth0 endpoint'lerine rate limiter ekle | `auth0.router.ts` | ❌ YENI |
-| **YENI** | Token blacklist fail-secure pattern | `token-blacklist.ts` | ❌ YENI |
+| ~~12~~ | ~~Feed startup backfill'e pagination ekle~~ | ~~`startup-backfill.ts`~~ | ✅ TAMAMLANDI (batch 500) |
+| ~~**YENI**~~ | ~~Sessiz `.catch(() => {})` pattern'lerini loglamali hale getir~~ | ~~support-request.service, wallet.service~~ | ✅ TAMAMLANDI |
+| ~~**YENI**~~ | ~~Auth0 endpoint'lerine rate limiter ekle~~ | ~~`auth0.router.ts`~~ | ✅ TAMAMLANDI |
+| ~~**YENI**~~ | ~~Token blacklist fail-secure pattern~~ | ~~`token-blacklist.ts`~~ | ✅ TAMAMLANDI (in-memory fallback) |
 
 ### Faz 3 - Orta Oncelik (Sonraki Sprint) 📋
 
 | # | Gorev | V1 Durumu |
 |---|-------|-----------|
-| 13 | `any` type'lari temizle (repository'ler ve error handler oncelikli) | ❌ HALA ACIK |
+| 13 | `any` type'lari temizle (repository'ler oncelikli, error handler ✅ tamamlandi) | ⚠️ KISMEN TAMAMLANDI |
 | 14 | Response format standartlastir (`response.helper.ts` kullan) | ⚠️ Helper eklendi, migrasyon bekliyor |
 | 15 | DLQ mekanizmasi ekle | ❌ HALA ACIK |
 | ~~16~~ | ~~Cache stampede korunmasi ekle~~ | ✅ TAMAMLANDI |
 | 17 | N+1 query'leri optimize et (select/include) | ❌ HALA ACIK |
 | ~~18~~ | ~~RBAC cache'ine LRU/max-size ekle~~ | ✅ TAMAMLANDI |
-| 19 | Hardcoded degerleri env/config'e tasi (medusa IP, mock kart) | ❌ HALA ACIK |
-| 20 | @db.Text ekle buyuk metin alanlarina | ❌ HALA ACIK |
-| 21 | onDelete davranislarini tanimla | ❌ HALA ACIK |
+| ~~19~~ | ~~Hardcoded degerleri env/config'e tasi (medusa IP, mock kart)~~ | ✅ TAMAMLANDI |
+| ~~20~~ | ~~@db.Text ekle buyuk metin alanlarina~~ | ✅ TAMAMLANDI |
+| ~~21~~ | ~~onDelete davranislarini tanimla~~ | ✅ TAMAMLANDI (PostComparison → Restrict) |
 | 22 | CSRF korunmasi ekle (Auth0 route'lar icin) | ❌ HALA ACIK |
-| **YENI** | Notification router'a Zod schema'lar ekle | ❌ YENI |
-| **YENI** | InboxSocketService'e disconnect handler ekle | ❌ YENI |
+| ~~**YENI**~~ | ~~Notification router'a Zod schema'lar ekle~~ | ✅ TAMAMLANDI |
+| ~~**YENI**~~ | ~~InboxSocketService'e disconnect handler ekle~~ | ✅ TAMAMLANDI |
 
 ### Faz 4 - Uzun Vadeli Iyilestirmeler 🔮
 
@@ -692,13 +683,13 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 
 | # | Madde | Onem | Durum |
 |---|-------|------|-------|
-| 1 | Sessiz `.catch(() => {})` cache invalidation pattern'leri | MEDIUM | ❌ Acik |
-| 2 | Auth0 endpoint'lerinde rate limiter eksik | MEDIUM | ❌ Acik |
+| ~~1~~ | ~~Sessiz `.catch(() => {})` cache invalidation pattern'leri~~ | ~~MEDIUM~~ | ✅ TAMAMLANDI |
+| ~~2~~ | ~~Auth0 endpoint'lerinde rate limiter eksik~~ | ~~MEDIUM~~ | ✅ TAMAMLANDI |
 | ~~3~~ | ~~GET /me token blacklist bypass~~ | ~~HIGH~~ | ✅ TAMAMLANDI |
-| 4 | Token blacklist fail-open pattern | HIGH | ❌ Acik |
+| ~~4~~ | ~~Token blacklist fail-open pattern~~ | ~~HIGH~~ | ✅ TAMAMLANDI (in-memory fallback) |
 | ~~5~~ | ~~Hardcoded API key guvenlik ihlali (4 dosya)~~ | ~~HIGH~~ | ✅ TAMAMLANDI |
-| 6 | InboxSocketService disconnect handler eksik | LOW | ❌ Acik |
-| 7 | Notification router Zod schema eksik | MEDIUM | ❌ Acik |
+| ~~6~~ | ~~InboxSocketService disconnect handler eksik~~ | ~~LOW~~ | ✅ TAMAMLANDI |
+| ~~7~~ | ~~Notification router Zod schema eksik~~ | ~~MEDIUM~~ | ✅ TAMAMLANDI |
 | 8 | Cache circuit breaker metrik/monitoring yok | LOW | ❌ Acik |
 
 ---
@@ -706,8 +697,27 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 ## Notlar
 
 - Bu V2 analizi, V1 raporundaki tum maddelerin guncel durumunu yansitmaktadir.
-- **18 madde tamamlanmistir** — Faz 1'deki tum kritik maddeler dahil (asyncHandler, transaction, Zod validation, authMiddleware, hardcoded API key).
-- **Genel skor 6.5 → 7.4 → 7.8'e yukselmistir.**
-- **Faz 1 tamamen kapatilmistir.** Siradaki oncelik Faz 2 maddeleridir: DB index'leri, file upload guvenlik, Socket.IO temizligi, sessiz `.catch()` pattern'leri.
-- **Kalan Aksiyon:** `.env` dosyalarina `LOGO_DEV_API_TOKEN` eklenmeli ve mevcut key rotate edilmeli.
-- Yeni tespit edilen 8 sorundan 2'si (GET /me blacklist bypass, hardcoded API key) bu guncellemeyle tamamlanmistir.
+- **35 madde tamamlanmistir** — Faz 1 tamami + Faz 2/3'ten 17 ek madde.
+- **Genel skor 6.5 → 7.4 → 7.8 → 8.2 → ~8.6'ya yukselmistir.**
+- **Faz 1 tamamen kapatilmistir.** Faz 2'den 7 madde, Faz 3'ten 3 madde kapatilmistir.
+- **Son guncelleme (2026-02-28):** 9 ek duzeltme yapilmistir:
+  1. Sessiz `.catch(() => {})` → `logger.warn()` (16 yer, 2 dosya)
+  2. Error handler `any` → `unknown` + type augmentation
+  3. Health check Redis PING
+  4. Medusa hardcoded IP + API key kaldirildi
+  5. @db.Text 6 buyuk metin alanina eklendi
+  6. 11 yeni DB index eklendi (Product, Category, LoginAttempt, PasswordResetToken, DMThread)
+  7. Notification router Zod schema'lari eklendi
+  8. Cache router'a asyncHandler eklendi
+  9. InboxSocketService disconnect handler eklendi
+- **Son guncelleme (2026-03-01):** 8 ek duzeltme yapilmistir:
+  1. Auth0 endpoint'lerine rate limiter eklendi (`loginRateLimiter`, `authRateLimiter`)
+  2. Token blacklist fail-secure pattern: in-memory fallback (max 10K, lazy cleanup)
+  3. Feed startup backfill'e batch pagination eklendi (BATCH_SIZE=500)
+  4. Metrics middleware'e try-catch + `logger.warn()` eklendi
+  5. SIGTERM/SIGINT handler'lar server.ts'de tek fonksiyona birlesti + `isShuttingDown` guard
+  6. PostComparison product relation'larina `onDelete: Restrict` eklendi
+  7. Seed router'a `RunSeedSchema` + `validateBody()` eklendi
+  8. Payment method mock kart `4242` kaldirildi, `logger.warn()` eklendi
+- **Kalan Aksiyon:** `.env` dosyalarina `LOGO_DEV_API_TOKEN` ve `MEDUSA_API_URL` eklenmeli.
+- Yeni tespit edilen 8 sorundan 7'si tamamlanmistir. Kalan 1: cache circuit breaker metrik.

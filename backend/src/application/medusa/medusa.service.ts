@@ -43,12 +43,16 @@ export class MedusaService {
     const medusaUrl =
       process.env.MEDUSA_API_URL ||
       process.env.EXPO_PUBLIC_MEDUSA_URL ||
-      'http://192.168.1.26:8090';
+      '';
     this.baseUrl = medusaUrl.replace(/\/$/, '');
+
+    if (!this.baseUrl) {
+      logger.warn('MEDUSA_API_URL is not set. Medusa service will not work.');
+    }
 
     this.apiKey =
       process.env.MEDUSA_API_KEY ||
-      process.env.EXPO_PUBLIC_MEDUSA_PUBLISHABLE_API_KEY || "pk_cfe68434d1ee0dd82890fcfe492a3472656dbea641266cb02f3dae8b204de65e" ||
+      process.env.EXPO_PUBLIC_MEDUSA_PUBLISHABLE_API_KEY ||
       null;
 
     this.pageSize = 500;
