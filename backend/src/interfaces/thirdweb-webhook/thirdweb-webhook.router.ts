@@ -727,7 +727,7 @@ router.post('/events',
       
       // Legacy format kontrolü
       if (payload.type && payload.data) {
-        const result = await contractEventService.processEvent(payload as ThirdwebContractSubscriptionPayload);
+        const result = await contractEventService.processEvent(payload as unknown as ThirdwebContractSubscriptionPayload);
 
         return res.status(200).json({
           success: result.success,
