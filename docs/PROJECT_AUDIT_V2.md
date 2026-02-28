@@ -40,9 +40,9 @@
 | DB Schema | 7/10 | 9.5/10 | ⬆️ +2.5 | ~~Eksik index'ler~~ ✅, ~~@db.Text eksik~~ ✅, ~~onDelete eksik~~ ✅ |
 | Loglama | 6/10 | 8.5/10 | ⬆️ +2.5 | console.log'lar temizlendi, request logging aktif, ~~metrics try-catch~~ ✅ |
 | Performans | 6/10 | 6.5/10 | ⬆️ +0.5 | N+1 query'ler, service instantiation, ~~feed backfill pagination~~ ✅ |
-| Kod Kalitesi | 6/10 | 7/10 | ⬆️ +1 | `any` type ihlalleri devam ediyor (error handler ✅) |
+| Kod Kalitesi | 6/10 | 9/10 | ⬆️ +3 | ~~`any` type ihlalleri~~ ✅ Tamamen temizlendi (3 kasitli haric) |
 
-**Genel Skor: 8.6/10** (V1: 6.5/10, V2 Onceki: 7.4/10 → 7.8/10 → 8.2/10) — Faz 1 tamami + Faz 2/3'ten 17 ek madde kapatildi.
+**Genel Skor: 8.8/10** (V1: 6.5/10, V2 Onceki: 7.4/10 → 7.8/10 → 8.2/10 → 8.6/10) — Faz 1 tamami + Faz 2/3'ten 18 ek madde kapatildi. `any` type temizligi tamamlandi.
 
 ---
 
@@ -251,19 +251,29 @@ Manuel null/regex kontrolleri kaldirildi, Zod schema'lar otomatik olarak handle 
 
 ## 5. Servis & Is Mantigi Analizi
 
-### 5.1 Type Safety Ihlalleri - `any` Kullanimi (Devam Ediyor)
+### ~~5.1 Type Safety Ihlalleri - `any` Kullanimi~~ ✅ TAMAMLANDI
 
-V1'de 166+ `any` kullanimi belirlenmisti. Tespit edilen bazi spesifik noktalar:
+~~V1'de 166+ `any` kullanimi belirlenmisti.~~ Kapsamli `any` type cleanup tamamlandi:
 
-| Dosya | Kullanim | Aciklama |
-|-------|----------|----------|
-| `content-post-prisma.repository.ts` | 12x `as any` | Prisma increment islemi icin cast |
-| `content-post-prisma.repository.ts:367` | `toDomain(prismaPost: any)` | Parametre tipi `any` |
-| `user-trust-score-prisma.repository.ts:92` | `toDomain(prismaScore: any)` | Parametre tipi `any` |
-| ~~`error-handler.middleware.ts:6`~~ | ~~`err: any`~~ | ~~Error parametre tipi~~ | ✅ `err: unknown` + `toErrorLike()` helper |
-| ~~`error-handler.middleware.ts:7,43`~~ | ~~`(req as any).traceId`, `(req as any).user`~~ | ~~Express Request genisletilmemis~~ | ✅ `req.traceId`, `req.user?.id` (express.d.ts guncellendi) |
+- **~432 `any` kullanimi tamamen temizlendi** (repository + service + infrastructure + router katmanlari)
+- **140 dosya degistirildi**, 3300+ satir eklendi, 2200+ satir silindi
+- **TypeScript hata sayisi 578 → 552** (26 pre-existing hata da duzeltildi)
+- **Kalan:** Sadece 3 kasitli `as any` (`content-share-prisma.repository.ts` - Prisma model henuz generate edilmemis)
 
-**Oneri:** Prisma increment icin uygun Prisma type'larini kullan.
+| Katman | Onceki `any` | Sonra | Durum |
+|--------|-------------|-------|-------|
+| Repository'ler (58 dosya) | ~120 | 3 (kasitli) | ✅ |
+| Servisler (40+ dosya) | ~200 | 0 | ✅ |
+| Infrastructure (20+ dosya) | ~60 | 0 | ✅ |
+| Router'lar (20+ dosya) | ~50 | 0 | ✅ |
+
+**Yapilan degisiklikler:**
+- `any` parametreler → `unknown` + type guard'lar
+- `as any` cast'lar → Prisma generated type'lar (`Prisma.XxxWhereInput`, `Prisma.XxxUpdateInput`)
+- `Promise<any>` → explicit return type'lar
+- `Record<string, any>` → `Record<string, unknown>`
+- Domain vs Prisma enum cast'lar → `as PrismaEnumType` pattern'leri
+- JSON data erisimi → typed helper fonksiyonlar ile guvenli property extraction
 
 ### 5.2 Service Instantiation Anti-Pattern (Devam Ediyor)
 
@@ -626,7 +636,7 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 
 | # | Gorev | V1 Durumu |
 |---|-------|-----------|
-| 13 | `any` type'lari temizle (repository'ler oncelikli, error handler ✅ tamamlandi) | ⚠️ KISMEN TAMAMLANDI |
+| ~~13~~ | ~~`any` type'lari temizle (repository + service + infra + router)~~ | ✅ TAMAMLANDI (~432 → 3 kasitli) |
 | 14 | Response format standartlastir (`response.helper.ts` kullan) | ⚠️ Helper eklendi, migrasyon bekliyor |
 | 15 | DLQ mekanizmasi ekle | ❌ HALA ACIK |
 | ~~16~~ | ~~Cache stampede korunmasi ekle~~ | ✅ TAMAMLANDI |
@@ -697,9 +707,9 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
 ## Notlar
 
 - Bu V2 analizi, V1 raporundaki tum maddelerin guncel durumunu yansitmaktadir.
-- **35 madde tamamlanmistir** — Faz 1 tamami + Faz 2/3'ten 17 ek madde.
-- **Genel skor 6.5 → 7.4 → 7.8 → 8.2 → ~8.6'ya yukselmistir.**
-- **Faz 1 tamamen kapatilmistir.** Faz 2'den 7 madde, Faz 3'ten 3 madde kapatilmistir.
+- **36 madde tamamlanmistir** — Faz 1 tamami + Faz 2/3'ten 18 ek madde.
+- **Genel skor 6.5 → 7.4 → 7.8 → 8.2 → 8.6 → ~8.8'e yukselmistir.**
+- **Faz 1 tamamen kapatilmistir.** Faz 2'den 7 madde, Faz 3'ten 4 madde kapatilmistir.
 - **Son guncelleme (2026-02-28):** 9 ek duzeltme yapilmistir:
   1. Sessiz `.catch(() => {})` → `logger.warn()` (16 yer, 2 dosya)
   2. Error handler `any` → `unknown` + type augmentation
@@ -719,5 +729,10 @@ Her request'te 50+ yeni obje olusturma pattern'i devam ediyor. `CacheService` si
   6. PostComparison product relation'larina `onDelete: Restrict` eklendi
   7. Seed router'a `RunSeedSchema` + `validateBody()` eklendi
   8. Payment method mock kart `4242` kaldirildi, `logger.warn()` eklendi
+- **Son guncelleme (2026-03-01, #2):** `any` type temizligi tamamlandi:
+  1. ~432 `any` kullanimi tamamen temizlendi (140 dosya, 5 commit)
+  2. Repository + service + infrastructure + router katmanlari kapsandi
+  3. TypeScript hata sayisi 578 → 552'ye dustu (26 pre-existing hata da duzeltildi)
+  4. Kalan: 3 kasitli `as any` (content-share-prisma.repository.ts - Prisma model generate bekleniyor)
 - **Kalan Aksiyon:** `.env` dosyalarina `LOGO_DEV_API_TOKEN` ve `MEDUSA_API_URL` eklenmeli.
 - Yeni tespit edilen 8 sorundan 7'si tamamlanmistir. Kalan 1: cache circuit breaker metrik.
