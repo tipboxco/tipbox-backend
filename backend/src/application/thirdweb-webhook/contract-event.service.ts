@@ -1289,14 +1289,23 @@ export class ContractEventService {
     }
 
     // Genel istatistikler
+    // contractEventLog model exists in schema but may not be in generated client yet
+    // Use $queryRawUnsafe as a safe fallback until prisma generate is run
     const prisma = getPrisma();
-    const [total, processed, unprocessed] = await Promise.all([
-      prisma.contractEventLog.count(),
-      prisma.contractEventLog.count({ where: { processed: true } }),
-      prisma.contractEventLog.count({ where: { processed: false } })
-    ]);
+    const result = await prisma.$queryRawUnsafe<Array<{ total: bigint; processed: bigint; unprocessed: bigint }>>(
+      `SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE processed = true) as processed,
+        COUNT(*) FILTER (WHERE processed = false) as unprocessed
+      FROM contract_event_logs`
+    );
+    const row = result[0] || { total: 0n, processed: 0n, unprocessed: 0n };
 
-    return { total, processed, unprocessed };
+    return {
+      total: Number(row.total),
+      processed: Number(row.processed),
+      unprocessed: Number(row.unprocessed),
+    };
   }
 
   // ==========================================================================
@@ -1321,7 +1330,7 @@ export class ContractEventService {
       try {
         // Transfer event'lerini yeniden işle
         if (event.eventName === 'Transfer') {
-          const transferEvent = parseTransferEvent(event.decodedLog);
+          const transferEvent = parseTransferEvent(event.decodedLog as unknown as Record<string, DecodedLogValue>);
           
           if (transferEvent) {
             const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);

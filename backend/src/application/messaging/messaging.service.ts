@@ -1499,7 +1499,7 @@ export class MessagingService {
           if (!lastMessage) {
             lastMessage = {
               sentAt: fallbackMessage.sentAt,
-            } as { sentAt: Date };
+            } as unknown as typeof lastMessage;
           }
         }
         

@@ -1929,7 +1929,8 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
 
   // Avatar yükleme
   let avatar: string | undefined;
-  const avatarFile = req.files?.['Avatar']?.[0];
+  const filesMap = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+  const avatarFile = filesMap?.['Avatar']?.[0];
   if (avatarFile) {
     try {
       avatar = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
@@ -1953,7 +1954,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
 
   // Banner yükleme
   let bannerUrl: string | undefined;
-  const bannerFile = req.files?.['Banner']?.[0];
+  const bannerFile = filesMap?.['Banner']?.[0];
   if (bannerFile) {
     try {
       bannerUrl = await uploadImageFile(bannerFile, 'profile-banners', 'Banner');

@@ -596,7 +596,7 @@ router.post('/events',
         : JSON.stringify(req.body);
 
     // Parse payload first
-    let payload: unknown;
+    let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(rawBody);
     } catch (error) {
@@ -727,7 +727,7 @@ router.post('/events',
       
       // Legacy format kontrolü
       if (payload.type && payload.data) {
-        const result = await contractEventService.processEvent(payload);
+        const result = await contractEventService.processEvent(payload as ThirdwebContractSubscriptionPayload);
 
         return res.status(200).json({
           success: result.success,
