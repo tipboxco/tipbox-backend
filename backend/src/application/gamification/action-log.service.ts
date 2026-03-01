@@ -190,6 +190,13 @@ export class ActionLogService {
 
       const actionLogData: Prisma.ActionLogCreateManyInput[] = [];
 
+      // ContentPostType -> ActionType code mapping
+      // Only EXPERIENCE and FREE (mapped to GENERAL) are tracked
+      const postTypeToActionCode: Record<string, string> = {
+        EXPERIENCE: 'EXPERIENCE',
+        FREE: 'GENERAL',
+      };
+
       // Backfill posts
       const posts = await prisma.contentPost.findMany({
         where: { userId },
@@ -197,7 +204,10 @@ export class ActionLogService {
       });
 
       for (const post of posts) {
-        const actionTypeId = resolveActionTypeId(MainAction.POST, post.type);
+        const actionCode = postTypeToActionCode[post.type];
+        if (!actionCode) continue; // Skip post types not tracked (TIPS, COMPARE, QUESTION, UPDATE)
+
+        const actionTypeId = resolveActionTypeId(MainAction.POST, actionCode);
         if (actionTypeId) {
           actionLogData.push({
             userId,

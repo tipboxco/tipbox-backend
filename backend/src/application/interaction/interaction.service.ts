@@ -2,11 +2,14 @@ import { ContentLike } from '../../domain/interaction/content-like.entity';
 import { ContentComment } from '../../domain/interaction/content-comment.entity';
 import { ContentShare } from '../../domain/interaction/content-share.entity';
 import { ContentFavorite } from '../../domain/interaction/content-favorite.entity';
+import { ContentPostVote } from '../../domain/interaction/content-post-vote.entity';
 import { ContentPost } from '../../domain/content/content-post.entity';
 import { User } from '../../domain/user/user.entity';
 import { ShareType } from '../../domain/interaction/share-type.enum';
+import { VoteType } from '../../domain/interaction/vote-type.enum';
 import { ContentLikePrismaRepository } from '../../infrastructure/repositories/content-like-prisma.repository';
 import { ContentPostPrismaRepository } from '../../infrastructure/repositories/content-post-prisma.repository';
+import { ContentPostVotePrismaRepository } from '../../infrastructure/repositories/content-post-vote-prisma.repository';
 import { ContentCommentPrismaRepository } from '../../infrastructure/repositories/content-comment-prisma.repository';
 import { ContentSharePrismaRepository } from '../../infrastructure/repositories/content-share-prisma.repository';
 import { ContentFavoritePrismaRepository } from '../../infrastructure/repositories/content-favorite-prisma.repository';
@@ -26,6 +29,7 @@ import { invalidatePostInteractionCache } from '../../infrastructure/cache/cache
 export class InteractionService {
   private contentLikeRepo = new ContentLikePrismaRepository();
   private contentPostRepo = new ContentPostPrismaRepository();
+  private contentPostVoteRepo = new ContentPostVotePrismaRepository();
   private commentRepo = new ContentCommentPrismaRepository();
   private shareRepo = new ContentSharePrismaRepository();
   private favoriteRepo = new ContentFavoritePrismaRepository();
@@ -201,6 +205,164 @@ export class InteractionService {
       logger.info(`User ${userId} unliked post ${postId}`);
     } catch (error) {
       logger.error(`Failed to unlike post ${postId} by user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  // ========== UPVOTE METHODS ==========
+
+  /**
+   * Event içindeki Free Post'a upvote at
+   * Sadece type: FREE ve eventId != null olan post'lar upvote edilebilir
+   */
+  async upvoteEventPost(userId: string, postId: string): Promise<ContentPostVote> {
+    try {
+      // Post'u eventId ile birlikte bul
+      const post = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { id: true, type: true, userId: true, eventId: true },
+      });
+      if (!post) {
+        throw new Error('Post not found');
+      }
+
+      // Event Free Post kontrolü
+      if (post.type !== 'FREE' || !post.eventId) {
+        throw new Error('Only Free posts within events can be upvoted');
+      }
+
+      // Kendi post'una upvote kontrolü
+      if (post.userId === userId) {
+        throw new Error('Cannot upvote your own post');
+      }
+
+      // Duplicate kontrolü
+      const existingVote = await this.contentPostVoteRepo.findByUserAndPost(userId, postId);
+      if (existingVote) {
+        throw new Error('Post already upvoted');
+      }
+
+      // Vote oluştur
+      const vote = await this.contentPostVoteRepo.create({
+        userId,
+        postId,
+        voteType: VoteType.UPVOTE,
+      });
+
+      // Upvote sayısını artır
+      await this.contentPostRepo.incrementUpvoteCount(postId);
+
+      // Action log (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.SYSTEM,
+          actionTypeCode: 'UPVOTE',
+          entityType: 'post',
+          entityId: postId,
+          metadata: {
+            postType: post.type,
+            authorId: post.userId,
+            eventId: post.eventId,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log upvote action', { error: getErrorMessage(err) });
+        });
+
+      // Achievement progress (fire-and-forget)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'UPVOTE', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for upvote',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+      // Event metrics: post sahibinin helpful votes'unu artır (fire-and-forget)
+      this.eventMetricsService
+        .incrementHelpfulVotesReceived(post.userId, post.eventId)
+        .then((metrics) => {
+          return this.badgeEligibilityService.checkAndGrantEventBadges(
+            post.userId,
+            post.eventId!,
+            metrics,
+          );
+        })
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to update event metrics or check badges for upvote',
+            userId: post.userId,
+            eventId: post.eventId,
+            error: err,
+          });
+        });
+
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after upvote', {
+          error: getErrorMessage(err),
+        });
+      });
+
+      logger.info(`User ${userId} upvoted post ${postId}`);
+      return vote;
+    } catch (error) {
+      logger.error(`Failed to upvote post ${postId} by user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event içindeki Free Post'tan upvote'u geri çek
+   */
+  async removeUpvoteEventPost(userId: string, postId: string): Promise<void> {
+    try {
+      // Vote'u bul
+      const vote = await this.contentPostVoteRepo.findByUserAndPost(userId, postId);
+      if (!vote) {
+        throw new Error('Upvote not found');
+      }
+
+      // Vote sil
+      await this.contentPostVoteRepo.delete(vote.id);
+
+      // Upvote sayısını azalt
+      await this.contentPostRepo.decrementUpvoteCount(postId);
+
+      // Post'u bul (event metrics için)
+      const postData = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true, userId: true },
+      });
+
+      // Event metrics: post sahibinin helpful votes'unu azalt (badge geri alınmaz)
+      if (postData?.eventId) {
+        this.eventMetricsService
+          .decrementHelpfulVotesReceived(postData.userId, postData.eventId)
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to decrement event metrics for upvote removal',
+              userId: postData.userId,
+              eventId: postData.eventId,
+              error: err,
+            });
+          });
+      }
+
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after upvote removal', {
+          error: getErrorMessage(err),
+        });
+      });
+
+      logger.info(`User ${userId} removed upvote from post ${postId}`);
+    } catch (error) {
+      logger.error(`Failed to remove upvote from post ${postId} by user ${userId}:`, error);
       throw error;
     }
   }
@@ -751,18 +913,21 @@ export class InteractionService {
     liked: boolean;
     favorited: boolean;
     shared: boolean;
+    upvoted: boolean;
   }> {
     try {
-      const [like, favorite, share] = await Promise.all([
+      const [like, favorite, share, upvote] = await Promise.all([
         this.contentLikeRepo.findByUserAndPost(userId, postId),
         this.favoriteRepo.findByUserAndPost(userId, postId),
         this.shareRepo.findByUserAndPost(userId, postId),
+        this.contentPostVoteRepo.findByUserAndPost(userId, postId),
       ]);
 
       return {
         liked: !!like,
         favorited: !!favorite,
         shared: !!share,
+        upvoted: !!upvote,
       };
     } catch (error) {
       logger.error(`Failed to get interaction status for post ${postId}:`, error);

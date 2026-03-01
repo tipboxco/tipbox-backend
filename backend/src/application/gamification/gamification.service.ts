@@ -9,14 +9,19 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import { invalidateBadgeCache } from '../../infrastructure/cache/cache-invalidation';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class GamificationService {
   private readonly notificationService: NotificationService;
   private prisma: ReturnType<typeof getPrisma>;
+  private readonly cacheService: CacheService;
 
   constructor() {
     this.notificationService = new NotificationService();
     this.prisma = getPrisma();
+    this.cacheService = CacheService.getInstance();
   }
 
   /**
@@ -157,6 +162,13 @@ export class GamificationService {
    */
   async getUserBadges(userId: string) {
     try {
+      // Cache-aside: check cache first
+      const cacheKey = CACHE_KEYS.USER_BADGES(userId);
+      const cached = await this.cacheService.get<Array<Record<string, unknown>>>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
       const userBadges = await this.prisma.userBadge.findMany({
         where: { userId },
         include: {
@@ -173,7 +185,7 @@ export class GamificationService {
         ],
       });
 
-      return userBadges.map((ub) => ({
+      const result = userBadges.map((ub) => ({
         id: ub.id,
         badgeId: ub.badgeId,
         badge: {
@@ -193,6 +205,11 @@ export class GamificationService {
         visibility: ub.visibility,
         earnedAt: ub.createdAt,
       }));
+
+      // Store in cache
+      await this.cacheService.set(cacheKey, result, CACHE_TTL.USER_BADGES).catch(() => {});
+
+      return result;
     } catch (error) {
       logger.error(`Failed to get badges for user ${userId}:`, error);
       throw error;
@@ -258,6 +275,13 @@ export class GamificationService {
    */
   async getUserGamificationStats(userId: string) {
     try {
+      // Cache-aside: check cache first
+      const cacheKey = CACHE_KEYS.USER_GAMIFICATION_STATS(userId);
+      const cached = await this.cacheService.get<Record<string, unknown>>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
       // Get badge stats
       const totalBadges = await this.prisma.userBadge.count({ where: { userId } });
       const claimedBadges = await this.prisma.userBadge.count({
@@ -322,7 +346,7 @@ export class GamificationService {
         }
       });
 
-      return {
+      const stats = {
         badges: {
           total: totalBadges,
           claimed: claimedBadges,
@@ -345,6 +369,11 @@ export class GamificationService {
           inProgress: inProgressCollections,
         },
       };
+
+      // Store in cache
+      await this.cacheService.set(cacheKey, stats, CACHE_TTL.USER_GAMIFICATION_STATS).catch(() => {});
+
+      return stats;
     } catch (error) {
       logger.error(`Failed to get gamification stats for user ${userId}:`, error);
       throw error;

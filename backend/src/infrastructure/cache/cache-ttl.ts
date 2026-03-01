@@ -77,6 +77,14 @@ export const CACHE_TTL = {
   STATIC_BRANDS: 86400,        // 24 saat - statik markalar
   STATIC_TAGS: 86400,          // 24 saat - statik tag'ler
   
+  // Gamification related
+  USER_BADGES: 1800,                 // 30 dakika - badge grant ile invalidate olur
+  USER_ACHIEVEMENTS: 600,            // 10 dakika - progress sık değişir
+  USER_GAMIFICATION_STATS: 600,      // 10 dakika - progress ile birlikte değişir
+  BADGE_DETAIL: 3600,                // 1 saat - badge detayları nadir değişir
+  COLLECTION_LIST: 3600,             // 1 saat - koleksiyon listesi nadir değişir
+  COLLECTION_DETAIL: 1800,           // 30 dakika - koleksiyon detayı
+
   // AI related
   AI_SPLIT_EXPERIENCE: 604800, // 7 gün - aynı metin tekrar sorulursa cache'ten dön (maliyet tasarrufu)
   

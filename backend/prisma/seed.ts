@@ -7051,10 +7051,14 @@ async function main() {
     { mainAction: 'BOOKMARK', code: 'ALL', label: 'Bookmark Action' },
     // JOIN actions
     { mainAction: 'JOIN', code: 'ALL', label: 'Join Action' },
+    { mainAction: 'JOIN', code: 'BRAND', label: 'Join Brand' },
     // SYSTEM actions
     { mainAction: 'SYSTEM', code: 'PROFILE_COMPLETE', label: 'Complete Profile' },
     { mainAction: 'SYSTEM', code: 'BIO_ADD', label: 'Add Bio' },
     { mainAction: 'SYSTEM', code: 'INVENTORY_ADD', label: 'Add Inventory Item' },
+    { mainAction: 'SYSTEM', code: 'PROFILE_PHOTO', label: 'Add Profile Photo' },
+    { mainAction: 'SYSTEM', code: 'TRUST', label: 'Trust User' },
+    { mainAction: 'SYSTEM', code: 'UPVOTE', label: 'Upvote Event Post' },
   ]
 
   const actionTypes = await Promise.all(

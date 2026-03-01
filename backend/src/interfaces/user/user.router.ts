@@ -29,6 +29,9 @@ import { invalidateUserCache, invalidateAllUserCache } from '../../infrastructur
 import { WalletService } from '../../application/wallet/wallet.service';
 import { createWeb3NftService, createNFTMetadata } from '../../application/wallet/web3-nft-service';
 // ValidationError kullanılmıyor; mevcut mimaride router içinde direkt 400/409 dönüyoruz
+import { ActionLogService } from '../../application/gamification/action-log.service';
+import { AchievementProgressService } from '../../application/gamification/achievement-progress.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 
 const router = Router();
 const userService = new UserService();
@@ -38,6 +41,8 @@ const prisma = getPrisma();
 const paymentDashboardService = new PaymentDashboardService();
 const paymentMethodService = new PaymentMethodService();
 const invoiceService = new InvoiceService();
+const actionLogService = new ActionLogService();
+const achievementProgressService = new AchievementProgressService();
 
 function toPaymentMethodResponse(card: { id: string; cardAlias: string; brand: string; last4: string; expiryMonth: number; expiryYear: number; isDefault: boolean; createdAt: Date; updatedAt: Date }): PaymentMethodResponse {
   return {
@@ -353,7 +358,27 @@ router.post(
       
       // Tam URL'yi oluştur
       const avatarUrl = resolveMediaUrl(filePath, false);
-      
+
+      // Gamification: PROFILE_PHOTO tracking (fire-and-forget)
+      actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.SYSTEM,
+          actionTypeCode: 'PROFILE_PHOTO',
+          entityType: 'profile',
+          entityId: userId,
+          metadata: { fileName, fileSize: file.size },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log PROFILE_PHOTO action', { userId, error: err instanceof Error ? err.message : String(err) });
+        });
+
+      achievementProgressService
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'PROFILE_PHOTO', 1)
+        .catch((err) => {
+          logger.warn('Failed to increment PROFILE_PHOTO progress', { userId, error: err instanceof Error ? err.message : String(err) });
+        });
+
       logger.info({
         message: 'Avatar başarıyla yüklendi ve veritabanına kaydedildi',
         userId,

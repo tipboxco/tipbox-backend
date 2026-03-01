@@ -16,6 +16,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import { PostService } from '../post/post.service';
 import { ContextType } from '../../domain/content/context-type.enum';
@@ -28,6 +29,7 @@ export class InventoryService {
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private readonly achievementProgressService: AchievementProgressService;
+  private readonly actionLogService: ActionLogService;
   private _postService?: PostService;
 
   constructor() {
@@ -38,6 +40,7 @@ export class InventoryService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.achievementProgressService = new AchievementProgressService();
+    this.actionLogService = new ActionLogService();
     // PostService lazy initialization to break circular dependency
   }
 
@@ -485,6 +488,25 @@ export class InventoryService {
         productId: dto.productId,
         inventoryId: inventory.id,
       });
+
+      // Action log (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.SYSTEM,
+          actionTypeCode: 'INVENTORY_ADD',
+          entityType: 'inventory',
+          entityId: inventory.id,
+          metadata: { productId: dto.productId },
+        })
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to log INVENTORY_ADD action',
+            userId,
+            inventoryId: inventory.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       // Collection badge progress (SYSTEM + INVENTORY_ADD) - async
       this.achievementProgressService
