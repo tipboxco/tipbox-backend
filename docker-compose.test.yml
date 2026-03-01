@@ -1,5 +1,5 @@
-# Test: Proje kökündeki tek .env kullanılır.
-# cp .env.example .env ile oluşturup test değerlerini (isteğe bağlı) girin.
+# Test: Proje kökündeki .env.test kullanılır.
+# cp .env.example .env.test ile oluşturup test değerlerini (isteğe bağlı) girin.
 services:
   postgres:
     image: postgres:15-alpine
@@ -86,7 +86,7 @@ services:
     container_name: tipbox_backend_test
     restart: always
     env_file:
-      - .env
+      - .env.test
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=test
@@ -177,7 +177,7 @@ services:
     ports:
       - "5555:5555"
     env_file:
-      - .env
+      - .env.test
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
     depends_on:
@@ -200,7 +200,7 @@ services:
     ports:
       - "5174:5174"
     env_file:
-      - .env
+      - .env.test
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api-test.tipbox.co}
     depends_on:
@@ -220,7 +220,7 @@ services:
     container_name: tipbox_catalog_service_test
     restart: always
     env_file:
-      - .env
+      - .env.test
     depends_on:
       postgres:
         condition: service_started
