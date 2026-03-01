@@ -134,7 +134,7 @@ export function resolveNftImageUrl(metadata: {
     (rawImage.startsWith("http") || rawImage.startsWith("ipfs") || rawImage.startsWith("data:"));
   if (hasValidImage) return replaceImageUrlHost(rawImage);
 
-  const fallback = process.env.NFT_BADGE_IMAGE_URL?.trim();
+  const fallback = process.env.SEED_MEDIA_BASE_URL?.trim();
   if (fallback) return fallback;
 
   return rawImage || undefined;

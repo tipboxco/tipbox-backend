@@ -45,12 +45,10 @@
 
 Nginx `/media/` proxy'si uzerinden MinIO'ya yonlendirilir.
 
-### NFT_BADGE_IMAGE_URL
+### NFT_BADGE_IMAGE_URL (kaldirildi)
 
-```diff
-- NFT_BADGE_IMAGE_URL=https://minio-tipbox.exportergo.com
-+ NFT_BADGE_IMAGE_URL=https://api-test.tipbox.co/media
-```
+`NFT_BADGE_IMAGE_URL` env degiskeni kaldirildi. Artik `SEED_MEDIA_BASE_URL` kullaniliyor.
+Kod referanslari (`types.ts`, `defaults.ts`, `marketplace.service.ts`) guncellendi.
 
 ### TUNNEL_URL
 
@@ -179,8 +177,7 @@ SSL sertifika yolu: `/etc/letsencrypt/live/api-test.tipbox.co/` (Let's Encrypt)
 - CORS_ORIGINS=http://localhost:3000,...,https://wilson-plugins-dayton-languages.trycloudflare.com,https://api-tipbox.exportergo.com
 + CORS_ORIGINS=https://api-test.tipbox.co,http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:9002
 
-- NFT_BADGE_IMAGE_URL=https://minio-tipbox.exportergo.com
-+ NFT_BADGE_IMAGE_URL=https://api-test.tipbox.co/media
+- NFT_BADGE_IMAGE_URL=https://minio-tipbox.exportergo.com  (KALDIRILDI - SEED_MEDIA_BASE_URL kullaniliyor)
 
 - TUNNEL_URL=https://api-tipbox.exportergo.com
 + TUNNEL_URL=https://api-test.tipbox.co

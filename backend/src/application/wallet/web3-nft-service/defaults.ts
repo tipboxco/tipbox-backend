@@ -9,7 +9,7 @@ import { createNFTMetadata, type NFTMetadataInput } from "./types";
 const DEFAULT_BADGE_METADATA_INPUT: NFTMetadataInput = {
   name: "Tipbox Badge",
   description: "Welcome to badge collection.",
-  imageUrl: process.env.NFT_BADGE_IMAGE_URL?.trim() || undefined,
+  imageUrl: process.env.SEED_MEDIA_BASE_URL?.trim() || undefined,
   externalUrl: undefined,
   attributes: [
     { trait_type: "type", value: "badge" },

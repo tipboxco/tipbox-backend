@@ -99,8 +99,8 @@ export class MarketplaceService {
       const { type, rarity } = this.parseTypeAndRarityFromMetadata(meta);
       const name = meta?.name?.trim() || `NFT #${tokenId}`;
       const description = meta?.description?.trim() || null;
-      const imageUrl = (resolveNftImageUrl(meta) || meta?.image || process.env.NFT_BADGE_IMAGE_URL || '').replace(':9000', '')
-      .replace(process.env.TUNNEL_URL || '',process.env.NFT_BADGE_IMAGE_URL || '');
+      const imageUrl = (resolveNftImageUrl(meta) || meta?.image || process.env.SEED_MEDIA_BASE_URL || '').replace(':9000', '')
+      .replace(process.env.TUNNEL_URL || '',process.env.SEED_MEDIA_BASE_URL || '');
 
       const existing = await this.nftRepo.findByTokenIdAndContract(tokenId, contractAddress);
       if (existing) {
