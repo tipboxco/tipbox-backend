@@ -1,7 +1,8 @@
 # Dependencies (tüm workspace'ler)
 node_modules/
 
-# Eski paket yöneticisi artıkları (sadece pnpm-lock.yaml kullanılır)
+# Lock dosyaları
+pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
