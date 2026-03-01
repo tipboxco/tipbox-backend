@@ -67,7 +67,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 9.15.0
 
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -163,7 +163,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           db_user: tipbox_user
-          db_name: tipbox_dev
+          db_name: tipbox_test
 
       - name: Stop services
         if: steps.check-secrets.outputs.available == 'true'
@@ -185,15 +185,6 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           force_rebuild: ${{ github.event.inputs.force_rebuild == true && 'true' || 'false' }}
-
-      - name: Generate Prisma Client
-        if: steps.check-secrets.outputs.available == 'true'
-        uses: ./.github/actions/execute-remote-stage
-        with:
-          ssh_host: hetzner-deploy
-          stage: prisma
-          project_dir: /opt/tipbox-backend
-          compose_file: docker-compose.test.yml
 
       - name: Start infrastructure services
         if: steps.check-secrets.outputs.available == 'true'
@@ -234,7 +225,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           db_user: tipbox_user
-          db_name: tipbox_dev
+          db_name: tipbox_test
 
       - name: Start all services
         if: steps.check-secrets.outputs.available == 'true'
