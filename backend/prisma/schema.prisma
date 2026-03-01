@@ -2,8 +2,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  // pnpm workspace: client'ı root node_modules'a üret ki @prisma/client ile aynı yerde olsun
-  output   = "../../node_modules/.prisma/client"
 }
 
 datasource db {

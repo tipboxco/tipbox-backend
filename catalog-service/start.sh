@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Ensure node_modules has all deps (fixes volume mount: anonymous volume can be empty or stale)
-if [ ! -d "node_modules/@xterm/xterm" ]; then
+# Ensure node_modules has all deps (fixes volume mount: named volume can be stale after rebuild)
+if [ ! -d "node_modules/@xterm/xterm" ] || [ ! -d "node_modules/@medusajs/dashboard" ] || [ ! -d "node_modules/@medusajs/draft-order" ]; then
   echo "Installing/refreshing node_modules..."
   pnpm install
   echo "node_modules ready."
@@ -39,8 +39,14 @@ fi
 # Run migrations and start server
 echo "Running database migrations..."
 npx medusa db:migrate
-# Medusa admin user (zaten varsa hata vermez)
-npx medusa user -e root@tipbox.co -p root@tipbox.co 2>/dev/null || true
+# Medusa admin user - sadece yoksa oluştur (duplicate key hatasını önler)
+USER_EXISTS=$(PGPASSWORD=postgres psql -h postgres -U postgres -d medusa-store -tAc "SELECT 1 FROM \"user\" WHERE email='root@tipbox.co'" 2>/dev/null)
+if [ "$USER_EXISTS" != "1" ]; then
+  echo "Creating Medusa admin user..."
+  npx medusa user -e root@tipbox.co -p root@tipbox.co 2>/dev/null || true
+else
+  echo "Medusa admin user already exists, skipping..."
+fi
 
 echo "Starting Medusa development server..."
 pnpm run dev

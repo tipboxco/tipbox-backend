@@ -131,8 +131,6 @@ services:
       - ./backend:/app
       - backend_node_modules_v2:/app/node_modules
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
-      # Docker daemon'a erişim için host docker.sock'u container'a bağla
-      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     command: pnpm run dev
     networks:
@@ -150,15 +148,12 @@ services:
     restart: always
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./logs/nginx:/var/log/nginx
-      - ./ssl:/etc/nginx/ssl:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - tipbox_network
     healthcheck:
@@ -168,9 +163,7 @@ services:
       retries: 3
 
   prisma-studio:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: node:23-alpine
     container_name: tipbox_prisma_studio
     restart: always
     ports:
@@ -183,10 +176,9 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - backend_prisma_node_modules:/app/node_modules
+      - ./backend/prisma:/app/prisma:ro
     working_dir: /app
-    command: npx prisma studio --port 5555 --browser none
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm add prisma@6.19.2 @prisma/client@6.19.2 && npx prisma studio --port 5555 --browser none"
     networks:
       - tipbox_network
 
@@ -200,11 +192,11 @@ services:
       - .env
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "5175:5175"  # Medusa server (API + admin dashboard)
     environment:
@@ -239,7 +231,7 @@ services:
     networks:
       - tipbox_network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5175/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -261,7 +253,7 @@ services:
       - backend
     volumes:
       - ./admin-panel:/app
-      - /app/node_modules
+      - admin_panel_node_modules:/app/node_modules
     working_dir: /app
     command: pnpm run dev
     networks:
@@ -273,8 +265,8 @@ volumes:
   minio_data:
   redis_data:
   backend_node_modules_v2:
-  backend_prisma_node_modules:
   catalog_service_node_modules:
+  admin_panel_node_modules:
 
 networks:
   tipbox_network:

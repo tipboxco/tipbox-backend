@@ -10,11 +10,11 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 # Set working directory
 WORKDIR /server
 
-# Copy package files
-COPY package.json  ./
+# Copy package files and lockfile
+COPY package.json pnpm-lock.yaml* .npmrc ./
 
 # Install all dependencies
-RUN pnpm install
+RUN pnpm install --no-frozen-lockfile
 
 # Copy source code
 COPY . .

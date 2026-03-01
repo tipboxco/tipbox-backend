@@ -1,8 +1,7 @@
 # Dependencies (tüm workspace'ler)
 node_modules/
 
-# Lock dosyaları
-pnpm-lock.yaml
+# Lock dosyaları (pnpm-lock.yaml her projede tutulmalı)
 package-lock.json
 yarn.lock
 

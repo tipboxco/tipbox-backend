@@ -42,12 +42,25 @@ if [ $attempt -eq $max_attempts ]; then
   exit 1
 fi
 
+# node_modules eksikse yeniden yükle
+# (named volume boş olabilir veya güncellenmiş olabilir)
+if [ ! -d "node_modules/.prisma" ] || [ ! -d "node_modules/@prisma/client" ]; then
+  echo "🔄 node_modules eksik veya Prisma Client bulunamadı, yükleniyor..."
+  pnpm install
+  echo "✅ Bağımlılıklar yüklendi!"
+fi
+
+# Prisma Client'ı her zaman generate et (schema değişmiş olabilir)
+echo "🔄 Prisma Client generate ediliyor..."
+pnpm exec prisma generate
+echo "✅ Prisma Client hazır!"
+
 if [ "${SKIP_DB_MIGRATIONS}" = "1" ] || [ "${SKIP_DB_MIGRATIONS}" = "true" ]; then
   echo "⏭️  SKIP_DB_MIGRATIONS aktif: migration/db push atlanıyor."
 else
   echo "🔄 Veritabanı migration'ları uygulanıyor..."
   # db push kullan (development için), production'da migrate deploy kullanılabilir
-  if npx prisma db push --accept-data-loss --skip-generate; then
+  if npx prisma db push --skip-generate; then
     echo "✅ Migration'lar başarıyla uygulandı!"
   else
     echo "⚠️  db push başarısız, migrate deploy deneniyor..."
@@ -56,18 +69,6 @@ else
 
   echo "✅ Migration işlemi tamamlandı!"
 fi
-
-# Bağımlılıkları yükle (named volume'daki node_modules güncel olmayabilir)
-# CI=true: interaktif prompt'ları devre dışı bırakır
-# --force: mevcut node_modules ile uyumsuzluk varsa yeniden yükler
-echo "🔄 Bağımlılıklar yükleniyor..."
-CI=true pnpm install --force
-echo "✅ Bağımlılıklar yüklendi!"
-
-# Prisma Client'ı generate et (postinstall çalışmasa bile garanti olsun)
-echo "🔄 Prisma Client generate ediliyor..."
-pnpm exec prisma generate
-echo "✅ Prisma Client hazır!"
 
 # Gelen komutu çalıştır (pnpm run dev gibi)
 exec "$@"

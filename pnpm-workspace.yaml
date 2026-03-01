@@ -1,7 +1,0 @@
-# Tipbox monorepo - pnpm workspace tanımı
-# https://pnpm.io/workspaces
-packages:
-  - "backend"
-  - "admin-panel"
-  - "catalog-service"
-  - "merge-code"

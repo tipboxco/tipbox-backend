@@ -15,8 +15,8 @@ COPY prisma ./prisma
 # Dependencies'leri yükle
 RUN pnpm install
 
-# Docker CLI ve netcat kur (docker ps ve PostgreSQL port kontrolü için)
-RUN apk add --no-cache docker-cli netcat-openbsd
+# netcat kur (PostgreSQL port kontrolü için)
+RUN apk add --no-cache netcat-openbsd
 
 # Prisma Client'ı generate et (schema kopyalandıktan sonra)
 # Not: prisma db push runtime'da çalıştırılacak (DATABASE_URL gerektirir)

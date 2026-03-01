@@ -68,7 +68,12 @@ export class AlchemyWebhookService {
   constructor() {
     this.signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY || '';
     if (!this.signingKey) {
-      logger.warn('ALCHEMY_WEBHOOK_SIGNING_KEY is not set. Alchemy webhook signature verification will fail.');
+      const env = process.env.NODE_ENV || 'development';
+      if (env === 'production') {
+        logger.warn('ALCHEMY_WEBHOOK_SIGNING_KEY is not set. Alchemy webhook signature verification will fail.');
+      } else {
+        logger.debug('ALCHEMY_WEBHOOK_SIGNING_KEY is not set (skipped in development).');
+      }
     }
   }
 

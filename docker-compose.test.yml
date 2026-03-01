@@ -132,8 +132,6 @@ services:
       - backend_test_node_modules:/app/node_modules
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       - ./logs:/app/logs
-      # Docker daemon'a erişim için host docker.sock'u container'a bağla
-      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     command: pnpm run dev
     networks:
@@ -169,9 +167,7 @@ services:
       retries: 3
 
   prisma-studio:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: node:23-alpine
     container_name: tipbox_prisma_studio_test
     restart: always
     ports:
@@ -184,10 +180,9 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - backend_test_prisma_node_modules:/app/node_modules
+      - ./backend/prisma:/app/prisma:ro
     working_dir: /app
-    command: npx prisma studio --port 5555 --browser none
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm add prisma@6.19.2 @prisma/client@6.19.2 && npx prisma studio --port 5555 --browser none"
     networks:
       - tipbox_network
 
@@ -207,7 +202,7 @@ services:
       - backend
     volumes:
       - ./admin-panel:/app
-      - /app/node_modules
+      - admin_panel_test_node_modules:/app/node_modules
     working_dir: /app
     command: pnpm run dev
     networks:
@@ -223,11 +218,11 @@ services:
       - .env.test
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "5175:5175"  # Medusa server (API + admin dashboard)
     environment:
@@ -262,7 +257,7 @@ services:
     networks:
       - tipbox_network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5175/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -274,7 +269,7 @@ volumes:
   minio_test_data:
   redis_test_data:
   backend_test_node_modules:
-  backend_test_prisma_node_modules:
+  admin_panel_test_node_modules:
   catalog_service_test_node_modules:
 
 networks:
