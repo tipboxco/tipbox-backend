@@ -65,6 +65,8 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:5173',
+        'http://localhost:5174', // Admin panel
+        'http://localhost:5175', // Catalog service (Medusa)
         // Android Emulator için özel IP
         'http://10.0.2.2:3000',
         // Local network IP'leri için wildcard pattern (regex ile kontrol edilecek)
@@ -82,6 +84,8 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         ...origins,
         'https://api-tipbox.tipbox.co',
         'http://localhost:3000',
+        'http://localhost:5174', // Admin panel
+        'http://localhost:5175', // Catalog service (Medusa)
         'https://api-test.tipbox.co',
         'http://api-test.tipbox.co',
         // Android Emulator için özel IP
@@ -95,7 +99,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
     case 'production':
       return ['https://api-tipbox.tipbox.co', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
     default:
-      return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
+      return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
   }
 }
 
