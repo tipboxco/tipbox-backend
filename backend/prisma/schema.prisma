@@ -1409,6 +1409,7 @@ model Transaction {
   @@index([actionType])
   @@index([createdAt])
   @@index([walletId, status])
+  @@index([txHash])
   @@map("transactions")
 }
 

@@ -50,8 +50,8 @@ export class ActionLogService {
           entityType: params.entityType,
           entityId: params.entityId,
           metadata: params.metadata
-            ? (JSON.parse(JSON.stringify(params.metadata)) as Prisma.JsonValue)
-            : null,
+            ? (params.metadata as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         },
       });
 
@@ -171,124 +171,124 @@ export class ActionLogService {
 
   /**
    * Backfill actions from existing data
-   * This will be implemented based on existing data structure
+   * Uses batch insert instead of sequential logAction calls for performance
    */
   async backfillActionsFromExistingData(userId: string): Promise<number> {
     logger.info('Backfilling actions for user', { userId });
 
-    let totalLogged = 0;
-
     try {
+      // Pre-cache all ActionTypes to avoid N+1 lookups
+      const allActionTypes = await prisma.actionType.findMany();
+      const actionTypeMap = new Map<string, string>();
+      for (const at of allActionTypes) {
+        actionTypeMap.set(`${at.mainAction}:${at.code}`, at.id);
+      }
+
+      const resolveActionTypeId = (mainAction: MainAction, code: string): string | null => {
+        return actionTypeMap.get(`${mainAction}:${code}`) ?? null;
+      };
+
+      const actionLogData: Prisma.ActionLogCreateManyInput[] = [];
+
       // Backfill posts
       const posts = await prisma.contentPost.findMany({
         where: { userId },
-        select: {
-          id: true,
-          type: true,
-          categoryId: true,
-          createdAt: true,
-        },
+        select: { id: true, type: true, categoryId: true },
       });
 
       for (const post of posts) {
-        await this.logAction({
-          userId,
-          mainAction: MainAction.POST,
-          actionTypeCode: post.type,
-          entityType: 'post',
-          entityId: post.id,
-          metadata: {
-            postType: post.type,
-            categoryId: post.categoryId,
-            backfilled: true,
-          },
-        });
-        totalLogged++;
+        const actionTypeId = resolveActionTypeId(MainAction.POST, post.type);
+        if (actionTypeId) {
+          actionLogData.push({
+            userId,
+            mainAction: MainAction.POST,
+            actionTypeId,
+            entityType: 'post',
+            entityId: post.id,
+            metadata: { postType: post.type, categoryId: post.categoryId, backfilled: true } as Prisma.InputJsonValue,
+          });
+        }
       }
 
-      // Backfill likes
+      // Backfill likes (only post likes, not comment likes)
       const likes = await prisma.contentLike.findMany({
-        where: { userId },
-        select: {
-          id: true,
-          postId: true,
-          createdAt: true,
-        },
+        where: { userId, postId: { not: null } },
+        select: { id: true, postId: true },
       });
 
-      for (const like of likes) {
-        await this.logAction({
-          userId,
-          mainAction: MainAction.LIKE,
-          actionTypeCode: 'ALL',
-          entityType: 'post',
-          entityId: like.postId,
-          metadata: {
-            backfilled: true,
-          },
-        });
-        totalLogged++;
+      const likeActionTypeId = resolveActionTypeId(MainAction.LIKE, 'ALL');
+      if (likeActionTypeId) {
+        for (const like of likes) {
+          if (like.postId) {
+            actionLogData.push({
+              userId,
+              mainAction: MainAction.LIKE,
+              actionTypeId: likeActionTypeId,
+              entityType: 'post',
+              entityId: like.postId,
+              metadata: { backfilled: true } as Prisma.InputJsonValue,
+            });
+          }
+        }
       }
 
       // Backfill comments
       const comments = await prisma.contentComment.findMany({
         where: { userId },
-        select: {
-          id: true,
-          postId: true,
-          body: true,
-          createdAt: true,
-        },
+        select: { id: true, postId: true, comment: true },
       });
 
-      for (const comment of comments) {
-        await this.logAction({
-          userId,
-          mainAction: MainAction.COMMENT,
-          actionTypeCode: 'ALL',
-          entityType: 'post',
-          entityId: comment.postId,
-          metadata: {
-            commentId: comment.id,
-            commentLength: comment.body.length,
-            backfilled: true,
-          },
-        });
-        totalLogged++;
+      const commentActionTypeId = resolveActionTypeId(MainAction.COMMENT, 'ALL');
+      if (commentActionTypeId) {
+        for (const comment of comments) {
+          actionLogData.push({
+            userId,
+            mainAction: MainAction.COMMENT,
+            actionTypeId: commentActionTypeId,
+            entityType: 'post',
+            entityId: comment.postId,
+            metadata: { commentId: comment.id, commentLength: comment.comment.length, backfilled: true } as Prisma.InputJsonValue,
+          });
+        }
       }
 
       // Backfill bookmarks/favorites
       const favorites = await prisma.contentFavorite.findMany({
         where: { userId },
-        select: {
-          id: true,
-          postId: true,
-          createdAt: true,
-        },
+        select: { id: true, postId: true },
       });
 
-      for (const favorite of favorites) {
-        await this.logAction({
-          userId,
-          mainAction: MainAction.BOOKMARK,
-          actionTypeCode: 'ALL',
-          entityType: 'post',
-          entityId: favorite.postId,
-          metadata: {
-            backfilled: true,
-          },
-        });
-        totalLogged++;
+      const bookmarkActionTypeId = resolveActionTypeId(MainAction.BOOKMARK, 'ALL');
+      if (bookmarkActionTypeId) {
+        for (const favorite of favorites) {
+          actionLogData.push({
+            userId,
+            mainAction: MainAction.BOOKMARK,
+            actionTypeId: bookmarkActionTypeId,
+            entityType: 'post',
+            entityId: favorite.postId,
+            metadata: { backfilled: true } as Prisma.InputJsonValue,
+          });
+        }
       }
 
+      // Batch insert in chunks of 500
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < actionLogData.length; i += BATCH_SIZE) {
+        const batch = actionLogData.slice(i, i + BATCH_SIZE);
+        await prisma.actionLog.createMany({ data: batch, skipDuplicates: true });
+        logger.debug('Action backfill batch inserted', { userId, batchStart: i, batchSize: batch.length });
+      }
+
+      const totalLogged = actionLogData.length;
       logger.info('Action backfill complete', { userId, totalLogged });
+      return totalLogged;
     } catch (error) {
       logger.error('Action backfill failed', {
         userId,
         error: getErrorMessage(error),
       });
+      return 0;
     }
-
-    return totalLogged;
   }
 }

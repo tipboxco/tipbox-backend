@@ -11,6 +11,7 @@ import { ProfilePrismaRepository } from '../../infrastructure/repositories/profi
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { LoginSchema } from '../auth/auth.schemas';
+import { loginRateLimiter } from '../../infrastructure/middleware/rate-limit.middleware';
 import type { AdminStatsResponse, AdminLogListItem, PaginationMeta } from './dtos/admin-common.dto';
 
 // Import sub-routers
@@ -93,6 +94,7 @@ const avatarRepo = new UserAvatarPrismaRepository();
  */
 router.post(
   '/login',
+  loginRateLimiter,
   validateBody(LoginSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body;

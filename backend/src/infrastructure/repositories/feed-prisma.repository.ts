@@ -129,17 +129,19 @@ export class FeedPrismaRepository {
       }
     });
 
-    // Update each user's unseenFeedCount
-    for (const [userId, count] of unseenCountsByUser.entries()) {
-      await this.prisma.profile.updateMany({
-        where: { userId },
-        data: {
-          unseenFeedCount: {
-            increment: -count
-          }
-        }
-      });
-    }
+    // Update each user's unseenFeedCount (parallel)
+    const profileUpdatePromises = Array.from(unseenCountsByUser.entries()).map(
+      ([userId, count]) =>
+        this.prisma.profile.updateMany({
+          where: { userId },
+          data: {
+            unseenFeedCount: {
+              increment: -count,
+            },
+          },
+        })
+    );
+    await Promise.all(profileUpdatePromises);
 
     return feedsBeforeUpdate.length;
   }
