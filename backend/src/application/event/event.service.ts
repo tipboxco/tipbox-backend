@@ -31,6 +31,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { EventMetricsService } from './event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 
 /** Prisma Event with product relation */
@@ -75,6 +76,7 @@ export class EventService {
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
   private achievementProgressService: AchievementProgressService;
+  private actionLogService: ActionLogService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -82,6 +84,7 @@ export class EventService {
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
     this.achievementProgressService = new AchievementProgressService();
+    this.actionLogService = new ActionLogService();
   }
 
   /** Prisma Event model delegate (cast for extended client type compatibility) */
@@ -1241,6 +1244,25 @@ export class EventService {
       });
 
       logger.info(`User ${userId} joined event ${eventId}`);
+
+      // Action log (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.JOIN,
+          actionTypeCode: 'ALL',
+          entityType: 'event',
+          entityId: eventId,
+          metadata: { eventId },
+        })
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to log JOIN action for event',
+            userId,
+            eventId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       // Collection badge progress (async)
       this.achievementProgressService

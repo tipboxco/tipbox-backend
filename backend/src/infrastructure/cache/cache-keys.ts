@@ -79,8 +79,16 @@ export const CACHE_KEYS = {
   STATIC_BRANDS: () => `static:brands`,
   STATIC_TAGS: () => `static:tags`,
   
+  // Gamification related
+  USER_BADGES: (userId: string) => `gamification:user:${userId}:badges`,
+  USER_ACHIEVEMENTS: (userId: string) => `gamification:user:${userId}:achievements`,
+  USER_GAMIFICATION_STATS: (userId: string) => `gamification:user:${userId}:stats`,
+  BADGE_DETAIL: (badgeId: string) => `gamification:badge:${badgeId}`,
+  COLLECTION_LIST: () => `gamification:collections`,
+  COLLECTION_DETAIL: (collectionId: string) => `gamification:collection:${collectionId}`,
+
   // AI related
-  AI_SPLIT_EXPERIENCE: (experienceTextHash: string, productId: string) => 
+  AI_SPLIT_EXPERIENCE: (experienceTextHash: string, productId: string) =>
     `ai:split:${productId}:${experienceTextHash}`,
 };
 
@@ -97,6 +105,8 @@ export const CACHE_PATTERNS = {
   DM_USER: (userId: string) => `dm:${userId}:*`,
   WALLET_USER: (userId: string) => `wallet:${userId}:*`,
   AI_PRODUCT: (productId: string) => `ai:split:${productId}:*`,
+  GAMIFICATION_USER: (userId: string) => `gamification:user:${userId}:*`,
+  GAMIFICATION_ALL: () => `gamification:*`,
   MARKETPLACE_ALL: () => `marketplace:*`,
   NFT_USER: (userId: string) => `nft:${userId}:*`,
   NFT_ALL: (nftId: string) => `nft:${nftId}:*`,

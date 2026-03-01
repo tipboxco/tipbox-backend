@@ -7,6 +7,9 @@ import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 import { brandToWebsite } from '../../data/brandToWebsite';
 import { randomUUID } from 'crypto';
+import { ActionLogService } from '../gamification/action-log.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const slugify = require('slugify');
 
@@ -376,9 +379,13 @@ export interface BrandHistoryEventsResponse {
 
 export class BrandService {
   private readonly prisma: ReturnType<typeof getPrisma>;
+  private readonly actionLogService: ActionLogService;
+  private readonly achievementProgressService: AchievementProgressService;
 
   constructor() {
     this.prisma = getPrisma();
+    this.actionLogService = new ActionLogService();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   /**
@@ -699,6 +706,26 @@ export class BrandService {
     const followersCount = await this.prisma.bridgeFollower.count({
       where: { brandId },
     });
+
+    // Gamification: Brand follow tracking (fire-and-forget)
+    this.actionLogService
+      .logAction({
+        userId,
+        mainAction: MainAction.JOIN,
+        actionTypeCode: 'BRAND',
+        entityType: 'brand',
+        entityId: brandId,
+      })
+      .catch((err) => {
+        logger.warn('Failed to log brand follow action', { userId, brandId, error: err instanceof Error ? err.message : String(err) });
+      });
+
+    this.achievementProgressService
+      .incrementProgressByCode(userId, MainAction.JOIN, 'BRAND', 1)
+      .catch((err) => {
+        logger.warn('Failed to increment brand follow progress', { userId, brandId, error: err instanceof Error ? err.message : String(err) });
+      });
+
     return { isJoined: true, followers: followersCount };
   }
 

@@ -91,6 +91,85 @@ router.delete(
   })
 );
 
+// ========== UPVOTE ENDPOINTS ==========
+
+/**
+ * @openapi
+ * /interactions/posts/{postId}/upvote:
+ *   post:
+ *     summary: Event içindeki Free Post'a upvote at
+ *     description: Sadece type FREE ve eventId olan post'lar upvote edilebilir. Kendi post'una upvote atamazsın.
+ *     tags: [Interactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Post upvote edildi
+ *       400:
+ *         description: Geçersiz post tipi veya zaten upvote edilmiş
+ *       401:
+ *         description: Yetkisiz
+ */
+router.post(
+  '/posts/:postId/upvote',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const rawPostId = req.params.postId?.trim();
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
+    const postId = await postService.resolvePostId(rawPostId);
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
+
+    await interactionService.upvoteEventPost(userId, postId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Post upvoted successfully',
+    });
+  })
+);
+
+/**
+ * @openapi
+ * /interactions/posts/{postId}/upvote:
+ *   delete:
+ *     summary: Event içindeki Free Post'tan upvote'u geri çek
+ *     tags: [Interactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Upvote geri alındı
+ */
+router.delete(
+  '/posts/:postId/upvote',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const rawPostId = req.params.postId?.trim();
+    if (!rawPostId) return res.status(400).json({ success: false, message: 'Post ID is required' });
+    const postId = await postService.resolvePostId(rawPostId);
+    if (!postId) return res.status(404).json({ success: false, message: 'Post not found' });
+
+    await interactionService.removeUpvoteEventPost(userId, postId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Upvote removed successfully',
+    });
+  })
+);
+
 // ========== BOOKMARK ENDPOINTS ==========
 
 /**
@@ -677,6 +756,8 @@ router.post(
  *                 favorited:
  *                   type: boolean
  *                 shared:
+ *                   type: boolean
+ *                 upvoted:
  *                   type: boolean
  */
 router.get(

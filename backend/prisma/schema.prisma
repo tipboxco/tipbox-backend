@@ -101,6 +101,7 @@ model User {
   paymentMethods          PaymentMethod[]
   userSubscriptions       UserSubscription[]
   invoices                Invoice[]
+  contentPostVotes        ContentPostVote[]
 
   @@map("users")
 }
@@ -542,6 +543,7 @@ model ContentPost {
   commentsCount        Int                       @default(0) @map("comments_count")
   favoritesCount       Int                       @default(0) @map("favorites_count")
   likesCount           Int                       @default(0) @map("likes_count")
+  upvotesCount         Int                       @default(0) @map("upvotes_count")
   sharesCount          Int                       @default(0) @map("shares_count")
   viewsCount           Int                       @default(0) @map("views_count")
   experienceDurationId String?                   @map("experience_duration_id") @db.Uuid
@@ -577,6 +579,7 @@ model ContentPost {
   updatePosts          PostUpdateContent[]       @relation("ExperiencePost")
   topCommunityChoices  TopCommunityChoice[]
   trendingPosts        TrendingPost[]
+  votes                ContentPostVote[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -844,6 +847,22 @@ model ContentCommentVote {
   @@index([userId])
   @@index([commentId])
   @@map("content_comment_votes")
+}
+
+model ContentPostVote {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  postId    String      @map("post_id") @db.VarChar(26)
+  voteType  VoteType    @map("vote_type")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  post      ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
+  @@map("content_post_votes")
 }
 
 model ContentPostView {

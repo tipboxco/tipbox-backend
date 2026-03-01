@@ -151,6 +151,117 @@ export class EventMetricsService {
   }
 
   /**
+   * Kullanıcının event'teki helpful votes sayısını artır (upvote durumunda)
+   */
+  async incrementHelpfulVotesReceived(userId: string, eventId: string): Promise<EventMetrics> {
+    try {
+      const stats = await this.prisma.eventStats.upsert({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId,
+          },
+        },
+        update: {
+          helpfulVotesReceived: {
+            increment: 1,
+          },
+          updatedAt: new Date(),
+        },
+        create: {
+          userId,
+          eventId,
+          totalParticipated: 0,
+          totalComments: 0,
+          helpfulVotesReceived: 1,
+          eventPostsCount: 0,
+          eventLikesReceived: 0,
+        },
+      });
+
+      logger.info(
+        `User ${userId} helpful votes incremented for event ${eventId}: ${stats.helpfulVotesReceived}`,
+      );
+
+      return {
+        userId,
+        eventId,
+        postsCount: stats.eventPostsCount,
+        likesReceivedCount: stats.eventLikesReceived,
+        helpfulVotesReceivedCount: stats.helpfulVotesReceived,
+      };
+    } catch (error) {
+      logger.error(
+        `Failed to increment helpful votes for user ${userId} in event ${eventId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının event'teki helpful votes sayısını azalt (upvote geri çekme)
+   */
+  async decrementHelpfulVotesReceived(userId: string, eventId: string): Promise<EventMetrics> {
+    try {
+      const existingStats = await this.prisma.eventStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId,
+          },
+        },
+      });
+
+      if (!existingStats) {
+        logger.warn(
+          `No stats found for user ${userId} in event ${eventId}, skipping helpful votes decrement`,
+        );
+        return {
+          userId,
+          eventId,
+          postsCount: 0,
+          likesReceivedCount: 0,
+          helpfulVotesReceivedCount: 0,
+        };
+      }
+
+      const stats = await this.prisma.eventStats.update({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId,
+          },
+        },
+        data: {
+          helpfulVotesReceived: {
+            decrement: 1,
+          },
+          updatedAt: new Date(),
+        },
+      });
+
+      logger.info(
+        `User ${userId} helpful votes decremented for event ${eventId}: ${stats.helpfulVotesReceived}`,
+      );
+
+      return {
+        userId,
+        eventId,
+        postsCount: stats.eventPostsCount,
+        likesReceivedCount: stats.eventLikesReceived,
+        helpfulVotesReceivedCount: stats.helpfulVotesReceived,
+      };
+    } catch (error) {
+      logger.error(
+        `Failed to decrement helpful votes for user ${userId} in event ${eventId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Kullanıcının güncel event metriklerini getir
    */
   async getUserMetrics(userId: string, eventId: string): Promise<EventMetrics> {

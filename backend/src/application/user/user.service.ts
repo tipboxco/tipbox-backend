@@ -28,6 +28,10 @@ import {
 } from '../../infrastructure/repositories/prisma-types.helper';
 import { BadgeResponseMapper } from '../../infrastructure/utils/badge-response-mapper';
 import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
+import { ActionLogService } from '../gamification/action-log.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 import type { UserReportCategory } from '../../domain/user/user-report-category.enum';
 
 type CosmeticSummary = {
@@ -228,6 +232,8 @@ export class UserService {
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
   private readonly trustRelationRepo: TrustRelationPrismaRepository;
   private readonly prisma: ReturnType<typeof getPrisma>;
+  private readonly actionLogService: ActionLogService;
+  private readonly achievementProgressService: AchievementProgressService;
 
   constructor(private readonly userRepo = new UserPrismaRepository()) {
     this.s3Service = new S3Service();
@@ -238,6 +244,8 @@ export class UserService {
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
     this.trustRelationRepo = new TrustRelationPrismaRepository();
     this.prisma = getPrisma();
+    this.actionLogService = new ActionLogService();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   async getUserById(id: string): Promise<User | null> {
@@ -623,6 +631,28 @@ export class UserService {
     });
 
     await this.cacheService.del(`user:${userId}:profile`);
+
+    // Gamification: BIO_ADD tracking (fire-and-forget)
+    if (typeof biography !== 'undefined' && biography) {
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.SYSTEM,
+          actionTypeCode: 'BIO_ADD',
+          entityType: 'profile',
+          entityId: userId,
+          metadata: { bioLength: biography.length },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log BIO_ADD action', { userId, error: getErrorMessage(err) });
+        });
+
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'BIO_ADD', 1)
+        .catch((err) => {
+          logger.warn('Failed to increment BIO_ADD progress', { userId, error: getErrorMessage(err) });
+        });
+    }
   }
 
   async listTrustedUsers(userId: string, query?: string): Promise<Array<{
@@ -738,7 +768,26 @@ export class UserService {
     // 2. Profile count'ları günceller
     // 3. Backfill job'ı kuyruğa ekler
     await this.trustRelationRepo.create(userId, targetUserId);
-    
+
+    // Gamification: TRUST tracking (fire-and-forget)
+    this.actionLogService
+      .logAction({
+        userId,
+        mainAction: MainAction.SYSTEM,
+        actionTypeCode: 'TRUST',
+        entityType: 'user',
+        entityId: targetUserId,
+      })
+      .catch((err) => {
+        logger.warn('Failed to log TRUST action', { userId, targetUserId, error: getErrorMessage(err) });
+      });
+
+    this.achievementProgressService
+      .incrementProgressByCode(userId, MainAction.SYSTEM, 'TRUST', 1)
+      .catch((err) => {
+        logger.warn('Failed to increment TRUST progress', { userId, targetUserId, error: getErrorMessage(err) });
+      });
+
     // Send notification to the trusted user (targetUserId)
     try {
       const { NotificationService } = await import('../notification/notification.service');
@@ -3865,6 +3914,26 @@ export class UserService {
         userId,
         userName: data.userName,
       });
+
+      // Gamification: PROFILE_COMPLETE tracking (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.SYSTEM,
+          actionTypeCode: 'PROFILE_COMPLETE',
+          entityType: 'profile',
+          entityId: userId,
+          metadata: { userName: data.userName, categoriesSelected: data.selectedCategories?.length ?? 0 },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log PROFILE_COMPLETE action', { userId, error: getErrorMessage(err) });
+        });
+
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'PROFILE_COMPLETE', 1)
+        .catch((err) => {
+          logger.warn('Failed to increment PROFILE_COMPLETE progress', { userId, error: getErrorMessage(err) });
+        });
 
       return updatedUser;
     });

@@ -109,7 +109,12 @@ export async function invalidateWalletCache(userId: string): Promise<void> {
  */
 export async function invalidateBadgeCache(userId: string): Promise<void> {
   try {
-    await cacheService.del(CACHE_KEYS.USER_PROFILE(userId));
+    await Promise.all([
+      cacheService.del(CACHE_KEYS.USER_PROFILE(userId)),
+      cacheService.del(CACHE_KEYS.USER_BADGES(userId)),
+      cacheService.del(CACHE_KEYS.USER_ACHIEVEMENTS(userId)),
+      cacheService.del(CACHE_KEYS.USER_GAMIFICATION_STATS(userId)),
+    ]);
 
     logger.info({
       message: 'Badge cache invalidated',

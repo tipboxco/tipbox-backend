@@ -3,4 +3,5 @@ export interface EventMetrics {
   eventId: string;
   postsCount: number;
   likesReceivedCount: number;
+  helpfulVotesReceivedCount?: number;
 }

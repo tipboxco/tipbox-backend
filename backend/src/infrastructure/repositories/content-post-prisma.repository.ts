@@ -185,6 +185,24 @@ export class ContentPostPrismaRepository {
     });
   }
 
+  async incrementUpvoteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        upvotesCount: { increment: 1 },
+      },
+    });
+  }
+
+  async decrementUpvoteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        upvotesCount: { increment: -1 },
+      },
+    });
+  }
+
   async incrementViewCount(postId: string): Promise<void> {
     await this.prisma.contentPost.update({
       where: { id: postId },
