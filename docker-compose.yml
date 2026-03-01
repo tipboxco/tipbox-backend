@@ -187,7 +187,7 @@ services:
       context: ./catalog-service
       dockerfile: Dockerfile
     container_name: tipbox_catalog_service
-    restart: always
+    restart: on-failure:3
     env_file:
       - .env
     depends_on:
@@ -202,7 +202,7 @@ services:
     environment:
       - PORT=5175
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=3072
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
@@ -220,14 +220,14 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
     volumes:
       - ./catalog-service:/server
-      - catalog_service_node_modules:/server/node_modules
+      - /server/node_modules
     working_dir: /server
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
         reservations:
-          memory: 512M
+          memory: 1G
     networks:
       - tipbox_network
     healthcheck:

@@ -4,17 +4,14 @@ FROM node:20-alpine
 # Install dos2unix, postgresql-client and unzip
 RUN apk add --no-cache dos2unix postgresql-client unzip
 
-# pnpm (start.sh pnpm run dev kullanıyor)
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
-
 # Set working directory
 WORKDIR /server
 
-# Copy package files and lockfile
-COPY package.json pnpm-lock.yaml* .npmrc ./
+# Copy package files and npm config
+COPY package.json  ./
 
-# Install all dependencies
-RUN pnpm install --no-frozen-lockfile
+# Install all dependencies using npm
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -23,7 +20,7 @@ COPY . .
 RUN dos2unix start.sh && chmod +x start.sh
 
 # Expose the port Medusa runs on
-EXPOSE 5175
+EXPOSE 9000
 
 # Start with migrations and then the development server
 # Using sh -c to handle potential CRLF issues from volume mount

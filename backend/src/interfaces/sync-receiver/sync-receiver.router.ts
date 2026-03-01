@@ -206,8 +206,8 @@ router.post(
 
       // Secret token doğrulama
       if (process.env.X_SYNC_SECRET) {
-        if (headers.syncSecret == process.env.X_SYNC_SECRET) {
-          return res.status(401).json({ message: "Invalıd Secret Key" });
+        if (headers.syncSecret !== process.env.X_SYNC_SECRET) {
+          return res.status(401).json({ message: 'Invalid Secret Key' });
         }
       }
 
