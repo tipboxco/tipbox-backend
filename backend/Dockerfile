@@ -8,8 +8,8 @@ RUN apk add --no-cache python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/pyth
 # pnpm kullan (monorepo ile uyumlu)
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Package files ve Prisma schema'yı kopyala (backend tek başına build edilir; lockfile kökte)
-COPY package.json ./
+# Package files, pnpm config ve Prisma schema'yı kopyala
+COPY package.json .npmrc ./
 COPY prisma ./prisma
 
 # Dependencies'leri yükle

@@ -96,7 +96,7 @@ services:
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tipbox_dev}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:9002,https://api-test.tipbox.co}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5175,https://api-test.tipbox.co}
       - CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH
       - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
@@ -206,9 +206,9 @@ services:
       minio:
         condition: service_started
     ports:
-      - "9002:9000"  # Medusa backend API (host:container - minio ile çakışmaması için 9002)
-      - "5173:5173"  # Medusa admin dashboard
+      - "5175:5175"  # Medusa server (API + admin dashboard)
     environment:
+      - PORT=5175
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
@@ -216,8 +216,8 @@ services:
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
       - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
       - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000}
-      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5173,http://localhost:9002}
-      - AUTH_CORS=${AUTH_CORS:-http://localhost:5173,http://localhost:9002,http://localhost:8000}
+      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5175}
+      - AUTH_CORS=${AUTH_CORS:-http://localhost:5175,http://localhost:8000}
       - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - S3_ENDPOINT_EXTERNAL=http://localhost:9000
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}

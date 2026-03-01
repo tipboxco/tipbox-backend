@@ -23,7 +23,7 @@ COPY . .
 RUN dos2unix start.sh && chmod +x start.sh
 
 # Expose the port Medusa runs on
-EXPOSE 9000
+EXPOSE 5175
 
 # Start with migrations and then the development server
 # Using sh -c to handle potential CRLF issues from volume mount

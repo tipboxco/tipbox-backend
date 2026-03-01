@@ -23,9 +23,6 @@ export const authRateLimiter = rateLimit({
     });
     res.status(options.statusCode).json(options.message);
   },
-  keyGenerator: (req) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
 });
 
 /**
@@ -50,9 +47,6 @@ export const loginRateLimiter = rateLimit({
     });
     res.status(options.statusCode).json(options.message);
   },
-  keyGenerator: (req) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
 });
 
 /**
@@ -76,9 +70,6 @@ export const verificationRateLimiter = rateLimit({
     });
     res.status(options.statusCode).json(options.message);
   },
-  keyGenerator: (req) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
 });
 
 /**
@@ -101,8 +92,5 @@ export const globalRateLimiter = rateLimit({
       path: req.path,
     });
     res.status(options.statusCode).json(options.message);
-  },
-  keyGenerator: (req) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
   },
 });

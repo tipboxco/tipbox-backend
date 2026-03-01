@@ -52,7 +52,8 @@
       "Bash(git add backend/src/infrastructure/middleware/seed-token.middleware.ts backend/src/infrastructure/middleware/rbac.middleware.ts backend/src/infrastructure/logger/error-handler.middleware.ts)",
       "Bash(git add backend/src/interfaces/auth/auth.router.ts backend/src/interfaces/auth/auth.schemas.ts backend/src/interfaces/auth/auth.middleware.ts backend/src/interfaces/app.ts)",
       "Bash(git add backend/src/application/brand/brand.service.ts backend/prisma/seed.ts backend/scripts/update-brand-logos.ts catalog-service/src/api/admin/seed/brands/route.ts)",
-      "Bash(git add backend/src/application/post/post.service.ts)"
+      "Bash(git add backend/src/application/post/post.service.ts)",
+      "Bash(ls -d d:/tipbox-app/tipbox-backend/*/)"
     ],
     "defaultMode": "bypassPermissions"
   }

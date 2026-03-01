@@ -5,6 +5,8 @@ node_modules/
 package-lock.json
 yarn.lock
 
+.pnpm-store/
+**/.pnpm-store/
 # Build / cache
 dist/
 dist-ssr/

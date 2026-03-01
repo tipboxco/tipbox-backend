@@ -57,6 +57,18 @@ else
   echo "✅ Migration işlemi tamamlandı!"
 fi
 
+# Bağımlılıkları yükle (named volume'daki node_modules güncel olmayabilir)
+# CI=true: interaktif prompt'ları devre dışı bırakır
+# --force: mevcut node_modules ile uyumsuzluk varsa yeniden yükler
+echo "🔄 Bağımlılıklar yükleniyor..."
+CI=true pnpm install --force
+echo "✅ Bağımlılıklar yüklendi!"
+
+# Prisma Client'ı generate et (postinstall çalışmasa bile garanti olsun)
+echo "🔄 Prisma Client generate ediliyor..."
+pnpm exec prisma generate
+echo "✅ Prisma Client hazır!"
+
 # Gelen komutu çalıştır (pnpm run dev gibi)
 exec "$@"
 
