@@ -256,9 +256,14 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
       "X-Sync-Timestamp": payload.timestamp,
     }
 
-    if (secretToken) {
-      headers["X-Sync-Secret"] = secretToken
+    if (false&&secretToken) {
+      //headers["X-Sync-Secret"] = secretToken
     }
+    if(process.env.X_SYNC_SECRET)
+    {
+      headers["x-sync-secret"] = process.env.X_SYNC_SECRET;
+    }
+
 
     try {
       console.log(`[SyncManager] Sending batch ${payload.batch_number} to ${targetUrl}...`)

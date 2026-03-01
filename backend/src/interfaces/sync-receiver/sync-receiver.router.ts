@@ -205,6 +205,12 @@ router.post(
       };
 
       // Secret token doğrulama
+      if (process.env.X_SYNC_SECRET) {
+        if (headers.syncSecret == process.env.X_SYNC_SECRET) {
+          return res.status(401).json({ message: "Invalıd Secret Key" });
+        }
+      }
+
 
       // Payload validasyonu
       const validation = syncReceiverService.validatePayload(req.body);
@@ -260,7 +266,7 @@ router.post(
         },
         processed_records: result.records,
       };
-    
+
       return res.status(200).json(response);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
