@@ -1,7 +1,8 @@
 # Dependencies (tüm workspace'ler)
 node_modules/
 
-# Eski paket yöneticisi artıkları (sadece pnpm-lock.yaml kullanılır)
+# Lock dosyaları
+pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
@@ -52,6 +53,7 @@ backend/.prisma/
 backend/src/generated/prisma
 *service-account*.json
 *gserviceaccount*.json
+tipboxbackend-*.json
 backend/tipboxbackend-*.json
 !backend/tipboxbackend-*.json.example
 backend/prisma/seed/seed-metadata.json
