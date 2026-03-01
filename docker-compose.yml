@@ -187,7 +187,7 @@ services:
       context: ./catalog-service
       dockerfile: Dockerfile
     container_name: tipbox_catalog_service
-    restart: on-failure:3
+    restart: always
     env_file:
       - .env
     depends_on:
