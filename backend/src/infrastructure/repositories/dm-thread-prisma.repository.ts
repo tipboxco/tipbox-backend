@@ -63,7 +63,6 @@ export class DMThreadPrismaRepository {
   async findById(id: string): Promise<DMThread | null> {
     const thread = await this.prisma.dMThread.findUnique({
       where: { id },
-      include: THREAD_INCLUDE,
     });
     return thread ? this.toDomain(thread) : null;
   }
@@ -77,7 +76,6 @@ export class DMThreadPrismaRepository {
         ],
         isSupportThread: false,
       },
-      include: THREAD_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
     return threads.map((thread) => this.toDomain(thread));
@@ -192,7 +190,6 @@ export class DMThreadPrismaRepository {
           },
         ],
       },
-      include: THREAD_INCLUDE,
     });
     return thread ? this.toDomain(thread) : null;
   }
@@ -208,7 +205,6 @@ export class DMThreadPrismaRepository {
         createdAt: data.createdAt ?? new Date(),
         updatedAt: data.updatedAt ?? new Date(),
       },
-      include: THREAD_INCLUDE,
     });
     return this.toDomain(thread);
   }
@@ -226,7 +222,6 @@ export class DMThreadPrismaRepository {
       const thread = await this.prisma.dMThread.update({
         where: { id: String(id) },
         data: updateData,
-        include: THREAD_INCLUDE,
       });
       return this.toDomain(thread);
     } catch {

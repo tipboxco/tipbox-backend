@@ -5,7 +5,8 @@ import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, BadRequestError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
 import { z } from 'zod';
-import multer from 'multer';
+import { createUpload } from '../../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
 import { S3Service } from '../../../infrastructure/s3/s3.service';
 
 const router = Router();
@@ -53,18 +54,7 @@ const AdminUpdateMarketplaceBannerSchema = z.object({
 
 // ==================== Image Upload ====================
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (_req, file, cb) => {
-    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, WEBP, and GIF allowed.'));
-    }
-  },
-});
+const upload = createUpload('ADMIN_IMAGES', 'MEDIUM');
 
 /**
  * POST /admin/marketplace-banners/upload-image
@@ -73,6 +63,7 @@ const upload = multer({
 router.post(
   '/upload-image',
   upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       throw new BadRequestError('No file uploaded');

@@ -48,6 +48,7 @@ import { requestContextMiddleware } from '../infrastructure/middleware/request-c
 import { bigIntSerializerMiddleware } from '../infrastructure/middleware/bigint-serializer.middleware';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import { globalRateLimiter } from '../infrastructure/middleware/rate-limit.middleware';
+import { csrfProtection } from '../infrastructure/middleware/csrf.middleware';
 import { asyncHandler } from '../infrastructure/errors/async-handler';
 
 // Services & Config
@@ -430,7 +431,7 @@ app.get('/metrics', async (req, res) => {
 
 // API Routes
 app.use('/auth', authRouter);
-app.use('/auth0', auth0Router);
+app.use('/auth0', csrfProtection(), auth0Router);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
 app.use('/transactions', authMiddleware, transactionRouter);

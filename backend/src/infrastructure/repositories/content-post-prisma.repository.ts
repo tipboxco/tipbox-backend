@@ -8,20 +8,8 @@ export class ContentPostPrismaRepository {
   private prisma = getPrisma();
 
   async findById(id: string): Promise<ContentPost | null> {
-    const post = await this.prisma.contentPost.findUnique({ 
+    const post = await this.prisma.contentPost.findUnique({
       where: { id },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      }
     });
     return post ? this.toDomain(post) : null;
   }
@@ -29,19 +17,7 @@ export class ContentPostPrismaRepository {
   async findByUserId(userId: string): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return posts.map(post => this.toDomain(post));
   }
@@ -49,19 +25,7 @@ export class ContentPostPrismaRepository {
   async findBySubCategoryId(subCategoryId: string): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { subCategoryId },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return posts.map(post => this.toDomain(post));
   }
@@ -69,19 +33,7 @@ export class ContentPostPrismaRepository {
   async findByType(type: ContentPostType): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { type },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return posts.map(post => this.toDomain(post));
   }
@@ -94,19 +46,7 @@ export class ContentPostPrismaRepository {
           { body: { contains: query, mode: 'insensitive' } }
         ]
       },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return posts.map(post => this.toDomain(post));
   }
@@ -145,18 +85,6 @@ export class ContentPostPrismaRepository {
         eventId: eventId || null,
         boostPrice: boostPrice ?? null
       },
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      }
     });
 
     // Increment user's postsCount
@@ -182,18 +110,6 @@ export class ContentPostPrismaRepository {
     const post = await this.prisma.contentPost.update({
       where: { id },
       data,
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      }
     });
     return post ? this.toDomain(post) : null;
   }
@@ -228,51 +144,25 @@ export class ContentPostPrismaRepository {
 
   async list(): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true,
-        comments: true,
-        likes: true,
-        favorites: true,
-        views: true,
-        contentPostTags: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return posts.map(post => this.toDomain(post));
   }
 
   async listRecent(limit: number = 10): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true
-      },
       orderBy: { createdAt: 'desc' },
-      take: limit
+      take: limit,
     });
     return posts.map(post => this.toDomain(post));
   }
 
   async listPopular(limit: number = 10): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
-      include: {
-        user: true,
-        subCategory: true,
-        question: true,
-        tip: true,
-        tags: true
-      },
       orderBy: {
-        likesCount: 'desc'
+        likesCount: 'desc',
       },
-      take: limit
+      take: limit,
     });
     return posts.map(post => this.toDomain(post));
   }

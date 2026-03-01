@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import RedisConfigManager from '../config/redis.config';
-import { NotificationJobData } from '../queue/queue.provider';
+import QueueProvider, { NotificationJobData } from '../queue/queue.provider';
 import { NotificationPrismaRepository } from '../repositories/notification-prisma.repository';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../logger/logger';
@@ -53,6 +53,11 @@ export class NotificationWorker {
 
       this.worker.on('failed', (job, err) => {
         logger.error(`Notification job ${job?.id} failed:`, err);
+        if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+          QueueProvider.getInstance()
+            .addToDLQ('notifications', job.data, err.message, job.id)
+            .catch(() => {});
+        }
       });
 
       this.worker.on('error', (err) => {

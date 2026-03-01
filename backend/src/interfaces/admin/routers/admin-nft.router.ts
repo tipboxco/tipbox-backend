@@ -4,8 +4,9 @@ import { validateBody, validateQuery } from '../../../infrastructure/middleware/
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, ValidationError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
-import multer, { FileFilterCallback } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
+import { createUpload } from '../../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
 import { S3Service } from '../../../infrastructure/s3/s3.service';
 import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 
@@ -44,18 +45,7 @@ const router = Router();
 const prisma = getPrisma();
 const s3Service = new S3Service();
 
-const nftUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB for NFT images
-  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (file.mimetype && allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only JPG, PNG, GIF and WebP supported'));
-    }
-  },
-});
+const nftUpload = createUpload('ADMIN_IMAGES', 'MEDIUM');
 
 /**
  * NFT & Marketplace Management Router
@@ -99,6 +89,7 @@ const nftUpload = multer({
 router.post(
   '/upload-image',
   nftUpload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'File required (field: file)' });

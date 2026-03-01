@@ -6,13 +6,8 @@ export class InventoryPrismaRepository {
   private prisma = getPrisma();
 
   async findById(id: string): Promise<Inventory | null> {
-    const inventory = await this.prisma.inventory.findUnique({ 
+    const inventory = await this.prisma.inventory.findUnique({
       where: { id },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      }
     });
     return inventory ? this.toDomain(inventory) : null;
   }
@@ -20,12 +15,7 @@ export class InventoryPrismaRepository {
   async findByUserId(userId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }
@@ -33,28 +23,18 @@ export class InventoryPrismaRepository {
   async findByProductId(productId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { productId },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
   async findByUserAndProduct(userId: string, productId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
-      where: { 
+      where: {
         userId,
-        productId 
+        productId
       },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }
@@ -70,13 +50,8 @@ export class InventoryPrismaRepository {
         userId,
         productId,
         hasOwned,
-        experienceSummary
+        experienceSummary,
       },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      }
     });
     return this.toDomain(inventory);
   }
@@ -88,11 +63,6 @@ export class InventoryPrismaRepository {
     const inventory = await this.prisma.inventory.update({
       where: { id },
       data,
-      include: {
-        user: true,
-        product: true,
-        media: true
-      }
     });
     return inventory ? this.toDomain(inventory) : null;
   }
@@ -101,11 +71,6 @@ export class InventoryPrismaRepository {
     const inventory = await this.prisma.inventory.update({
       where: { id },
       data: { hasOwned },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      }
     });
     return inventory ? this.toDomain(inventory) : null;
   }
@@ -121,16 +86,11 @@ export class InventoryPrismaRepository {
 
   async findCurrentlyOwned(userId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
-      where: { 
+      where: {
         userId,
-        hasOwned: true 
+        hasOwned: true,
       },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }
@@ -138,30 +98,20 @@ export class InventoryPrismaRepository {
   async findRecentPurchases(userId: string, days: number = 30): Promise<Inventory[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const inventories = await this.prisma.inventory.findMany({
-      where: { 
+      where: {
         userId,
         createdAt: {
-          gte: since
-        }
+          gte: since,
+        },
       },
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
   async list(): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
-      include: {
-        user: true,
-        product: true,
-        media: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return inventories.map(inventory => this.toDomain(inventory));
   }

@@ -95,6 +95,10 @@ export class CacheService {
     this.circuitBreakerOpenUntil = null;
     this.errorCount = 0;
     logger.info('Circuit breaker reset, attempting to reconnect cache');
+    try {
+      const { getMetricsService } = require('../metrics/metrics.service');
+      getMetricsService().recordCircuitBreakerReset();
+    } catch { /* metrics opsiyonel */ }
     return false;
   }
 
@@ -106,6 +110,10 @@ export class CacheService {
     if (this.errorCount >= CIRCUIT_BREAKER_THRESHOLD) {
       this.circuitBreakerOpenUntil = Date.now() + CIRCUIT_BREAKER_TIMEOUT;
       logger.warn(`Circuit breaker activated for ${CIRCUIT_BREAKER_TIMEOUT}ms due to ${this.errorCount} consecutive errors`);
+      try {
+        const { getMetricsService } = require('../metrics/metrics.service');
+        getMetricsService().recordCircuitBreakerTrip();
+      } catch { /* metrics opsiyonel */ }
     }
   }
 

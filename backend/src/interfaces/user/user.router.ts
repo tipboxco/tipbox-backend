@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
+import { createUpload } from '../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../infrastructure/middleware/file-type-validation.middleware';
 import {
   PROFILE_FEED_CARD_TYPES,
   ProfileFeedCardType,
@@ -73,41 +74,7 @@ function toInvoiceResponse(inv: { id: string; amount: number; currency: string; 
   };
 }
 
-// Multer configuration - memory storage (dosya buffer'da tutulacak)
-// Bu tanım endpoint'lerden ÖNCE olmalı (hoisting sorunu için)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Sadece resim dosyalarına izin ver (HEIC/HEIF iOS desteği ile)
-    const allowedMimeTypes = [
-      'image/jpeg', 
-      'image/jpg', 
-      'image/png', 
-      'image/gif', 
-      'image/webp',
-      'image/heic',
-      'image/heif'
-    ];
-    
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else if (file.originalname) {
-      // Fallback: Dosya uzantısına göre kontrol
-      const ext = file.originalname.split('.').pop()?.toLowerCase();
-      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
-      if (ext && allowedExtensions.includes(ext)) {
-        cb(null, true);
-      } else {
-        cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
-      }
-    } else {
-      cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
-    }
-  },
-});
+const upload = createUpload('IMAGES', 'SMALL');
 
 const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefined => {
   if (!value) {
@@ -267,6 +234,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
 router.post(
   '/me/avatar',
   upload.single('avatar'),
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -460,6 +428,7 @@ router.post(
 router.post(
   '/me/banner',
   upload.single('banner'),
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1807,7 +1776,7 @@ router.get('/avatars', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Profil tamamlanırken bir hata oluştu
  */
-router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request, res: Response) => {
+router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), validateFileType('IMAGES'), asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   

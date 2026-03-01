@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import logger from '../logger/logger';
 import RedisConfigManager from '../config/redis.config';
+import QueueProvider, { JobData } from '../queue/queue.provider';
 import { SupportRequestAutoCompleteJobData } from '../scheduler/support-request-auto-complete.scheduler';
 import { SupportRequestService } from '../../application/messaging/support-request.service';
 
@@ -69,6 +70,11 @@ export class SupportRequestAutoCompleteWorker {
         error: err.message,
         stack: err.stack,
       });
+      if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+        QueueProvider.getInstance()
+          .addToDLQ('support-request-auto-complete', job.data as unknown as JobData, err.message, job.id)
+          .catch(() => {});
+      }
     });
 
     this.worker.on('error', (err) => {

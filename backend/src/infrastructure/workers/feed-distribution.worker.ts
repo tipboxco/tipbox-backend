@@ -5,6 +5,7 @@ import { FeedSource } from '../../domain/admin/feed-source.enum';
 import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 import logger from '../logger/logger';
 import RedisConfigManager from '../config/redis.config';
+import QueueProvider from '../queue/queue.provider';
 
 export interface FeedDistributionJobData {
   postId: string;
@@ -89,6 +90,11 @@ export class FeedDistributionWorker {
         error: err.message,
         stack: err.stack,
       });
+      if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+        QueueProvider.getInstance()
+          .addToDLQ('feed-distribution', job.data, err.message, job.id)
+          .catch(() => {});
+      }
     });
 
     this.worker.on('error', (err) => {

@@ -194,6 +194,30 @@ class QueueProvider {
   }
 
   /**
+   * Permanently failed job'u Dead Letter Queue'ya taşır
+   */
+  public async addToDLQ(
+    originalQueue: string,
+    jobData: JobData,
+    error: string,
+    jobId?: string
+  ): Promise<void> {
+    try {
+      const dlqQueue = this.getQueue('dead-letter-queue');
+      await dlqQueue.add('dlq-job', {
+        originalQueue,
+        originalJobId: jobId,
+        data: jobData,
+        error,
+        failedAt: new Date().toISOString(),
+      });
+      logger.warn(`Job moved to DLQ from ${originalQueue}`, { jobId, error });
+    } catch (dlqError) {
+      logger.error('Failed to add job to DLQ:', dlqError);
+    }
+  }
+
+  /**
    * Belirtilen kuyruğun durumunu getirir
    * @param queueName - Kuyruk adı
    * @returns Kuyruk durumu

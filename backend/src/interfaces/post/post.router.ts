@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
+import { createUpload } from '../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../infrastructure/middleware/file-type-validation.middleware';
 import { PostService } from '../../application/post/post.service';
 import {
   CreatePostRequest,
@@ -25,36 +26,7 @@ const router = Router();
 const postService = new PostService();
 const s3Service = new S3Service();
 
-// Multer configuration for post image uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit per file
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Only image files allowed (including HEIC for iOS devices)
-    const allowedMimeTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'image/heic', 'image/heif' // HEIC/HEIF support for iOS
-    ];
-    
-    // Check MIME type
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else if (file.originalname) {
-      // Fallback: Check file extension if MIME type is not available
-      const ext = file.originalname.split('.').pop()?.toLowerCase();
-      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
-      if (ext && allowedExtensions.includes(ext)) {
-        cb(null, true);
-      } else {
-        cb(new Error(`Desteklenmeyen dosya formatı: ${file.mimetype || ext || 'bilinmeyen'}. Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)`));
-      }
-    } else {
-      cb(new Error('Dosya formatı algılanamadı. Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
-    }
-  },
-});
+const upload = createUpload('IMAGES', 'MEDIUM');
 
 router.use(authMiddleware);
 
@@ -223,6 +195,7 @@ async function processPostImages(
 router.post(
   '/free',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -286,6 +259,7 @@ router.post(
 router.post(
   '/tips-and-tricks',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -359,6 +333,7 @@ router.post(
 router.post(
   '/question',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -508,6 +483,7 @@ router.get(
 router.post(
   '/benchmark',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -785,6 +761,7 @@ router.post(
 router.post(
   '/experience',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1559,6 +1536,7 @@ router.delete(
 router.post(
   '/update',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1937,6 +1915,7 @@ router.get(
 router.post(
   '/:eventId/post',
   upload.array('images', 10), // Max 10 images per spec
+  validateFileType('IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;

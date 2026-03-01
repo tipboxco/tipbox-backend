@@ -7,6 +7,7 @@ import { generateIdForModel } from '../ids/id.strategy';
 import logger from '../logger/logger';
 import { TrustBackfillJobData } from '../scheduler/trust-backfill.scheduler';
 import RedisConfigManager from '../config/redis.config';
+import QueueProvider from '../queue/queue.provider';
 
 export class TrustBackfillWorker {
   private worker: Worker;
@@ -49,11 +50,16 @@ export class TrustBackfillWorker {
     });
 
     this.worker.on('failed', (job, err) => {
-      logger.error({ 
-        message: `Trust backfill job ${job?.id} failed`, 
-        error: err.message, 
-        stack: err.stack 
+      logger.error({
+        message: `Trust backfill job ${job?.id} failed`,
+        error: err.message,
+        stack: err.stack
       });
+      if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+        QueueProvider.getInstance()
+          .addToDLQ('trust-backfill', job.data, err.message, job.id)
+          .catch(() => {});
+      }
     });
 
     this.worker.on('error', (err) => {

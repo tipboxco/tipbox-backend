@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
+import { createUpload } from '../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../infrastructure/middleware/file-type-validation.middleware';
 import { ExpertService } from '../../application/expert/expert.service';
 import { TipsBalanceService } from '../../application/wallet/tips-balance.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
@@ -14,26 +15,7 @@ const expertService = new ExpertService();
 const tipsBalanceService = new TipsBalanceService();
 const s3Service = new S3Service();
 
-// Multer configuration for Expert Request media uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit per file
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Image and video files allowed
-    const allowedMimeTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'
-    ];
-    
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Sadece resim (JPG, PNG, GIF, WebP) ve video (MP4, WebM, MOV, AVI) dosyaları yüklenebilir'));
-    }
-  },
-});
+const upload = createUpload('IMAGES_VIDEO', 'MEDIUM');
 
 /**
  * @openapi
@@ -167,6 +149,7 @@ router.post(
   '/request',
   authMiddleware,
   upload.array('media', 10), // Maximum 10 media files
+  validateFileType('IMAGES_VIDEO'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;

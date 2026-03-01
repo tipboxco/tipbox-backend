@@ -27,31 +27,6 @@ export class FeedPrismaRepository {
 
     const feeds = await this.prisma.feed.findMany({
       where,
-      include: {
-        post: {
-          include: {
-            user: {
-              include: {
-                profile: true,
-              },
-            },
-            product: true,
-            comparison: {
-              include: {
-                product1: true,
-                product2: true,
-              },
-            },
-            question: true,
-            tip: true,
-            tags: true,
-            likes: true,
-            comments: true,
-            favorites: true,
-          },
-        },
-      },
-      // YENİ SIRALAMA: relevance_score önce (seen penalty ile düşenler aşağıda)
       orderBy: [
         { relevanceScore: 'desc' },
         { post: { isBoosted: 'desc' } },

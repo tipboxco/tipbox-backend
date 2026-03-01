@@ -1,7 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../../application/auth/auth.service';
 import logger from '../logger/logger';
-import { InboxSocketService } from './services/inbox-socket.service';
 import { ChatSocketService } from './services/chat-socket.service';
 import { RequestSocketService } from './services/request-socket.service';
 
@@ -15,7 +14,6 @@ export interface AuthenticatedSocket extends Socket {
 export class SocketHandler {
   private io: Server;
   private authService: AuthService;
-  private inboxService: InboxSocketService;
   private chatService: ChatSocketService;
   private requestService: RequestSocketService;
 
@@ -23,7 +21,6 @@ export class SocketHandler {
     this.io = io;
     this.authService = new AuthService();
     // Modüler socket servislerini initialize et
-    this.inboxService = new InboxSocketService(this);
     this.chatService = new ChatSocketService(this);
     this.requestService = new RequestSocketService(this);
   }
@@ -117,10 +114,9 @@ export class SocketHandler {
       logger.info(`📤 'connected' event'i gönderildi`);
 
       // Modüler socket servislerini initialize et
-      this.inboxService.setupHandlers(socket);
       this.chatService.setupHandlers(socket);
       this.requestService.setupHandlers(socket);
-      logger.info(`📦 Socket servisleri initialize edildi (inbox, chat, request)`);
+      logger.info(`📦 Socket servisleri initialize edildi (chat, request)`);
       logger.info('═══════════════════════════════════════════════════════');
 
       // Disconnect event handler

@@ -7,6 +7,7 @@ import { UserDevicePrismaRepository } from '../../infrastructure/repositories/us
 import { EmailService } from '../../infrastructure/email/email.service';
 import { signJwt, verifyJwt } from '../../infrastructure/auth/jwt.helper';
 import { DeviceParser } from '../../infrastructure/utils/device-parser.util';
+import { randomInt } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
@@ -366,7 +367,7 @@ export class AuthService implements IAuthService {
    * 6 haneli doğrulama kodu oluştur
    */
   private generateVerificationCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 1000000).toString();
   }
 
   async validateToken(token: string): Promise<User | null> {

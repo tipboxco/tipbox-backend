@@ -25,6 +25,8 @@ export class MetricsService {
   private redisOperationDuration: Histogram;
   private errorCounter: Counter;
   private activeUsers: Gauge;
+  private cacheCircuitBreakerState: Gauge;
+  private cacheCircuitBreakerTrips: Counter;
 
   constructor() {
     // Yeni bir registry oluştur
@@ -96,6 +98,20 @@ export class MetricsService {
     this.activeUsers = new Gauge({
       name: 'active_users_total',
       help: 'Number of active users',
+      registers: [this.register],
+    });
+
+    // Cache Circuit Breaker State - 0=closed, 1=open
+    this.cacheCircuitBreakerState = new Gauge({
+      name: 'cache_circuit_breaker_state',
+      help: 'Cache circuit breaker state (0=closed, 1=open)',
+      registers: [this.register],
+    });
+
+    // Cache Circuit Breaker Trips - Toplam trip sayısı
+    this.cacheCircuitBreakerTrips = new Counter({
+      name: 'cache_circuit_breaker_trips_total',
+      help: 'Total number of cache circuit breaker trips',
       registers: [this.register],
     });
   }
@@ -179,6 +195,21 @@ export class MetricsService {
    */
   setActiveUsers(count: number): void {
     this.activeUsers.set(count);
+  }
+
+  /**
+   * Cache circuit breaker trip (açılma) kaydı
+   */
+  recordCircuitBreakerTrip(): void {
+    this.cacheCircuitBreakerTrips.inc();
+    this.cacheCircuitBreakerState.set(1);
+  }
+
+  /**
+   * Cache circuit breaker reset (kapanma) kaydı
+   */
+  recordCircuitBreakerReset(): void {
+    this.cacheCircuitBreakerState.set(0);
   }
 
   /**

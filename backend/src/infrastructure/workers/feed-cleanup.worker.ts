@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { FeedCleanupService } from '../../application/feed/feed-cleanup.service';
 import logger from '../logger/logger';
 import RedisConfigManager from '../config/redis.config';
+import QueueProvider from '../queue/queue.provider';
 
 export interface FeedCleanupJobData {
   type: 'low-score-cleanup' | 'user-optimization';
@@ -53,6 +54,11 @@ export class FeedCleanupWorker {
         jobType: job?.data.type,
         error: err.message,
       });
+      if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+        QueueProvider.getInstance()
+          .addToDLQ('feed-cleanup', job.data, err.message, job.id)
+          .catch(() => {});
+      }
     });
 
     logger.info({ 

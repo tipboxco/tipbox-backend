@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
@@ -11,6 +10,8 @@ import { SendTipsCreate, SupportRequestCreate, SupportType } from './inbox.dto';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 import { S3Service } from '../../infrastructure/s3/s3.service';
+import { createUpload } from '../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../infrastructure/middleware/file-type-validation.middleware';
 import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
@@ -19,28 +20,7 @@ const supportRequestService = new SupportRequestService();
 const userRepo = new UserPrismaRepository();
 const s3Service = new S3Service();
 
-// Multer configuration for media uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit per file
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Allow images, videos, audio, and files
-    const allowedMimeTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
-      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
-      'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Unsupported file type: ${file.mimetype}`));
-    }
-  },
-});
+const upload = createUpload('ALL_MEDIA', 'LARGE');
 
 router.use(authMiddleware);
 
@@ -361,6 +341,7 @@ router.get(
 router.post(
   '/',
   upload.single('media'),
+  validateFileType('ALL_MEDIA'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -2928,6 +2909,7 @@ router.get(
 router.post(
   '/threads/:threadId/media',
   upload.single('media'),
+  validateFileType('ALL_MEDIA'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;

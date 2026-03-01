@@ -7,7 +7,7 @@
 
 import { Worker, Job } from 'bullmq';
 import RedisConfigManager from '../config/redis.config';
-import { TipSendJobData } from '../queue/queue.provider';
+import QueueProvider, { TipSendJobData } from '../queue/queue.provider';
 import { TransactionPrismaRepository } from '../repositories/transaction-prisma.repository';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
 import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
@@ -54,9 +54,14 @@ export class TipSendWorker {
       this.worker.on('completed', (job) =>
         logger.info('Tip-send job completed', { jobId: job.id })
       );
-      this.worker.on('failed', (job, err) =>
-        logger.error('Tip-send job failed', { jobId: job?.id, error: err?.message })
-      );
+      this.worker.on('failed', (job, err) => {
+        logger.error('Tip-send job failed', { jobId: job?.id, error: err?.message });
+        if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+          QueueProvider.getInstance()
+            .addToDLQ('tip-send', job.data, err.message, job.id)
+            .catch(() => {});
+        }
+      });
       this.worker.on('error', (err) => logger.error('TipSend worker error', err));
 
       logger.info('TipSend worker started', { redisHost, redisPort });

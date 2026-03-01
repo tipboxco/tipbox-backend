@@ -4,10 +4,11 @@ import { validateBody, validateQuery } from '../../../infrastructure/middleware/
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, ValidationError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
-import multer, { FileFilterCallback } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { S3Service } from '../../../infrastructure/s3/s3.service';
 import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
+import { createUpload } from '../../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
 
 // Import schemas
 import {
@@ -64,18 +65,7 @@ const router = Router();
 const prisma = getPrisma();
 const s3Service = new S3Service();
 
-const productUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (file.mimetype && allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only JPG, PNG, GIF and WebP supported'));
-    }
-  },
-});
+const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 /**
  * Products & Catalog Router
@@ -118,7 +108,8 @@ const productUpload = multer({
  */
 router.post(
   '/upload-image',
-  productUpload.single('file'),
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'File required (field: file)' });

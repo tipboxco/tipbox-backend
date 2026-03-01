@@ -24,18 +24,6 @@ export class NFTMarketListingPrismaRepository {
   async findById(id: string): Promise<NFTMarketListing | null> {
     const listing = await this.prisma.nFTMarketListing.findUnique({
       where: { id },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
     });
     return listing ? this.toDomain(listing) : null;
   }
@@ -45,18 +33,6 @@ export class NFTMarketListingPrismaRepository {
       where: {
         nftId,
         status: NFTMarketListingStatus.ACTIVE,
-      },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
       },
     });
     return listing ? this.toDomain(listing) : null;
@@ -140,18 +116,6 @@ export class NFTMarketListingPrismaRepository {
 
     const listings = await this.prisma.nFTMarketListing.findMany({
       where,
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
       orderBy,
       take: (filter.limit || 100) + 1,
     });
@@ -168,18 +132,6 @@ export class NFTMarketListingPrismaRepository {
 
     const listings = await this.prisma.nFTMarketListing.findMany({
       where,
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
       orderBy: { listedAt: 'desc' },
     });
 
@@ -198,18 +150,6 @@ export class NFTMarketListingPrismaRepository {
         price,
         status: NFTMarketListingStatus.ACTIVE,
       },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
     });
     return this.toDomain(listing);
   }
@@ -218,18 +158,6 @@ export class NFTMarketListingPrismaRepository {
     const listing = await this.prisma.nFTMarketListing.update({
       where: { id },
       data: { price },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
     });
     return this.toDomain(listing);
   }
@@ -238,18 +166,6 @@ export class NFTMarketListingPrismaRepository {
     const listing = await this.prisma.nFTMarketListing.update({
       where: { id },
       data: { status: NFTMarketListingStatus.CANCELLED },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
     });
     return this.toDomain(listing);
   }
@@ -258,18 +174,6 @@ export class NFTMarketListingPrismaRepository {
     const listing = await this.prisma.nFTMarketListing.update({
       where: { id },
       data: { status: NFTMarketListingStatus.SOLD },
-      include: {
-        nft: true,
-        listedByUser: {
-          include: {
-            profile: true,
-            avatars: {
-              where: { isActive: true },
-              take: 1,
-            },
-          },
-        },
-      },
     });
     return this.toDomain(listing);
   }

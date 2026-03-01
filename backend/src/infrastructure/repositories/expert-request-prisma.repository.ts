@@ -9,9 +9,6 @@ export class ExpertRequestPrismaRepository {
   async findById(id: string): Promise<ExpertRequest | null> {
     const request = await this.prisma.expertRequest.findUnique({
       where: { id },
-      include: {
-        answers: true,
-      },
     });
     return request ? this.toDomain(request) : null;
   }
@@ -19,23 +16,6 @@ export class ExpertRequestPrismaRepository {
   async findByUserId(userId: string): Promise<ExpertRequest[]> {
     const requests = await this.prisma.expertRequest.findMany({
       where: { userId },
-      include: {
-        answers: {
-          include: {
-            expertUser: {
-              include: {
-                profile: true,
-                titles: true,
-                avatars: {
-                  where: { isActive: true },
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-      },
       orderBy: { createdAt: 'desc' },
     });
     return requests.map((request) => this.toDomain(request));
@@ -78,9 +58,6 @@ export class ExpertRequestPrismaRepository {
         status: data.status,
         answeredAt: data.answeredAt,
       },
-      include: {
-        answers: true,
-      },
     });
     return request ? this.toDomain(request) : null;
   }
@@ -92,28 +69,6 @@ export class ExpertRequestPrismaRepository {
   async findAnsweredRequests(): Promise<ExpertRequest[]> {
     const requests = await this.prisma.expertRequest.findMany({
       where: { status: 'ANSWERED' },
-      include: {
-        answers: {
-          include: {
-            expertUser: {
-              include: {
-                profile: true,
-                titles: true,
-                avatars: {
-                  where: { isActive: true },
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-      },
       orderBy: { answeredAt: 'desc' },
     });
     return requests.map((request) => this.toDomain(request));

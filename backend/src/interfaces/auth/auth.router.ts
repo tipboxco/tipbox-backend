@@ -281,27 +281,6 @@ router.post('/login', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
 router.post('/register', authRateLimiter, validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
 
-  if (!email || !password || !name) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email, password and name fields are required',
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Password must be at least 6 characters long',
-    });
-  }
-
-  if (name.length < 2 || name.length > 50) {
-    return res.status(400).json({
-      success: false,
-      message: 'Name must be between 2 and 50 characters',
-    });
-  }
-
   try {
     const result = await authService.signup(email, password, name);
 

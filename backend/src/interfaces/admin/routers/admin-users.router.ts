@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
+import { createUpload } from '../../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
@@ -60,18 +61,7 @@ const router = Router();
 const prisma = getPrisma();
 const s3Service = new S3Service();
 
-const adminUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (file.mimetype && allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Sadece JPG, PNG, GIF ve WebP desteklenir'));
-    }
-  },
-});
+const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 const profileRepo = new ProfilePrismaRepository();
 const avatarRepo = new UserAvatarPrismaRepository();

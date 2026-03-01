@@ -6,14 +6,8 @@ export class PostComparisonPrismaRepository {
   private prisma = getPrisma();
 
   async findById(id: string): Promise<PostComparison | null> {
-    const comparison = await this.prisma.postComparison.findUnique({ 
+    const comparison = await this.prisma.postComparison.findUnique({
       where: { id },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      }
     });
     return comparison ? this.toDomain(comparison) : null;
   }
@@ -21,12 +15,6 @@ export class PostComparisonPrismaRepository {
   async findByPostId(postId: string): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
       where: { postId },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      },
       orderBy: { createdAt: 'desc' }
     });
     return comparisons.map(comparison => this.toDomain(comparison));
@@ -40,12 +28,6 @@ export class PostComparisonPrismaRepository {
           { product2Id: productId }
         ]
       },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      },
       orderBy: { createdAt: 'desc' }
     });
     return comparisons.map(comparison => this.toDomain(comparison));
@@ -58,12 +40,6 @@ export class PostComparisonPrismaRepository {
           { AND: [{ product1Id: productAId }, { product2Id: productBId }] },
           { AND: [{ product1Id: productBId }, { product2Id: productAId }] }
         ]
-      },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -83,12 +59,6 @@ export class PostComparisonPrismaRepository {
         product2Id: productBId,
 
       },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      }
     });
     return this.toDomain(comparison);
   }
@@ -99,12 +69,6 @@ export class PostComparisonPrismaRepository {
     const comparison = await this.prisma.postComparison.update({
       where: { id },
       data,
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      }
     });
     return comparison ? this.toDomain(comparison) : null;
   }
@@ -113,12 +77,6 @@ export class PostComparisonPrismaRepository {
     const comparison = await this.prisma.postComparison.update({
       where: { id },
       data: { comparisonSummary: "Updated" },
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      }
     });
     return comparison ? this.toDomain(comparison) : null;
   }
@@ -134,12 +92,6 @@ export class PostComparisonPrismaRepository {
 
   async list(): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      },
       orderBy: { createdAt: 'desc' }
     });
     return comparisons.map(comparison => this.toDomain(comparison));
@@ -147,12 +99,6 @@ export class PostComparisonPrismaRepository {
 
   async listRecent(limit: number = 10): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
-      include: {
-        post: true,
-        product1: true,
-        product2: true,
-        scores: true
-      },
       orderBy: { createdAt: 'desc' },
       take: limit
     });
