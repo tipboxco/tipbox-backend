@@ -51,6 +51,7 @@ backend/.prisma/
 backend/src/generated/prisma
 *service-account*.json
 *gserviceaccount*.json
+tipboxbackend-*.json
 backend/tipboxbackend-*.json
 !backend/tipboxbackend-*.json.example
 backend/prisma/seed/seed-metadata.json
