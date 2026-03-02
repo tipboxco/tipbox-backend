@@ -198,6 +198,7 @@ services:
       - .env.test
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api-test.tipbox.co}
+      - VITE_BASE_PATH=/dashboard
     depends_on:
       - backend
     volumes:

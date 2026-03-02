@@ -2,6 +2,12 @@
 
 INIT_MARKER="/tmp/.catalog_init_done"
 
+# Parse DATABASE_URL for PostgreSQL credentials
+# Format: postgresql://user:password@host:port/dbname
+DB_USER=$(echo "$DATABASE_URL" | sed -n 's|postgresql://\([^:]*\):.*|\1|p')
+DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p')
+DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+
 # Ensure node_modules has all deps (fixes volume mount: anonymous volume can be empty or stale)
 if [ ! -d "node_modules/@xterm/xterm" ]; then
   echo "Installing/refreshing node_modules..."
@@ -10,8 +16,8 @@ if [ ! -d "node_modules/@xterm/xterm" ]; then
 fi
 
 # Wait for PostgreSQL to be ready
-echo "Waiting for PostgreSQL to be ready..."
-until PGPASSWORD=postgres psql -h postgres -U postgres -c '\q' 2>/dev/null; do
+echo "Waiting for PostgreSQL to be ready (user: $DB_USER, host: $DB_HOST)..."
+until PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c '\q' 2>/dev/null; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 2
 done
@@ -21,8 +27,8 @@ echo "PostgreSQL is ready!"
 if [ ! -f "$INIT_MARKER" ]; then
   # Create medusa-store database if it doesn't exist
   echo "Creating medusa-store database if not exists..."
-  PGPASSWORD=postgres psql -h postgres -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'medusa-store'" | grep -q 1 || \
-    PGPASSWORD=postgres psql -h postgres -U postgres -c "CREATE DATABASE \"medusa-store\""
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'medusa-store'" | grep -q 1 || \
+    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c "CREATE DATABASE \"medusa-store\""
   echo "Database ready!"
 
   # Extract product data if zip exists and not already extracted

@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  base: '/dashboard/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -13,7 +12,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5174,
-    allowedHosts: ['api-test.tipbox.co'],
+    allowedHosts: true,
+    hmr: {
+      path: '__vite_hmr',
+    },
     proxy: {
       '/admin': {
         target: 'http://localhost:3000',
