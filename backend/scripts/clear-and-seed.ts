@@ -23,6 +23,9 @@ import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
+import { clearUserContentData } from '../prisma/seed/clear-user-content-data';
+import { clearAllSeedData } from '../prisma/seed/clear-seed-data';
+import { prisma } from '../prisma/seed/types';
 
 /**
  * P3005 hatası için baseline işlemi yapar
@@ -351,25 +354,21 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     // Migration'lar uygulanmış görünse bile, schema ile database arasında uyumsuzluk olabilir
     // (Örneğin: migration'lar uygulanmış ama bazı kolonlar eksik olabilir)
     console.log('🔄 Schema ve database senkronizasyonu kontrol ediliyor...\n');
-    let schemaChanged = false;
     try {
       // prisma db push ile schema uyumsuzluğunu kontrol et ve gerekirse düzelt
-      // NOT: --skip-generate kullanmıyoruz çünkü schema değişirse Prisma Client'ı da güncellemek gerekiyor
-      const pushOutput = execSync('npx prisma db push --accept-data-loss 2>&1', {
+      // --skip-generate: generate aşağıda ayrıca yapılacak
+      const pushOutput = execSync('npx prisma db push --accept-data-loss --skip-generate 2>&1', {
         stdio: 'pipe',
         cwd: process.cwd(),
         encoding: 'utf-8',
       });
-      
-      // Eğer "Your database is now in sync" mesajı varsa, zaten senkronize
-      if (pushOutput.includes('Your database is now in sync')) {
+
+      // Eğer database zaten senkronize ise
+      if (pushOutput.includes('Your database is now in sync') || pushOutput.includes('already in sync')) {
         console.log('✅ Schema ve database zaten senkronize\n');
       } else {
-        // Schema push yapıldı, değişiklikler uygulandı
-        schemaChanged = true;
         console.log('⚠️  Schema ile database arasında uyumsuzluk bulundu ve düzeltildi\n');
         console.log('📋 Yapılan değişiklikler:');
-        // Push çıktısından önemli satırları göster
         const lines = pushOutput.split('\n');
         lines.forEach(line => {
           if (line.includes('CREATE') || line.includes('ALTER') || line.includes('ADD') || line.includes('DROP')) {
@@ -377,13 +376,11 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
           }
         });
         console.log('');
-        // Prisma Client otomatik generate edildi (db push içinde)
-        console.log('✅ Prisma Client otomatik olarak generate edildi (db push içinde)\n');
       }
     } catch (error: any) {
       // db push hata verirse, yine de devam et (migration'lar uygulanmış olabilir)
       const errorOutput = error.stdout?.toString() || error.stderr?.toString() || '';
-      if (errorOutput.includes('Your database is now in sync')) {
+      if (errorOutput.includes('Your database is now in sync') || errorOutput.includes('already in sync')) {
         console.log('✅ Schema ve database senkronize\n');
       } else {
         console.warn('⚠️  Schema senkronizasyon kontrolü başarısız, devam ediliyor...');
@@ -391,19 +388,32 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
         console.warn('   💡 Eğer seed sırasında hata alırsanız, manuel olarak çalıştırın: npx prisma db push --accept-data-loss\n');
       }
     }
-    
-    // Prisma client'ın güncel olduğundan emin ol
-    // Eğer schema değişmediyse (db push yapılmadıysa), generate et
-    if (!schemaChanged) {
-      console.log('🔧 Prisma client generate ediliyor...\n');
-      try {
-        execSync('npx prisma generate', {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Prisma client güncel\n');
-      } catch (error) {
+
+    // Prisma client generate (stdio: 'pipe' ile çalıştır - inherit file descriptor hanging sorununu önler)
+    console.log('🔧 Prisma client generate ediliyor...\n');
+    try {
+      const generateOutput = execSync('npx prisma generate 2>&1', {
+        stdio: 'pipe',
+        cwd: process.cwd(),
+        encoding: 'utf-8',
+        timeout: 120000, // 2 dakika timeout
+      });
+      // Sadece önemli satırları göster
+      const genLines = generateOutput.split('\n');
+      for (const line of genLines) {
+        if (line.includes('Generated') || line.includes('✔')) {
+          console.log(`  ${line.trim()}`);
+        }
+      }
+      console.log('✅ Prisma client güncel\n');
+    } catch (error: any) {
+      const errorOutput = error.stdout?.toString() || error.stderr?.toString() || '';
+      // Generate başarılı olmuş ama exit code 0 olmamış olabilir
+      if (errorOutput.includes('Generated') || errorOutput.includes('✔')) {
+        console.log('✅ Prisma client generate edildi\n');
+      } else {
         console.error('❌ Prisma client generate başarısız!');
+        console.error('   Hata:', errorOutput.substring(0, 300));
         process.exit(1);
       }
     }
@@ -417,28 +427,20 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       await clearUserContentMedia();
     }
     
-    // ADIM 2: Seed verilerini temizle (DB)
+    // ADIM 2: Seed verilerini temizle (DB) - doğrudan fonksiyon çağrısı (child process OOM sorununu önler)
     if (clearAll) {
       console.log('\n🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');
-      const clearSeedPath = path.join(process.cwd(), 'prisma', 'seed', 'clear-seed-data.ts');
-      execSync(`npx ts-node ${clearSeedPath} --force`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
+      await clearAllSeedData(true);
     } else {
       console.log('\n🧹 Kullanıcı/içerik verileri temizleniyor (taxonomy korunuyor)...\n');
-      const clearUserContentPath = path.join(process.cwd(), 'prisma', 'seed', 'clear-user-content-data.ts');
-      execSync(`npx ts-node ${clearUserContentPath}`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
+      await clearUserContentData();
     }
     
     // ADIM 3: Seed görsellerini MinIO'ya yükle (Temizlemeden SONRA)
     console.log('\n📤 Seed görselleri MinIO\'ya yükleniyor (doğru UGC yapısı ile)...\n');
     try {
       const uploadMediaPath = path.join(process.cwd(), 'scripts', 'fix-minio-structure.ts');
-      execSync(`npx ts-node ${uploadMediaPath}`, {
+      execSync(`npx ts-node --transpile-only ${uploadMediaPath}`, {
         stdio: 'inherit',
         cwd: process.cwd(),
       });
@@ -454,7 +456,7 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     console.log('\n🎨 Event & Marketplace Badge görselleri hazırlanıyor...\n');
     try {
       const uploadBadgeImagesPath = path.join(process.cwd(), 'scripts', 'upload-all-badge-images.ts');
-      execSync(`npx ts-node ${uploadBadgeImagesPath}`, {
+      execSync(`npx ts-node --transpile-only ${uploadBadgeImagesPath}`, {
         stdio: 'inherit',
         cwd: process.cwd(),
       });
@@ -486,7 +488,7 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     console.log('\n🔄 Feed distribution tetikleniyor...\n');
     try {
       const feedDistributionPath = path.join(process.cwd(), 'scripts', 'trigger-feed-distribution.ts');
-      execSync(`npx ts-node ${feedDistributionPath}`, {
+      execSync(`npx ts-node --transpile-only ${feedDistributionPath}`, {
         stdio: 'inherit',
         cwd: process.cwd(),
       });
@@ -509,5 +511,12 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
 const args = process.argv.slice(2);
 const clearAll = args.includes('--all') || args.includes('-a');
 
-clearAndSeed(clearAll);
+clearAndSeed(clearAll)
+  .catch((error) => {
+    console.error('❌ Seed işlemi beklenmeyen hata ile başarısız:', error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
 

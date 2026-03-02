@@ -117,7 +117,7 @@ function App() {
   return (
     <ThemeProvider>
       <ThemedApp>
-        <Router>
+        <Router basename="/dashboard">
           <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginRedirect />} />
