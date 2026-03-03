@@ -95,6 +95,10 @@ prisma/seed.js
 prisma/seedrevized.ts
 *.seed.ts
 
+# Prisma migration backups (build context'i buyutur)
+prisma/migrations_backup_*/
+prisma/backupsal_migrations/
+
 # Test assets
 tests/assets/
 test-*.ts
@@ -123,6 +127,9 @@ swagger-server.js
 
 # DM Messaging UI
 DmMessagingUI/
+
+# Bun lock file (Docker pnpm kullanir)
+bun.lock
 
 # Temporary files
 tmp/

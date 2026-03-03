@@ -1,21 +1,64 @@
+# Dependencies
 node_modules
 npm-debug.log
+package-lock.json.bak
+
+# Environment files
 .env
-.env.local
+.env.*
+!.env.example
+
+# Git
 .git
 .gitignore
-README.md
-*.md
+.gitattributes
+
+# IDE
 .vscode
 .idea
-*.log
-.DS_Store
-coverage
-.nyc_output
-dist
-build
 *.swp
 *.swo
 *~
+.DS_Store
 
+# Logs
+*.log
+npm-debug.log*
 
+# Build artifacts
+dist
+build
+coverage
+.nyc_output
+.medusa/server
+
+# Documentation
+*.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Seed data (85MB+ - volume mount ile erisilir)
+src/scripts/tipbox-datas/*.zip
+src/scripts/tipbox-datas/products/
+src/scripts/tipbox-datas/images/
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+jest.config*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar

@@ -129,10 +129,13 @@ jobs:
               echo "⚠️  Backup failed, but continuing..."
             }
             
-            # Docker Compose ile build ve deploy
-            echo "🔨 Building Docker images..."
-            docker compose -f docker-compose.prod.yml build --no-cache backend
-            
+            # Docker Compose ile build ve deploy (BuildKit + layer cache)
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+
+            echo "🔨 Building Docker images (with cache)..."
+            docker compose -f docker-compose.prod.yml build backend admin-panel
+
             echo "🚀 Starting containers..."
             docker compose -f docker-compose.prod.yml up -d
             

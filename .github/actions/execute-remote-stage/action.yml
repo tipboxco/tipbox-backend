@@ -89,12 +89,14 @@ runs:
             build)
               echo "🔨 Building Docker images..."
               cd "$PROJECT_DIR" || exit 1
+              export DOCKER_BUILDKIT=1
+              export COMPOSE_DOCKER_CLI_BUILD=1
               if [ "$FORCE_REBUILD" = "true" ]; then
                 echo "🔄 Force rebuild requested - building without cache"
-                docker compose -f "$COMPOSE_FILE" build --no-cache backend
+                docker compose -f "$COMPOSE_FILE" build --no-cache
               else
-                echo "⚡ Building with cache for faster deployment"
-                docker compose -f "$COMPOSE_FILE" build backend
+                echo "⚡ Building all services with cache (BuildKit)..."
+                docker compose -f "$COMPOSE_FILE" build
               fi
               echo "✅ Images built successfully"
               ;;

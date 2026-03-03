@@ -8,12 +8,13 @@ RUN apk add --no-cache python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/pyth
 # pnpm kullan (monorepo ile uyumlu)
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Package files, pnpm config ve Prisma schema'yı kopyala
+# Package files, pnpm config ve Prisma schema'yi kopyala
 COPY package.json .npmrc ./
+COPY pnpm-lock.yaml* ./
 COPY prisma ./prisma
 
-# Dependencies'leri yükle
-RUN pnpm install
+# Dependencies'leri yukle
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # netcat kur (PostgreSQL port kontrolü için)
 RUN apk add --no-cache netcat-openbsd
