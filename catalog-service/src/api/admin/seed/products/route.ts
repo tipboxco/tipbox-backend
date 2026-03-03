@@ -14,6 +14,8 @@ import slugify from "slugify"
  * Büyük veri alımı için optimize edilmiştir.
  */
 
+const CHUNK_SIZE = 500
+
 const PRODUCT_BRAND_LINK_QUERY =    `DELETE FROM product_product_brand_brand;
 DO $$ 
 BEGIN
@@ -83,12 +85,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       return res.status(404).json({ error: "Products CSV dosyası bulunamadı" })
     }
 
-    const productsCsvContent = fs.readFileSync(productsCsvPath, "utf-8")
-    const productsData = Papa.parse(productsCsvContent, {
-      header: true,
-      skipEmptyLines: true,
-    }).data as any[]
-
     const defaultSalesChannel = await salesChannelModuleService.listSalesChannels({
       name: "Default Sales Channel",
     })
@@ -128,7 +124,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     for (const brand of existingBrands) {
       const brandIdValue = brand.metadata?.brand_id
       if (brandIdValue && typeof brandIdValue === "string") {
-        // brand_id => id eşleşmesi
         brandMap.set(brandIdValue, brand.id)
       }
     }
@@ -139,40 +134,18 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
     const handleSet = new Set<string>()
     let createdProducts = 0
+    let failedBatches = 0
+    let totalRows = 0
 
-    // CSV'deki toplam brand_id sayısını hesapla (istatistik için)
+    // Brand istatistikleri (stream sırasında toplanacak)
     let totalProductsWithBrandId = 0
     let totalProductsWithBrandIdInCsv = 0
     let brandIdNotInMapCount = 0
     const uniqueBrandIdsInCsv = new Set<string>()
 
-    for (const productRow of productsData) {
-      if (productRow.brand_id) {
-        totalProductsWithBrandIdInCsv++
-        uniqueBrandIdsInCsv.add(productRow.brand_id)
-        const brandMapId = brandMap.get(productRow.brand_id)
-        if (brandMapId) {
-          totalProductsWithBrandId++
-        } else {
-          brandIdNotInMapCount++
-        }
-      }
-    }
-
-    logger.info(
-      `CSV Analizi: ${totalProductsWithBrandIdInCsv} ürün için brand_id var, ` +
-      `${totalProductsWithBrandId} ürün için brandMap'te eşleşme bulundu, ` +
-      `${brandIdNotInMapCount} ürün için brandMap'te eşleşme bulunamadı ` +
-      `(${uniqueBrandIdsInCsv.size} farklı brand_id değeri)`
-    )
-
     const BATCH_SIZE = 250
-    let batches: any[][] = []
-    for (let i = 0; i < productsData.length; i += BATCH_SIZE) {
-      batches.push(productsData.slice(i, i + BATCH_SIZE))
-    }
 
-    function makeHandle(row: any): string {
+    function makeHandle(row: Record<string, string>): string {
       let baseHandle = ""
       if (row.title) {
         baseHandle = slugify(row.title, {
@@ -200,7 +173,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       return handle
     }
 
-    const prepareProduct = (productRow: any) => {
+    const prepareProduct = (productRow: Record<string, string>) => {
       let categoryIds: string[] = []
       if (productRow.category_ids) {
         try {
@@ -211,16 +184,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
               .filter((id: string | undefined) => id !== undefined && id !== "") as string[]
           }
         } catch { }
-      }
-
-      // Brand link ürün create sırasında EKLENMEYECEK, sadece metadata'da tutulacak, SQL script ile linking yapılacak
-      // Dolayısıyla brand_id döndürelim ama productObj'ye eklemeyelim
-      let brand_id: string | undefined
-      if (productRow.brand_id) {
-        const brandMapId = brandMap.get(productRow.brand_id)
-        if (brandMapId) {
-          brand_id = brandMapId
-        }
       }
 
       let images: { url: string }[] = []
@@ -247,7 +210,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         } catch { }
       }
 
-      const productObj: any = {
+      return {
         title: (productRow.title || "").substring(0, 255),
         description: productRow.description || "",
         handle: makeHandle(productRow),
@@ -256,11 +219,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         category_ids: categoryIds,
         images,
         metadata,
-        "options": [
+        options: [
           {
-            "title": "Default option",
-            "values": ["Default option value"]
-          }
+            title: "Default option",
+            values: ["Default option value"],
+          },
         ],
         variants: [],
         sales_channels: [
@@ -269,31 +232,43 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           },
         ],
       }
-
-      // brand_id'yi productObj'ye ekleme. Sadece referans için döndürüyoruz (linking SQL ile olacak).
-      return { productObj, brand_id }
     }
 
-    let failedBatches = 0
+    // CSV'yi stream ile oku, her BATCH_SIZE satırda bir DB'ye yaz
+    // Bellekte asla tüm CSV tutulmaz
+    let pendingRows: Record<string, string>[] = []
+    let batchIndex = 0
 
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i]
-      const productsToCreate: any[] = []
+    const processBatch = async (rows: Record<string, string>[]) => {
+      batchIndex++
+      const productsToCreate: ReturnType<typeof prepareProduct>[] = []
       const failedProducts: string[] = []
 
-      for (const productRow of batch) {
+      for (const productRow of rows) {
+        // Brand istatistiklerini topla
+        if (productRow.brand_id) {
+          totalProductsWithBrandIdInCsv++
+          uniqueBrandIdsInCsv.add(productRow.brand_id)
+          if (brandMap.get(productRow.brand_id)) {
+            totalProductsWithBrandId++
+          } else {
+            brandIdNotInMapCount++
+          }
+        }
+
         try {
-          const { productObj } = prepareProduct(productRow)
+          const productObj = prepareProduct(productRow)
           if (productObj.handle && !/^[a-z0-9-]+$/.test(productObj.handle)) {
             logger.warn(
               `[Ürün Hazırlama Hatası] Handle URL-safe değil: "${productObj.handle}" (Ürün: ${productRow.title || productRow.id})`
             )
           }
           productsToCreate.push(productObj)
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
           const productInfo = `"${productRow.title || "Başlıksız"}" (ID: ${productRow.id})`
           logger.warn(
-            `[Ürün Hazırlama Hatası] Ürün hazırlanırken hata: ${productInfo} - Hata: ${error.message}`
+            `[Ürün Hazırlama Hatası] Ürün hazırlanırken hata: ${productInfo} - Hata: ${errorMsg}`
           )
           failedProducts.push(productInfo)
         }
@@ -307,11 +282,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
             },
           })
           createdProducts += createdProductsResult.length
-
-        } catch (err: any) {
+        } catch (err: unknown) {
           failedBatches++
-          const batchErrorMsg = String(err?.message || err)
-          const batchInfo = `Batch ${i + 1}/${batches.length} (${productsToCreate.length} ürün)`
+          const batchErrorMsg = err instanceof Error ? err.message : String(err)
+          const batchInfo = `Batch ${batchIndex} (${productsToCreate.length} ürün)`
 
           if (batchErrorMsg.includes("Invalid product handle")) {
             const handleMatch = batchErrorMsg.match(/Invalid product handle ['"]([^'"]+)['"]/)
@@ -326,13 +300,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           ) {
             logger.warn(
               `[Batch Oluşturma Hatası] ${batchInfo} - Variant option hatalı/eksik tanımlandı. ` +
-              `Option values alanı ile options objeleri tam eşleşmeli! Her bir ürün 'options' içinde option title ve 'values' alanını, ayrıca 'variants' için options obje formatında value sağlamalı (örn: { Size: "Default" }). ` +
               `Hata detayı: ${batchErrorMsg}`
             )
           } else if (batchErrorMsg.includes("Product options are not provided")) {
             logger.warn(
               `[Batch Oluşturma Hatası] ${batchInfo} - Ürün seçenekleri (options) tanımlanmamış. ` +
-              `Her ürün için en az bir option tanımlanmalı. Hata detayı: ${batchErrorMsg}`
+              `Hata detayı: ${batchErrorMsg}`
             )
           } else {
             logger.warn(
@@ -342,18 +315,58 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
           if (failedProducts.length > 0) {
             logger.warn(
-              `[Batch ${i + 1}] Hazırlanamayan ürünler: ${failedProducts.join(", ")}`
+              `[Batch ${batchIndex}] Hazırlanamayan ürünler: ${failedProducts.join(", ")}`
             )
           }
         }
       }
 
-      if ((i + 1) % Math.max(1, Math.floor(batches.length / 20)) === 0) {
+      if (batchIndex % 10 === 0) {
         logger.info(
-          `İlerleme: ${createdProducts} / ${productsData.length} ürün oluşturuldu. ${failedBatches} batch başarısız oldu.`
+          `İlerleme: ${createdProducts} ürün oluşturuldu (${totalRows} satır okundu). ${failedBatches} batch başarısız.`
         )
       }
     }
+
+    // CSV stream ile oku - bellekte sadece BATCH_SIZE kadar satır tutulur
+    await new Promise<void>((resolve, reject) => {
+      const readStream = fs.createReadStream(productsCsvPath, {
+        encoding: "utf-8",
+        highWaterMark: CHUNK_SIZE * 1024,
+      })
+      Papa.parse(readStream, {
+        header: true,
+        skipEmptyLines: true,
+        chunk: async (results: Papa.ParseResult<Record<string, string>>, parser: Papa.Parser) => {
+          pendingRows.push(...results.data)
+          totalRows += results.data.length
+
+          // BATCH_SIZE'a ulaştığında işle
+          while (pendingRows.length >= BATCH_SIZE) {
+            const batch = pendingRows.splice(0, BATCH_SIZE)
+            parser.pause()
+            await processBatch(batch)
+            parser.resume()
+          }
+        },
+        complete: async () => {
+          // Kalan satırları işle
+          if (pendingRows.length > 0) {
+            await processBatch(pendingRows)
+            pendingRows = []
+          }
+          resolve()
+        },
+        error: (err: Error) => reject(err),
+      })
+    })
+
+    logger.info(
+      `CSV Analizi: ${totalProductsWithBrandIdInCsv} ürün için brand_id var, ` +
+      `${totalProductsWithBrandId} ürün için brandMap'te eşleşme bulundu, ` +
+      `${brandIdNotInMapCount} ürün için brandMap'te eşleşme bulunamadı ` +
+      `(${uniqueBrandIdsInCsv.size} farklı brand_id değeri)`
+    )
 
     // SQL ile batching sonunda product-brand linklerini batch linkleme işlemi
     logger.info("Ürünler başarıyla oluşturuldu, SQL ile toplu brand linking başlatılıyor...")
@@ -361,11 +374,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     await pgConnection.raw(PRODUCT_BRAND_LINK_QUERY)
     logger.info("SQL ile toplu brand linking işlemi tamamlandı.")
 
-    // Inventory levels oluştur (toplu ve tek seferde, 30K ürün için optimize)
-    const { data: allInventoryItems } = await query.graph({
-      entity: "inventory_item",
-      fields: ["id"],
-    })
+    // Inventory levels oluştur - batch halinde sorgu ve oluşturma
     const stockLocations = await container.resolve(Modules.STOCK_LOCATION).listStockLocations({})
     if (stockLocations.length > 0) {
       const stockLocation = stockLocations[0]
@@ -373,24 +382,46 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       const existingLevels = await inventoryModuleService.listInventoryLevels({
         location_id: stockLocation.id,
       })
-      const existingItemIds = new Set(existingLevels.map((level: any) => level.inventory_item_id))
+      const existingItemIds = new Set(existingLevels.map((level: { inventory_item_id: string }) => level.inventory_item_id))
 
-      const newInventoryLevels = allInventoryItems
-        .filter((item: any) => !existingItemIds.has(item.id))
-        .map((item: any) => ({
-          location_id: stockLocation.id,
-          stocked_quantity: 1000000,
-          inventory_item_id: item.id,
-        }))
-
+      const INV_QUERY_BATCH = 5000
       const INV_LEVEL_BATCH_SIZE = 1000
-      for (let i = 0; i < newInventoryLevels.length; i += INV_LEVEL_BATCH_SIZE) {
-        const thisBatch = newInventoryLevels.slice(i, i + INV_LEVEL_BATCH_SIZE)
-        await createInventoryLevelsWorkflow(container).run({
-          input: {
-            inventory_levels: thisBatch,
-          },
+      let invOffset = 0
+      let hasMore = true
+
+      while (hasMore) {
+        const { data: inventoryBatch } = await query.graph({
+          entity: "inventory_item",
+          fields: ["id"],
+          pagination: { take: INV_QUERY_BATCH, skip: invOffset },
         })
+
+        if (!inventoryBatch || inventoryBatch.length === 0) {
+          hasMore = false
+          break
+        }
+
+        const newLevels = inventoryBatch
+          .filter((item: { id: string }) => !existingItemIds.has(item.id))
+          .map((item: { id: string }) => ({
+            location_id: stockLocation.id,
+            stocked_quantity: 1000000,
+            inventory_item_id: item.id,
+          }))
+
+        for (let i = 0; i < newLevels.length; i += INV_LEVEL_BATCH_SIZE) {
+          const thisBatch = newLevels.slice(i, i + INV_LEVEL_BATCH_SIZE)
+          await createInventoryLevelsWorkflow(container).run({
+            input: {
+              inventory_levels: thisBatch,
+            },
+          })
+        }
+
+        invOffset += inventoryBatch.length
+        if (inventoryBatch.length < INV_QUERY_BATCH) {
+          hasMore = false
+        }
       }
     }
 

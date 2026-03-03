@@ -18,13 +18,15 @@ interface BrandCsvRow {
   ispopular: string
 }
 
+const CHUNK_SIZE = 500
+const BATCH_SIZE = 250
+
 /**
  * POST /admin/seed/brands
- * Brands seed işlemini başlatır (bulk ekleme)
- * 1. Önce distinct root_category_name değerlerinden BrandCategory oluşturur
- * 2. Ardından brandleri eklerken category_id ataması yapar
- * 3. secondary_category_name ve third_category_name değerlerini metadata'ya ekler
- * 4. website değerini website_url alanına atar
+ * Brands seed işlemini başlatır (stream + batch ekleme)
+ * 1. Önce CSV stream ile okunup distinct root_category_name değerleri toplanır
+ * 2. BrandCategory'ler oluşturulur
+ * 3. CSV tekrar stream ile okunup batch halinde brandler oluşturulur
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
@@ -33,43 +35,50 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const brandModuleService = container.resolve<BrandModuleService>(BRAND_MODULE)
     const csvDataPath = path.join(process.cwd(), "src", "scripts", "tipbox-datas")
 
-    // Brands CSV'yi oku (brands_2.csv)
     const brandsCsvPath = path.join(csvDataPath, "brands_2.csv")
     if (!fs.existsSync(brandsCsvPath)) {
       return res.status(404).json({ error: "Brands CSV dosyası bulunamadı (brands_2.csv)" })
     }
 
-    const brandsCsvContent = fs.readFileSync(brandsCsvPath, "utf-8")
-    const brandsData = Papa.parse<BrandCsvRow>(brandsCsvContent, {
-      header: true,
-      skipEmptyLines: true,
-    }).data
+    // 1. İlk geçiş: distinct category isimlerini topla (bellekte sadece string set tutulur)
+    const distinctCategories = new Set<string>()
+    let totalRows = 0
 
-    logger.info(`CSV'den ${brandsData.length} brand okundu`)
+    await new Promise<void>((resolve, reject) => {
+      const readStream = fs.createReadStream(brandsCsvPath, {
+        encoding: "utf-8",
+        highWaterMark: CHUNK_SIZE * 1024,
+      })
+      Papa.parse<BrandCsvRow>(readStream, {
+        header: true,
+        skipEmptyLines: true,
+        chunk: (results: Papa.ParseResult<BrandCsvRow>) => {
+          for (const row of results.data) {
+            totalRows++
+            const catName = row.root_category_name?.trim()
+            if (catName && catName.length > 0) {
+              distinctCategories.add(catName)
+            }
+          }
+        },
+        complete: () => resolve(),
+        error: (err: Error) => reject(err),
+      })
+    })
 
-    // 1. Distinct root_category_name değerlerini al
-    const distinctCategories = [
-      ...new Set(
-        brandsData
-          .map((row) => row.root_category_name?.trim())
-          .filter((name) => name && name.length > 0)
-      ),
-    ]
-
-    logger.info(`${distinctCategories.length} farklı kategori bulundu: ${distinctCategories.join(", ")}`)
+    logger.info(`CSV'den ${totalRows} brand okundu`)
+    logger.info(`${distinctCategories.size} farklı kategori bulundu: ${[...distinctCategories].join(", ")}`)
 
     // 2. BrandCategory'leri oluştur
-    const categoryMap = new Map<string, string>() // root_category_name -> category_id
+    const categoryMap = new Map<string, string>()
 
-    // Önce mevcut kategorileri kontrol et
     const existingCategories = await brandModuleService.listBrandCategories()
     for (const cat of existingCategories) {
       categoryMap.set(cat.title, cat.id)
     }
 
-    // Yeni kategorileri oluştur
-    const newCategoriesToCreate = distinctCategories.filter((name) => !categoryMap.has(name))
-    
+    const newCategoriesToCreate = [...distinctCategories].filter((name) => !categoryMap.has(name))
+
     if (newCategoriesToCreate.length > 0) {
       const categoriesToCreate = newCategoriesToCreate.map((categoryName) => ({
         title: categoryName,
@@ -83,28 +92,33 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           categoryMap.set(cat.title, cat.id)
         }
         logger.info(`${createdCategories.length} yeni BrandCategory oluşturuldu`)
-      } catch (err: any) {
-        logger.error("BrandCategory oluşturulurken hata: " + err.message)
-        return res.status(500).json({ error: "BrandCategory oluşturulurken hata: " + err.message })
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        logger.error("BrandCategory oluşturulurken hata: " + errMsg)
+        return res.status(500).json({ error: "BrandCategory oluşturulurken hata: " + errMsg })
       }
     }
 
-    // 3. Brands'leri hazırla
-    const brandsToCreate = brandsData.map((brandRow) => {
-      // Metadata oluştur
-      const metadataObj: Record<string, any> = {}
-      
-      // Mevcut metadata'yı parse et (eğer varsa)
+    // 3. İkinci geçiş: CSV'yi tekrar stream ile oku, batch halinde brandleri oluştur
+    if (typeof brandModuleService.createBrands !== "function") {
+      return res.status(500).json({ error: "brandModuleService.createBrands bulk metodu bulunamadı" })
+    }
+
+    let createdBrandsCount = 0
+    let failedBatches = 0
+    let pendingRows: BrandCsvRow[] = []
+    let batchIndex = 0
+
+    const prepareBrand = (brandRow: BrandCsvRow) => {
+      const metadataObj: Record<string, string> = {}
+
       if (brandRow.metadata && brandRow.metadata.trim()) {
         try {
           const parsedMeta = JSON.parse(brandRow.metadata)
           Object.assign(metadataObj, parsedMeta)
-        } catch {
-          // JSON parse hatası, boş bırak
-        }
+        } catch { }
       }
 
-      // secondary ve third category bilgilerini metadata'ya ekle
       if (brandRow.second_category_name?.trim()) {
         metadataObj.second_category_name = brandRow.second_category_name.trim()
       }
@@ -112,14 +126,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         metadataObj.third_category_name = brandRow.third_category_name.trim()
       }
 
-      // Category ID'yi bul
       const categoryId = brandRow.root_category_name?.trim()
         ? categoryMap.get(brandRow.root_category_name.trim()) || null
         : null
 
-      const website = brandRow.website?.trim();
-      
-      // rank değerini parse et (number veya null)
+      const website = brandRow.website?.trim()
+
       let rank: number | null = null
       if (brandRow.rank?.trim()) {
         const parsedRank = parseInt(brandRow.rank.trim(), 10)
@@ -127,47 +139,83 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           rank = parsedRank
         }
       }
-      
-      // ispopular değerini parse et (boolean veya null)
+
       let ispopular: boolean | null = null
       if (brandRow.ispopular?.trim()) {
         const ispopularValue = brandRow.ispopular.trim().toLowerCase()
-        if (ispopularValue === 'true' || ispopularValue === '1' || ispopularValue === 'yes') {
+        if (ispopularValue === "true" || ispopularValue === "1" || ispopularValue === "yes") {
           ispopular = true
-        } else if (ispopularValue === 'false' || ispopularValue === '0' || ispopularValue === 'no') {
+        } else if (ispopularValue === "false" || ispopularValue === "0" || ispopularValue === "no") {
           ispopular = false
         }
       }
-      
+
       return {
         name: brandRow.name,
         handle: brandRow.handle || null,
         website_url: brandRow.website?.trim() || null,
-        logo_url: website?.length > 0 ? `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}` : null,
+        logo_url: website && website.length > 0
+          ? `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}`
+          : null,
         category_id: categoryId,
-        rank: rank,
-        ispopular: ispopular,
+        rank,
+        ispopular,
         metadata: Object.keys(metadataObj).length > 0 ? metadataObj : null,
       }
-    })
-
-    // 4. Toplu ekle
-    let createdBrands: any[] = []
-    try {
-      if (typeof brandModuleService.createBrands === "function") {
-        createdBrands = await brandModuleService.createBrands(brandsToCreate)
-      } else {
-        throw new Error("brandModuleService.createBrands bulk metodu bulunamadı")
-      }
-    } catch (err: any) {
-      logger.error("Toplu marka oluşturulurken hata: " + err.message)
-      return res.status(500).json({ error: "Toplu marka oluşturulurken hata: " + err.message })
     }
+
+    const processBatch = async (rows: BrandCsvRow[]) => {
+      batchIndex++
+      const brandsToCreate = rows.map(prepareBrand)
+
+      try {
+        const created = await brandModuleService.createBrands(brandsToCreate)
+        createdBrandsCount += created.length
+      } catch (err: unknown) {
+        failedBatches++
+        const errMsg = err instanceof Error ? err.message : String(err)
+        logger.warn(`[Brand Batch ${batchIndex}] ${rows.length} brand oluşturulurken hata: ${errMsg}`)
+      }
+
+      if (batchIndex % 10 === 0) {
+        logger.info(`Brand ilerleme: ${createdBrandsCount} oluşturuldu (batch ${batchIndex})`)
+      }
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const readStream = fs.createReadStream(brandsCsvPath, {
+        encoding: "utf-8",
+        highWaterMark: CHUNK_SIZE * 1024,
+      })
+      Papa.parse<BrandCsvRow>(readStream, {
+        header: true,
+        skipEmptyLines: true,
+        chunk: async (results: Papa.ParseResult<BrandCsvRow>, parser: Papa.Parser) => {
+          pendingRows.push(...results.data)
+
+          while (pendingRows.length >= BATCH_SIZE) {
+            const batch = pendingRows.splice(0, BATCH_SIZE)
+            parser.pause()
+            await processBatch(batch)
+            parser.resume()
+          }
+        },
+        complete: async () => {
+          if (pendingRows.length > 0) {
+            await processBatch(pendingRows)
+            pendingRows = []
+          }
+          resolve()
+        },
+        error: (err: Error) => reject(err),
+      })
+    })
 
     res.json({
       success: true,
-      message: `${createdBrands.length} marka bulk olarak oluşturuldu`,
-      count: createdBrands.length,
+      message: `${createdBrandsCount} marka batch halinde oluşturuldu`,
+      count: createdBrandsCount,
+      failed_batches: failedBatches,
       categories_created: newCategoriesToCreate.length,
       total_categories: categoryMap.size,
     })

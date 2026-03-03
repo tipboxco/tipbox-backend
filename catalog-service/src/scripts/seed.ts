@@ -945,66 +945,250 @@ async function seedFromCsvFiles(
   
   const csvDataPath = path.join(process.cwd(), "src", "scripts", "tipbox-datas");
   
-  // CSV dosyalarını yükle
-  const { categoriesData, brandsData, productsData } = loadCsvData(csvDataPath, logger);
-  
-  logger.info(`Loaded ${categoriesData.length} categories, ${brandsData.length} brands, ${productsData.length} products`);
+  // Categories ve brands CSV'lerini yükle (küçük dosyalar)
+  const { categoriesData, brandsData } = await loadSmallCsvData(csvDataPath, logger);
+
+  logger.info(`Loaded ${categoriesData.length} categories, ${brandsData.length} brands`);
 
   // 1. Önce brand'leri oluştur
   const brandMap = await seedBrands(container, logger, brandsData);
-  
+
   // 2. Sonra category'leri oluştur (parent-child ilişkisi ile)
   const categoryMap = await seedCategories(container, logger, categoriesData);
-  
-  // 3. Product'leri oluştur
-  const productMap = await seedProducts(
+
+  // 3. Product'leri stream ile oluştur ve brand linkleme yap (bellek optimize)
+  await seedProductsFromStream(
     container,
     logger,
-    productsData,
+    csvDataPath,
     categoryMap,
+    brandMap,
     shippingProfile,
     defaultSalesChannel
   );
-  
-  // 4. Product-Brand linkleme
-  await linkProductsToBrands(container, logger, productsData, productMap, brandMap);
-  
-  // 5. Inventory levels oluştur
+
+  // 4. Inventory levels oluştur
   await createInventoryLevelsForProducts(container, logger, query, stockLocation);
 }
 
+const CHUNK_SIZE = 500;
+
 /**
- * CSV dosyalarını yükle
+ * CSV dosyasını stream ile chunk'lar halinde oku (bellek optimizasyonu)
+ * Sadece küçük CSV dosyaları için kullan (categories, brands)
  */
-function loadCsvData(csvDataPath: string, logger: any) {
-  // Categories CSV'yi oku
+function readCsvStream(csvPath: string): Promise<Record<string, string>[]> {
+  return new Promise((resolve, reject) => {
+    const rows: Record<string, string>[] = [];
+    const readStream = fs.createReadStream(csvPath, { encoding: "utf-8", highWaterMark: CHUNK_SIZE * 1024 });
+    Papa.parse(readStream, {
+      header: true,
+      skipEmptyLines: true,
+      chunk: (results: Papa.ParseResult<Record<string, string>>) => {
+        rows.push(...results.data);
+      },
+      complete: () => resolve(rows),
+      error: (err: Error) => reject(err),
+    });
+  });
+}
+
+/**
+ * Küçük CSV dosyalarını yükle (categories, brands)
+ * Products CSV büyük olduğu için ayrı stream ile işlenir
+ */
+async function loadSmallCsvData(csvDataPath: string, logger: any) {
   logger.info("Reading categories CSV...");
   const categoriesCsvPath = path.join(csvDataPath, "categories.csv");
-  const categoriesCsvContent = fs.readFileSync(categoriesCsvPath, "utf-8");
-  const categoriesData = Papa.parse(categoriesCsvContent, {
-    header: true,
-    skipEmptyLines: true,
-  }).data as any[];
+  const categoriesData = await readCsvStream(categoriesCsvPath);
 
-  // Brands CSV'yi oku
   logger.info("Reading brands CSV...");
   const brandsCsvPath = path.join(csvDataPath, "brands.csv");
-  const brandsCsvContent = fs.readFileSync(brandsCsvPath, "utf-8");
-  const brandsData = Papa.parse(brandsCsvContent, {
-    header: true,
-    skipEmptyLines: true,
-  }).data as any[];
+  const brandsData = await readCsvStream(brandsCsvPath);
 
-  // Products CSV'yi oku
-  logger.info("Reading products CSV...");
+  return { categoriesData, brandsData };
+}
+
+/**
+ * Products CSV'yi stream ile okuyup batch halinde oluşturur ve brand linkler
+ * Bellekte asla tüm CSV tutulmaz
+ */
+async function seedProductsFromStream(
+  container: any,
+  logger: any,
+  csvDataPath: string,
+  categoryMap: Map<string, string>,
+  brandMap: Map<string, string>,
+  shippingProfile: any,
+  defaultSalesChannel: any[]
+): Promise<void> {
   const productsCsvPath = path.join(csvDataPath, "products_with_images.csv");
-  const productsCsvContent = fs.readFileSync(productsCsvPath, "utf-8");
-  const productsData = Papa.parse(productsCsvContent, {
-    header: true,
-    skipEmptyLines: true,
-  }).data as any[];
+  const remoteLink = container.resolve(ContainerRegistrationKeys.REMOTE_LINK);
+  const handleSet = new Set<string>();
+  let createdProducts = 0;
+  let linkedCount = 0;
+  let totalRows = 0;
+  let batchIndex = 0;
+  const BATCH_SIZE = 50;
 
-  return { categoriesData, brandsData, productsData };
+  let pendingRows: Record<string, string>[] = [];
+
+  const processBatch = async (rows: Record<string, string>[]) => {
+    batchIndex++;
+    const productsToCreate: any[] = [];
+    const batchProductIds: string[] = [];
+    const batchBrandIds: (string | undefined)[] = [];
+
+    for (const productRow of rows) {
+      try {
+        let categoryIds: string[] = [];
+        if (productRow.category_ids) {
+          try {
+            const parsed = JSON.parse(productRow.category_ids);
+            if (Array.isArray(parsed)) {
+              categoryIds = parsed
+                .map((catId: string) => categoryMap.get(catId))
+                .filter((id: string | undefined) => id !== undefined && id !== "") as string[];
+            }
+          } catch { }
+        }
+
+        let images: { url: string }[] = [];
+        if (productRow.thumbnail) {
+          images.push({ url: productRow.thumbnail });
+        }
+        if (productRow.images) {
+          try {
+            const parsed = JSON.parse(productRow.images);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((imgUrl: string) => {
+                if (imgUrl && !images.some(i => i.url === imgUrl)) {
+                  images.push({ url: imgUrl });
+                }
+              });
+            }
+          } catch { }
+        }
+
+        let baseHandle = (productRow.title || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .substring(0, 90);
+        if (!baseHandle) {
+          baseHandle = `product-${productRow.id}`;
+        }
+        let handle = baseHandle;
+        let counter = 1;
+        while (handleSet.has(handle)) {
+          handle = `${baseHandle}-${counter}`;
+          counter++;
+        }
+        handleSet.add(handle);
+
+        let metadata = null;
+        if (productRow.metadata) {
+          try {
+            metadata = JSON.parse(productRow.metadata);
+          } catch { }
+        }
+
+        productsToCreate.push({
+          title: (productRow.title || "").substring(0, 255),
+          description: productRow.description || "",
+          handle,
+          status: ProductStatus.PUBLISHED,
+          shipping_profile_id: shippingProfile.id,
+          category_ids: categoryIds,
+          images,
+          metadata,
+          variants: [
+            {
+              title: "Default",
+              sku: `SKU-${productRow.id}`,
+              prices: [{ amount: 1000, currency_code: "eur" }],
+            },
+          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }],
+        });
+
+        batchProductIds.push(productRow.id);
+        batchBrandIds.push(
+          productRow.brand_id && productRow.brand_id !== "NULL" && productRow.brand_id !== ""
+            ? brandMap.get(productRow.brand_id)
+            : undefined
+        );
+      } catch (error: any) {
+        logger.warn(`Failed to prepare product ${productRow.title || productRow.id}: ${error.message}`);
+      }
+    }
+
+    if (productsToCreate.length > 0) {
+      try {
+        const { result: createdProductsResult } = await createProductsWorkflow(container).run({
+          input: { products: productsToCreate },
+        });
+
+        // Product-Brand linkleme (batch içinde hemen yap, bellekte tutma)
+        for (let j = 0; j < batchProductIds.length && j < createdProductsResult.length; j++) {
+          const createdProduct = createdProductsResult[j];
+          const brandId = batchBrandIds[j];
+          if (createdProduct && brandId) {
+            try {
+              await remoteLink.create({
+                [Modules.PRODUCT]: { product_id: createdProduct.id },
+                brand: { brand_id: brandId },
+              });
+              linkedCount++;
+            } catch (linkErr: any) {
+              logger.warn(`Failed to link product ${createdProduct.id} to brand ${brandId}: ${linkErr.message}`);
+            }
+          }
+        }
+
+        createdProducts += createdProductsResult.length;
+      } catch (error: any) {
+        logger.warn(`Failed to create products batch ${batchIndex}: ${error.message}`);
+      }
+    }
+
+    if (batchIndex % 20 === 0) {
+      logger.info(`Products ilerleme: ${createdProducts} oluşturuldu, ${linkedCount} brand link (${totalRows} satır okundu)`);
+    }
+  };
+
+  logger.info("Creating products from CSV stream...");
+  await new Promise<void>((resolve, reject) => {
+    const readStream = fs.createReadStream(productsCsvPath, {
+      encoding: "utf-8",
+      highWaterMark: CHUNK_SIZE * 1024,
+    });
+    Papa.parse(readStream, {
+      header: true,
+      skipEmptyLines: true,
+      chunk: async (results: Papa.ParseResult<Record<string, string>>, parser: Papa.Parser) => {
+        pendingRows.push(...results.data);
+        totalRows += results.data.length;
+
+        while (pendingRows.length >= BATCH_SIZE) {
+          const batch = pendingRows.splice(0, BATCH_SIZE);
+          parser.pause();
+          await processBatch(batch);
+          parser.resume();
+        }
+      },
+      complete: async () => {
+        if (pendingRows.length > 0) {
+          await processBatch(pendingRows);
+          pendingRows = [];
+        }
+        resolve();
+      },
+      error: (err: Error) => reject(err),
+    });
+  });
+
+  logger.info(`Created ${createdProducts} products, linked ${linkedCount} to brands`);
 }
 
 /**
@@ -1183,205 +1367,7 @@ function sortCategoriesByParentChild(categoriesData: any[]): any[] {
 }
 
 /**
- * Product'leri oluştur
- */
-async function seedProducts(
-  container: any,
-  logger: any,
-  productsData: any[],
-  categoryMap: Map<string, string>,
-  shippingProfile: any,
-  defaultSalesChannel: any[]
-): Promise<Map<string, string>> {
-  logger.info("Creating products from CSV...");
-  const productMap = new Map<string, string>(); // CSV id -> Medusa id mapping
-  const handleSet = new Set<string>(); // Unique handle kontrolü için
-  let createdProducts = 0;
-  const batchSize = 50; // Batch halinde oluştur
-
-  for (let i = 0; i < productsData.length; i += batchSize) {
-    const batch = productsData.slice(i, i + batchSize);
-    const productsToCreate: any[] = [];
-    const batchProductIds: string[] = []; // Batch'teki product_id'leri takip et
-
-    for (const productRow of batch) {
-      try {
-        // Category IDs'i parse et (yeni format: JSON array string)
-        let categoryIds: string[] = [];
-        if (productRow.category_ids) {
-          try {
-            const parsed = JSON.parse(productRow.category_ids);
-            if (Array.isArray(parsed)) {
-              categoryIds = parsed
-                .map((catId: string) => categoryMap.get(catId))
-                .filter((id: string | undefined) => id !== undefined && id !== "") as string[];
-            }
-          } catch (e) {
-            // JSON parse hatası, devam et
-          }
-        }
-
-        // Images'i parse et (yeni format: JSON array string)
-        let images: { url: string }[] = [];
-        if (productRow.thumbnail) {
-          images.push({ url: productRow.thumbnail });
-        }
-        if (productRow.images) {
-          try {
-            const parsed = JSON.parse(productRow.images);
-            if (Array.isArray(parsed)) {
-              parsed.forEach((imgUrl: string) => {
-                if (imgUrl && !images.some(i => i.url === imgUrl)) {
-                  images.push({ url: imgUrl });
-                }
-              });
-            }
-          } catch (e) {
-            // JSON parse hatası, devam et
-          }
-        }
-
-        // Handle oluştur (title'den)
-        let baseHandle = (productRow.title || "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "")
-          .substring(0, 90);
-        
-        if (!baseHandle) {
-          baseHandle = `product-${productRow.id}`;
-        }
-        
-        let handle = baseHandle;
-        let counter = 1;
-        while (handleSet.has(handle)) {
-          handle = `${baseHandle}-${counter}`;
-          counter++;
-        }
-        handleSet.add(handle);
-
-        // Metadata parse et
-        let metadata = null;
-        if (productRow.metadata) {
-          try {
-            metadata = JSON.parse(productRow.metadata);
-          } catch (e) {
-            // JSON parse hatası, null bırak
-          }
-        }
-
-        productsToCreate.push({
-          title: (productRow.title || "").substring(0, 255),
-          description: productRow.description || "",
-          handle: handle,
-          status: ProductStatus.PUBLISHED,
-          shipping_profile_id: shippingProfile.id,
-          category_ids: categoryIds,
-          images: images,
-          metadata: metadata,
-          variants: [
-            {
-              title: "Default",
-              sku: `SKU-${productRow.id}`,
-              prices: [
-                {
-                  amount: 1000, // Default price
-                  currency_code: "eur",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        });
-        
-        batchProductIds.push(productRow.id);
-      } catch (error: any) {
-        logger.warn(`Failed to prepare product ${productRow.title || productRow.id}: ${error.message}`);
-      }
-    }
-
-    if (productsToCreate.length > 0) {
-      try {
-        const { result: createdProductsResult } = await createProductsWorkflow(container).run({
-          input: {
-            products: productsToCreate,
-          },
-        });
-
-        // Product mapping oluştur - sıralı eşleştirme
-        for (let j = 0; j < batchProductIds.length && j < createdProductsResult.length; j++) {
-          const csvProductId = batchProductIds[j];
-          const createdProduct = createdProductsResult[j];
-          if (createdProduct && csvProductId) {
-            productMap.set(csvProductId, createdProduct.id);
-          }
-        }
-
-        createdProducts += createdProductsResult.length;
-        logger.info(`Created ${createdProducts}/${productsData.length} products...`);
-      } catch (error: any) {
-        logger.warn(`Failed to create products batch: ${error.message}`);
-      }
-    }
-  }
-
-  logger.info(`Created ${createdProducts} products`);
-  return productMap;
-}
-
-/**
- * Product-Brand linkleme
- */
-async function linkProductsToBrands(
-  container: any,
-  logger: any,
-  productsData: any[],
-  productMap: Map<string, string>,
-  brandMap: Map<string, string>
-) {
-  logger.info("Linking products to brands from CSV...");
-  const remoteLink = container.resolve(ContainerRegistrationKeys.REMOTE_LINK);
-  let linkedCount = 0;
-  let skippedCount = 0;
-
-  for (const productRow of productsData) {
-    if (!productRow.brand_id || productRow.brand_id === "NULL" || productRow.brand_id === "") {
-      skippedCount++;
-      continue;
-    }
-
-    const productId = productMap.get(productRow.id);
-    const brandId = brandMap.get(productRow.brand_id);
-
-    if (!productId || !brandId) {
-      skippedCount++;
-      continue;
-    }
-
-    try {
-      await remoteLink.create({
-        [Modules.PRODUCT]: {
-          product_id: productId,
-        },
-        brand: {
-          brand_id: brandId,
-        },
-      });
-      linkedCount++;
-    } catch (error: any) {
-      logger.warn(`Failed to link product ${productRow.id} to brand ${productRow.brand_id}: ${error.message}`);
-    }
-  }
-
-  logger.info(`Linked ${linkedCount} products to brands (skipped: ${skippedCount})`);
-}
-
-/**
- * Yeni ürünler için inventory levels oluştur
+ * Yeni ürünler için inventory levels oluştur (batch halinde sorgu ve oluşturma)
  */
 async function createInventoryLevelsForProducts(
   container: any,
@@ -1390,40 +1376,57 @@ async function createInventoryLevelsForProducts(
   stockLocation: any
 ) {
   logger.info("Creating inventory levels for new products...");
-  
-  // Tüm inventory items'ları al
-  const { data: allInventoryItems } = await query.graph({
-    entity: "inventory_item",
-    fields: ["id"],
-  });
 
-  // Mevcut inventory levels'ları kontrol et
   const inventoryModuleService = container.resolve(Modules.INVENTORY);
   const existingLevels = await inventoryModuleService.listInventoryLevels({
     location_id: stockLocation.id,
   });
-  const existingItemIds = new Set(existingLevels.map((level: any) => level.inventory_item_id));
+  const existingItemIds = new Set(existingLevels.map((level: { inventory_item_id: string }) => level.inventory_item_id));
 
-  // Yeni inventory levels oluştur
-  const newInventoryLevels: CreateInventoryLevelInput[] = [];
-  for (const inventoryItem of allInventoryItems) {
-    if (!existingItemIds.has(inventoryItem.id)) {
-      const inventoryLevel = {
+  const INV_QUERY_BATCH = 5000;
+  const INV_LEVEL_BATCH_SIZE = 1000;
+  let invOffset = 0;
+  let hasMore = true;
+  let totalCreated = 0;
+
+  while (hasMore) {
+    const { data: inventoryBatch } = await query.graph({
+      entity: "inventory_item",
+      fields: ["id"],
+      pagination: { take: INV_QUERY_BATCH, skip: invOffset },
+    });
+
+    if (!inventoryBatch || inventoryBatch.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    const newLevels: CreateInventoryLevelInput[] = inventoryBatch
+      .filter((item: { id: string }) => !existingItemIds.has(item.id))
+      .map((item: { id: string }) => ({
         location_id: stockLocation.id,
         stocked_quantity: 1000000,
-        inventory_item_id: inventoryItem.id,
-      };
-      newInventoryLevels.push(inventoryLevel);
+        inventory_item_id: item.id,
+      }));
+
+    for (let i = 0; i < newLevels.length; i += INV_LEVEL_BATCH_SIZE) {
+      const thisBatch = newLevels.slice(i, i + INV_LEVEL_BATCH_SIZE);
+      await createInventoryLevelsWorkflow(container).run({
+        input: {
+          inventory_levels: thisBatch,
+        },
+      });
+      totalCreated += thisBatch.length;
+    }
+
+    invOffset += inventoryBatch.length;
+    if (inventoryBatch.length < INV_QUERY_BATCH) {
+      hasMore = false;
     }
   }
 
-  if (newInventoryLevels.length > 0) {
-    await createInventoryLevelsWorkflow(container).run({
-      input: {
-        inventory_levels: newInventoryLevels,
-      },
-    });
-    logger.info(`Created inventory levels for ${newInventoryLevels.length} items`);
+  if (totalCreated > 0) {
+    logger.info(`Created inventory levels for ${totalCreated} items`);
   } else {
     logger.info("No new inventory levels needed");
   }
