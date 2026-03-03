@@ -1,5 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { BRAND_MODULE } from "../../../../modules/brand"
 import BrandModuleService from "../../../../modules/brand/service"
 import * as fs from "fs"
@@ -228,100 +228,49 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 /**
  * DELETE /admin/seed/brands
  * Tüm markaları ve brand kategorilerini siler
+ *
+ * Optimize: Raw SQL ile bulk delete — 23.000+ DB sorgusu yerine 5 sorgu
  */
 export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
     const container = req.scope
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
-    const brandModuleService = container.resolve<BrandModuleService>(BRAND_MODULE)
-    const remoteLink = container.resolve(ContainerRegistrationKeys.REMOTE_LINK)
-    const query = container.resolve(ContainerRegistrationKeys.QUERY)
+    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
 
-    // Tüm markaları getir
-    const brands = await brandModuleService.listBrands()
-    const brandCategories = await brandModuleService.listBrandCategories()
+    // Count'ları al
+    const brandCountResult = await pgConnection.raw("SELECT count(*)::int AS cnt FROM brand")
+    const categoryCountResult = await pgConnection.raw("SELECT count(*)::int AS cnt FROM brand_category")
+    const brandCount = brandCountResult.rows?.[0]?.cnt ?? brandCountResult[0]?.[0]?.cnt ?? 0
+    const categoryCount = categoryCountResult.rows?.[0]?.cnt ?? categoryCountResult[0]?.[0]?.cnt ?? 0
 
-    let deletedBrandCount = 0
-    let deletedCategoryCount = 0
-    const errors: string[] = []
-
-    // Önce tüm brand-product linklerini sil
-    if (brands && brands.length > 0) {
-      for (const brand of brands) {
-        try {
-          // Brand'e bağlı ürünleri getir
-          const { data: brandData } = await query.graph({
-            entity: "brand",
-            fields: ["id", "product.id"],
-            filters: {
-              id: brand.id,
-            },
-          })
-
-          const brandWithProducts = brandData[0]
-          if (brandWithProducts?.product) {
-            const products = Array.isArray(brandWithProducts.product)
-              ? brandWithProducts.product
-              : [brandWithProducts.product]
-
-            // Tüm linkleri sil
-            for (const product of products) {
-              try {
-                await remoteLink.dismiss({
-                  [Modules.PRODUCT]: {
-                    product_id: product.id,
-                  },
-                  brand: {
-                    brand_id: brand.id,
-                  },
-                })
-              } catch (error: any) {
-                logger.warn(`Failed to dismiss link for product ${product.id}: ${error.message}`)
-              }
-            }
-          }
-        } catch (error: any) {
-          logger.warn(`Failed to get products for brand ${brand.id}: ${error.message}`)
-        }
-      }
-
-      // Tüm brandları sil
-      if (typeof brandModuleService.deleteBrands === "function") {
-        for (const brand of brands) {
-          try {
-            await brandModuleService.deleteBrands(brand.id)
-            deletedBrandCount++
-          } catch (error: any) {
-            errors.push(`Marka ${brand.name} (${brand.id}) silinirken hata: ${error.message}`)
-            logger.warn(`Failed to delete brand ${brand.name}: ${error.message}`)
-          }
-        }
-      }
+    if (brandCount === 0 && categoryCount === 0) {
+      return res.json({
+        success: true,
+        message: "Silinecek brand veya kategori bulunamadı",
+        deleted_brand_count: 0,
+        deleted_category_count: 0,
+      })
     }
 
-    // Tüm brand kategorilerini sil
-    if (brandCategories && brandCategories.length > 0) {
-      if (typeof brandModuleService.deleteBrandCategories === "function") {
-        for (const category of brandCategories) {
-          try {
-            await brandModuleService.deleteBrandCategories(category.id)
-            deletedCategoryCount++
-          } catch (error: any) {
-            errors.push(`Kategori ${category.title} (${category.id}) silinirken hata: ${error.message}`)
-            logger.warn(`Failed to delete brand category ${category.title}: ${error.message}`)
-          }
-        }
-      }
-    }
+    logger.info(`[Seed DELETE] ${brandCount} brand ve ${categoryCount} kategori silinecek...`)
+
+    // 1. Brand-product linklerini sil
+    await pgConnection.raw("DELETE FROM product_product_brand_brand")
+    logger.info("[Seed DELETE] Brand-product linkleri silindi")
+
+    // 2. Tüm brandleri sil
+    await pgConnection.raw("DELETE FROM brand")
+    logger.info(`[Seed DELETE] ${brandCount} brand silindi`)
+
+    // 3. Tüm brand kategorilerini sil
+    await pgConnection.raw("DELETE FROM brand_category")
+    logger.info(`[Seed DELETE] ${categoryCount} kategori silindi`)
 
     res.json({
-      success: errors.length === 0,
-      message: `${deletedBrandCount} marka ve ${deletedCategoryCount} kategori silindi`,
-      deleted_brand_count: deletedBrandCount,
-      deleted_category_count: deletedCategoryCount,
-      total_brand_count: brands?.length || 0,
-      total_category_count: brandCategories?.length || 0,
-      errors: errors.length > 0 ? errors : undefined,
+      success: true,
+      message: `${brandCount} marka ve ${categoryCount} kategori silindi`,
+      deleted_brand_count: brandCount,
+      deleted_category_count: categoryCount,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"

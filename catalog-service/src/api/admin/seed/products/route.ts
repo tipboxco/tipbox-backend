@@ -440,21 +440,24 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
 /**
  * DELETE /admin/seed/products
- * Tüm ürünleri siler (artık paralel değil)
+ * Tüm ürünleri siler
+ *
+ * Optimize: Raw SQL ile link temizleme + sayfalı silme
+ * Bellekte asla tüm ürün ID listesi tutulmaz, her sayfada sadece PAGE_SIZE kadar ID
  */
 export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
     const container = req.scope
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
+    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
     const productService = container.resolve(Modules.PRODUCT)
 
-    const { data: products } = await query.graph({
-      entity: "product",
-      fields: ["id", "title"],
-    })
+    // Toplam ürün sayısını al (belleğe yüklemeden)
+    const countResult = await pgConnection.raw("SELECT count(*)::int AS cnt FROM product")
+    const totalCount = countResult.rows?.[0]?.cnt ?? countResult[0]?.[0]?.cnt ?? 0
 
-    if (!products || products.length === 0) {
+    if (totalCount === 0) {
       return res.json({
         success: true,
         message: "Silinecek ürün bulunamadı",
@@ -462,38 +465,53 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
       })
     }
 
-    let deletedCount = 0
-    const errors: string[] = []
-    const BATCH_SIZE = 250
+    logger.info(`[Seed DELETE] ${totalCount} ürün silinecek...`)
 
-    let productBatches: any[][] = []
-    for (let i = 0; i < products.length; i += BATCH_SIZE) {
-      productBatches.push(products.slice(i, i + BATCH_SIZE))
-    }
-    const deleteBatch = async (batch: any[]) => {
+    // 1. Brand-product linklerini raw SQL ile temizle
+    await pgConnection.raw("DELETE FROM product_product_brand_brand")
+    logger.info("[Seed DELETE] Brand-product linkleri silindi")
+
+    // 2. Sayfalı silme: her sayfada PAGE_SIZE kadar ürün ID çek, sil, sonraki sayfaya geç
+    const PAGE_SIZE = 500
+    let deletedCount = 0
+    let failedBatches = 0
+    let page = 0
+
+    while (true) {
+      // Her zaman offset=0 kullan çünkü silinen ürünler listeden düşer
+      const { data: products } = await query.graph({
+        entity: "product",
+        fields: ["id"],
+        pagination: { skip: 0, take: PAGE_SIZE },
+      })
+
+      if (!products || products.length === 0) break
+
+      page++
+      const ids = products.map((p: { id: string }) => p.id)
+
       try {
-        const ids = batch.map(p => p.id)
         await productService.deleteProducts(ids)
-        return ids.length
-      } catch (error: any) {
-        for (const product of batch) {
-          errors.push(`Ürün ${product.title} (${product.id}) silinirken hata: ${error.message}`)
-          logger.warn(`Failed to delete product ${product.title}: ${error.message}`)
-        }
-        return 0
+        deletedCount += ids.length
+      } catch (err: unknown) {
+        failedBatches++
+        const errMsg = err instanceof Error ? err.message : String(err)
+        logger.warn(`[Seed DELETE] Batch ${page} (${ids.length} ürün) silinirken hata: ${errMsg}`)
+      }
+
+      if (page % 5 === 0) {
+        logger.info(`[Seed DELETE] İlerleme: ${deletedCount} ürün silindi (sayfa ${page})`)
       }
     }
-    for (let i = 0; i < productBatches.length; i++) {
-      const completedCount = await deleteBatch(productBatches[i])
-      deletedCount += completedCount
-    }
+
+    logger.info(`[Seed DELETE] Tamamlandı: ${deletedCount}/${totalCount} ürün silindi`)
 
     res.json({
-      success: errors.length === 0,
+      success: failedBatches === 0,
       message: `${deletedCount} ürün silindi`,
       deleted_count: deletedCount,
-      total_count: products.length,
-      errors: errors.length > 0 ? errors : undefined,
+      total_count: totalCount,
+      failed_batches: failedBatches,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"

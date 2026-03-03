@@ -208,24 +208,21 @@ async function getRecordCount(
       return count
     }
     case "category": {
-      // TÜM kategorileri say - hiçbir filtre yok
-      const { data } = await query.graph({
-        entity: "product_category",
-        fields: ["id"],
-      })
-      const count = data?.length || 0
-      console.log(`[Sync] Total categories count: ${count}`)
-      return count
+      // Product service listAndCount ile kategori sayısını al (belleğe yüklemeden)
+      const productService = scope.resolve(Modules.PRODUCT)
+      const [, catCount] = await productService.listAndCountProductCategories({}, { take: 0 })
+      console.log(`[Sync] Total categories count: ${catCount}`)
+      return catCount
     }
     case "brand": {
       const brandService = scope.resolve(BRAND_MODULE) as BrandModuleService
-      const brands = await brandService.listBrands()
-      return brands.length
+      const [, brandCount] = await brandService.listAndCountBrands({}, { take: 0 })
+      return brandCount
     }
     case "brand_category": {
       const brandService = scope.resolve(BRAND_MODULE) as BrandModuleService
-      const brandCategories = await brandService.listBrandCategories()
-      return brandCategories.length
+      const [, catCount] = await brandService.listAndCountBrandCategories({}, { take: 0 })
+      return catCount
     }
     case "backend_seed":
       return 0
@@ -552,14 +549,14 @@ async function getRecordsBatch(
     }
     case "brand_category": {
       if (!context.brandService) return []
-      // Brand category service ile pagination
-      const brandCategories = await context.brandService.listBrandCategories()
-      
-      // Manuel pagination (service'de pagination desteği yoksa)
-      const paginatedCategories = brandCategories.slice(offset, offset + limit)
-      
+      // Brand category service ile DB-level pagination
+      const paginatedCategories = await context.brandService.listBrandCategories(
+        {},
+        { skip: offset, take: limit }
+      )
+
       // Backend "brand-categories" modül tipinde name field'ı bekliyor
-      return paginatedCategories.map((category: any) => ({
+      return paginatedCategories.map((category: { id: string; title: string; thumbnail?: string | null; metadata?: Record<string, unknown> | null; created_at?: string; updated_at?: string }) => ({
         id: category.id,
         name: category.title, // Backend'in beklediği field (name)
         title: category.title, // Orijinal field da gönder

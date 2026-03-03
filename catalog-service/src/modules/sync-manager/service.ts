@@ -90,6 +90,10 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
 
   /**
    * Batch ilerlemesini ve log satırlarını günceller (SSE ile client'a gider).
+   *
+   * Optimize: Sadece son MAX_LOG_LINES satır tutulur.
+   * Eski yöntem her batch'te TÜM mevcut logları DB'den okuyup yenisine append ediyordu,
+   * 100+ batch'te RAM ve DB payload sürekli büyüyordu.
    */
   async updateBatchProgressWithLogs(
     id: string,
@@ -98,11 +102,19 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
     failed: number,
     newLogLines: Array<{ type: "stdout" | "stderr"; line: string }>
   ) {
+    const MAX_LOG_LINES = 50
+
     const jobs = await this.listSyncJobs({ id })
     const job = Array.isArray(jobs) ? jobs[0] : jobs
     const existingMeta = (job?.metadata as Record<string, unknown> | null) ?? {}
     const existingLogs = (existingMeta.log_lines as Array<{ type: string; line: string }> | undefined) ?? []
-    const log_lines = [...existingLogs, ...newLogLines]
+
+    // Yeni logları ekle, ama sadece son MAX_LOG_LINES satırı tut
+    const combined = [...existingLogs, ...newLogLines]
+    const log_lines = combined.length > MAX_LOG_LINES
+      ? combined.slice(combined.length - MAX_LOG_LINES)
+      : combined
+
     const metadata = { ...existingMeta, log_lines }
     return await this.updateJob(id, {
       current_batch: currentBatch,
