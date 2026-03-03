@@ -3,7 +3,7 @@ import * as fs from "fs"
 import * as path from "path"
 import Papa from "papaparse"
 
-const CHUNK_SIZE = 100
+const CHUNK_SIZE = 500
 
 /**
  * CSV dosyasını streaming ile okur, belleğe tamamını yüklemeden
