@@ -1,15 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from "react"
-import { 
-  Heading, 
-  Button, 
-  Text, 
+import {
+  Heading,
+  Button,
+  Text,
   Input,
   Badge,
   IconButton,
   Kbd,
   clx,
 } from "@medusajs/ui"
-import { 
+import {
   MagnifyingGlass,
   XMark,
   ShoppingBag,
@@ -18,6 +18,7 @@ import {
 } from "@medusajs/icons"
 import { ProductRow, type Product } from "./product-row"
 import { ProductListSkeleton, ProductRowSkeleton } from "../skeleton"
+import { backendUrl } from "../../lib/config"
 
 type ProductsResponse = {
   products: Product[]
@@ -108,8 +109,8 @@ export const ProductPickerModal = ({
         params.append("q", searchTerm)
       }
       
-      const response = await fetch(`${fetchEndpoint}?${params}`, { 
-        credentials: "include" 
+      const response = await fetch(`${backendUrl}${fetchEndpoint}?${params}`, {
+        credentials: "include"
       })
       const data: ProductsResponse = await response.json()
       

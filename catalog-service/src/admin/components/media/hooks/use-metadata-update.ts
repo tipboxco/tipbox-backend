@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react"
 import { toast } from "@medusajs/ui"
+import { backendUrl } from "../../../lib/config"
 
 type UseMetadataUpdateOptions = {
   entityId: string
@@ -28,7 +29,7 @@ export function useMetadataUpdate(options: UseMetadataUpdateOptions) {
         // Replace :id placeholder with actual entity ID
         const endpoint = updateEndpoint.replace(":id", entityId)
 
-        const response = await fetch(endpoint, {
+        const response = await fetch(`${backendUrl}${endpoint}`, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },

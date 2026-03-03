@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { backendUrl } from "../../lib/config"
 import { Modal, ModalBody, ModalFooter } from "../modal"
 import {
   Button,
@@ -109,7 +110,7 @@ export function MediaPickerDialog({
         params.append("search", search)
       }
 
-      const response = await fetch(`/admin/media?${params.toString()}`, {
+      const response = await fetch(`${backendUrl}/admin/media?${params.toString()}`, {
         credentials: "include",
       })
       if (!response.ok) throw new Error("Medya listesi alınamadı")
@@ -190,7 +191,7 @@ export function MediaPickerDialog({
           formData.append("files", file)
         }
 
-        const response = await fetch("/admin/uploads", {
+        const response = await fetch(`${backendUrl}/admin/uploads`, {
           method: "POST",
           credentials: "include",
           body: formData,

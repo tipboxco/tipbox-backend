@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { backendUrl } from "../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -97,7 +98,7 @@ const BrandsPage = () => {
       const requestId = ++requestIdRef.current
       activeFetchRef.current = { requestId, controller }
 
-      const response = await fetch(`/admin/brands?${params}`, {
+      const response = await fetch(`${backendUrl}/admin/brands?${params}`, {
         credentials: "include",
         signal: controller.signal,
       })
@@ -161,7 +162,7 @@ const BrandsPage = () => {
     if (!confirmed) return
 
     try {
-      const response = await fetch(`/admin/brands/${brand.id}`, {
+      const response = await fetch(`${backendUrl}/admin/brands/${brand.id}`, {
         method: "DELETE",
         credentials: "include",
       })

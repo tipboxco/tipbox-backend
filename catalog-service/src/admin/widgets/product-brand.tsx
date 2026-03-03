@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
 import { DetailWidgetProps, AdminProduct } from "@medusajs/framework/types"
+import { backendUrl } from "../lib/config"
 import { 
   Container, 
   Text, 
@@ -69,8 +70,8 @@ const ProductBrandWidget = ({ data }: DetailWidgetProps<AdminProduct>) => {
     const fetchCurrentBrand = async () => {
       setLoading(true)
       try {
-        const response = await fetch(`/admin/products/${data.id}/brand`, { 
-          credentials: "include" 
+        const response = await fetch(`${backendUrl}/admin/products/${data.id}/brand`, {
+          credentials: "include"
         })
         const brandData = await response.json()
         
@@ -101,8 +102,8 @@ const ProductBrandWidget = ({ data }: DetailWidgetProps<AdminProduct>) => {
         params.append("q", query)
       }
       
-      const response = await fetch(`/admin/brands?${params}`, { 
-        credentials: "include" 
+      const response = await fetch(`${backendUrl}/admin/brands?${params}`, {
+        credentials: "include"
       })
       const data: BrandsResponse = await response.json()
       
@@ -137,7 +138,7 @@ const ProductBrandWidget = ({ data }: DetailWidgetProps<AdminProduct>) => {
   const handleSave = async (brand: Brand) => {
     setSaving(true)
     try {
-      const response = await fetch(`/admin/products/${data.id}/brand`, {
+      const response = await fetch(`${backendUrl}/admin/products/${data.id}/brand`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -164,7 +165,7 @@ const ProductBrandWidget = ({ data }: DetailWidgetProps<AdminProduct>) => {
   const handleRemove = async () => {
     setSaving(true)
     try {
-      const response = await fetch(`/admin/products/${data.id}/brand`, {
+      const response = await fetch(`${backendUrl}/admin/products/${data.id}/brand`, {
         method: "DELETE",
         credentials: "include",
       })

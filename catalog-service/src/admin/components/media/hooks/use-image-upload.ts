@@ -2,6 +2,7 @@ import { useState, useCallback } from "react"
 import { toast } from "@medusajs/ui"
 import { validateImageFile, fileToBase64 } from "../utils"
 import { compressImage, needsCompression } from "../utils/image-compression"
+import { backendUrl } from "../../../lib/config"
 
 type UseImageUploadOptions = {
   maxSizeMB?: number
@@ -46,7 +47,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
         }
 
         // Upload to MinIO via API
-        const response = await fetch("/admin/media", {
+        const response = await fetch(`${backendUrl}/admin/media`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -111,7 +112,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
             }
 
             // Upload to MinIO via API
-            const response = await fetch("/admin/media", {
+            const response = await fetch(`${backendUrl}/admin/media`, {
               method: "POST",
               credentials: "include",
               headers: { "Content-Type": "application/json" },

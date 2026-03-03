@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "@medusajs/ui"
+import { backendUrl } from "../../lib/config"
 import type { SyncConfig, SyncJob, SyncStats, LogLine } from "./types"
 import type { SyncFormData } from "./sync-form"
 
@@ -81,7 +82,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
   const fetchInitialData = useCallback(async () => {
     if (!configId) return
     try {
-      const response = await fetch(`/admin/sync/${configId}`, { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/${configId}`, { credentials: "include" })
       if (!response.ok) {
         navigate("/settings/sync")
         return
@@ -126,7 +127,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
       }
       const timer = setTimeout(done, SSE_CONNECT_TIMEOUT_MS)
 
-      const eventSource = new EventSource(`/admin/sync/${configId}/stream`, { withCredentials: true })
+      const eventSource = new EventSource(`${backendUrl}/admin/sync/${configId}/stream`, { withCredentials: true })
       eventSourceRef.current = eventSource
       setIsStreaming(true)
       eventSource.onopen = () => done()
@@ -186,7 +187,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
     }
     setSaving(true)
     try {
-      const response = await fetch(`/admin/sync/${configId}`, {
+      const response = await fetch(`${backendUrl}/admin/sync/${configId}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -225,7 +226,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
     }
     await connectSSE()
     try {
-      const response = await fetch(`/admin/sync/${configId}/run`, { method: "POST", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/${configId}/run`, { method: "POST", credentials: "include" })
       if (!response.ok) {
         const result = await response.json().catch(() => ({}))
         toast.error("Hata", { description: (result as { error?: string }).error || response.statusText })
@@ -335,7 +336,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
     if (cancellingJob) return
     setCancellingJob(job.id)
     try {
-      const response = await fetch(`/admin/sync/jobs/${job.id}`, { method: "DELETE", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/jobs/${job.id}`, { method: "DELETE", credentials: "include" })
       if (response.ok) toast.success("Başarılı", { description: "Job iptal edildi" })
       else {
         const error = await response.json()
@@ -352,7 +353,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
     if (!configId) return
     setDeleting(true)
     try {
-      const response = await fetch(`/admin/sync/${configId}`, { method: "DELETE", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/${configId}`, { method: "DELETE", credentials: "include" })
       if (response.ok) {
         toast.success("Başarılı", { description: "Silindi" })
         navigate("/settings/sync")
@@ -367,7 +368,7 @@ export function SyncDetailProvider({ configId, children }: SyncDetailProviderPro
   const handleToggleActive = useCallback(async () => {
     if (!configId || !config) return
     try {
-      const response = await fetch(`/admin/sync/${configId}`, {
+      const response = await fetch(`${backendUrl}/admin/sync/${configId}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

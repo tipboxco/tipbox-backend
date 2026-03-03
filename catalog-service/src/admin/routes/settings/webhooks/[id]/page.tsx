@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { backendUrl } from "../../../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -88,7 +89,7 @@ const WebhookDetailPage = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch("/admin/webhooks/events", { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/events`, { credentials: "include" })
       const data = await response.json()
       setEvents(data.events || [])
     } catch {}
@@ -98,7 +99,7 @@ const WebhookDetailPage = () => {
     if (!id) return
     setLoading(true)
     try {
-      const response = await fetch(`/admin/webhooks/${id}`, { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}`, { credentials: "include" })
       if (!response.ok) { navigate("/settings/webhooks"); return }
       const data = await response.json()
       setWebhook(data.webhook)
@@ -110,7 +111,7 @@ const WebhookDetailPage = () => {
     if (!id) return
     setLogsLoading(true)
     try {
-      const response = await fetch(`/admin/webhooks/${id}/logs?limit=100`, { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}/logs?limit=100`, { credentials: "include" })
       const data = await response.json()
       setLogs(data.logs || [])
       if (data.logs?.length > 0 && !selectedLog) setSelectedLog(data.logs[0])
@@ -121,7 +122,7 @@ const WebhookDetailPage = () => {
   const fetchStats = useCallback(async () => {
     if (!id) return
     try {
-      const response = await fetch(`/admin/webhooks/${id}/stats`, { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}/stats`, { credentials: "include" })
       const data = await response.json()
       setStats(data.stats)
     } catch {}
@@ -138,7 +139,7 @@ const WebhookDetailPage = () => {
 
     setSaving(true)
     try {
-      const response = await fetch(`/admin/webhooks/${id}`, {
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}`, {
         method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_names: data.event_names, target_url: data.target_url, secret_token: data.secret_token || null, is_active: data.is_active, metadata: parsedMetadata }),
       })
@@ -151,7 +152,7 @@ const WebhookDetailPage = () => {
   const handleToggle = async () => {
     if (!webhook || !id) return
     try {
-      const response = await fetch(`/admin/webhooks/${id}/toggle`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !webhook.is_active }) })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}/toggle`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !webhook.is_active }) })
       if (response.ok) { const d = await response.json(); setWebhook(d.webhook); toast.success("Başarılı", { description: `Webhook ${!webhook.is_active ? "aktif" : "pasif"} edildi` }) }
     } catch {}
   }
@@ -160,7 +161,7 @@ const WebhookDetailPage = () => {
     if (!id) return
     setDeleting(true)
     try {
-      const response = await fetch(`/admin/webhooks/${id}`, { method: "DELETE", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}`, { method: "DELETE", credentials: "include" })
       if (response.ok) { toast.success("Başarılı", { description: "Webhook silindi" }); navigate("/settings/webhooks") }
     } catch {}
     finally { setDeleting(false); setDeleteDialogOpen(false) }
@@ -170,7 +171,7 @@ const WebhookDetailPage = () => {
     if (!id) return
     setTesting(true)
     try {
-      const response = await fetch(`/admin/webhooks/${id}/test`, { method: "POST", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}/test`, { method: "POST", credentials: "include" })
       const result = await response.json()
       if (result.success) toast.success("Test Başarılı", { description: `HTTP ${result.status_code}` })
       else toast.error("Test Başarısız", { description: result.error })
@@ -183,7 +184,7 @@ const WebhookDetailPage = () => {
     if (!id || resending) return
     setResending(log.id)
     try {
-      const response = await fetch(`/admin/webhooks/${id}/test`, { method: "POST", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/webhooks/${id}/test`, { method: "POST", credentials: "include" })
       const result = await response.json()
       if (result.success) toast.success("Başarılı", { description: "İstek yeniden gönderildi" })
       else toast.error("Başarısız", { description: result.error })

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { backendUrl } from "../../../lib/config"
 import { Button, toast } from "@medusajs/ui"
 import { ArrowsPointingOut, PlusMini, Spinner } from "@medusajs/icons"
 import {
@@ -43,7 +44,7 @@ const SyncPage = () => {
   const fetchConfigs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const response = await fetch("/admin/sync", { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync`, { credentials: "include" })
       const data = await response.json()
       setConfigs(data.sync_configs || [])
     } catch {
@@ -55,7 +56,7 @@ const SyncPage = () => {
 
   const connectSSE = useCallback(() => {
     if (eventSourceRef.current) return
-    const eventSource = new EventSource("/admin/sync/stream", { withCredentials: true })
+    const eventSource = new EventSource(`${backendUrl}/admin/sync/stream`, { withCredentials: true })
     eventSourceRef.current = eventSource
     setIsStreaming(true)
     eventSource.onmessage = (event) => {
@@ -84,7 +85,7 @@ const SyncPage = () => {
   const fetchBackendSeeds = useCallback(async (silent = false) => {
     if (!silent) setBackendSeedLoading(true)
     try {
-      const response = await fetch("/admin/seed/backend", { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/seed/backend`, { credentials: "include" })
       const data = await response.json()
       if (response.ok && data.data?.seeds) {
         setBackendSeeds(data.data.seeds)
@@ -140,7 +141,7 @@ const SyncPage = () => {
         batch_size: data.batch_size,
         is_active: data.is_active,
       }
-      const url = editingConfig ? `/admin/sync/${editingConfig.id}` : "/admin/sync"
+      const url = editingConfig ? `${backendUrl}/admin/sync/${editingConfig.id}` : `${backendUrl}/admin/sync`
       const method = editingConfig ? "PUT" : "POST"
       const response = await fetch(url, {
         method,
@@ -166,7 +167,7 @@ const SyncPage = () => {
   const handleDelete = async (config: SyncConfig) => {
     if (!confirm(`"${config.name}" silinsin mi?`)) return
     try {
-      const response = await fetch(`/admin/sync/${config.id}`, { method: "DELETE", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/${config.id}`, { method: "DELETE", credentials: "include" })
       if (response.ok) {
         toast.success("Başarılı", { description: "Silindi" })
         fetchConfigs(true)
@@ -201,7 +202,7 @@ const SyncPage = () => {
     let fail = 0
     for (const id of selectedConfigIds) {
       try {
-        const res = await fetch(`/admin/sync/${id}`, { method: "DELETE", credentials: "include" })
+        const res = await fetch(`${backendUrl}/admin/sync/${id}`, { method: "DELETE", credentials: "include" })
         if (res.ok) ok++
         else fail++
       } catch {
@@ -218,7 +219,7 @@ const SyncPage = () => {
     if (runningSyncs.has(config.id)) return
     setRunningSyncs((prev) => new Set(prev).add(config.id))
     try {
-      const response = await fetch(`/admin/sync/${config.id}/run`, { method: "POST", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/sync/${config.id}/run`, { method: "POST", credentials: "include" })
       const result = await response.json()
       if (response.ok) {
         toast.success("Başlatıldı", { description: `${result.total_records} kayıt, ${result.total_batches} batch` })
@@ -248,7 +249,7 @@ const SyncPage = () => {
     setStreamSeedName(body?.seed_name ?? "Seed")
     setStreamJobId(null)
     try {
-      const response = await fetch("/admin/seed/backend/run", {
+      const response = await fetch(`${backendUrl}/admin/seed/backend/run`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -310,7 +311,7 @@ const SyncPage = () => {
     if (addingSeedId != null) return
     setAddingSeedId(seed.id)
     try {
-      const response = await fetch("/admin/seed/backend/ensure-config", {
+      const response = await fetch(`${backendUrl}/admin/seed/backend/ensure-config`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

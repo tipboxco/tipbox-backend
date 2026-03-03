@@ -1,14 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from "react"
-import { 
-  Heading, 
-  Button, 
-  Text, 
+import {
+  Heading,
+  Button,
+  Text,
   Input,
   Badge,
   IconButton,
   Kbd,
 } from "@medusajs/ui"
-import { 
+import {
   MagnifyingGlass,
   XMark,
   TagSolid,
@@ -17,6 +17,7 @@ import {
 } from "@medusajs/icons"
 import { BrandRow, type Brand } from "./brand-row"
 import { ProductListSkeleton, ProductRowSkeleton } from "../skeleton"
+import { backendUrl } from "../../lib/config"
 
 type BrandsResponse = {
   brands: Brand[]
@@ -119,8 +120,8 @@ export const BrandPickerModal = ({
         params.append("q", searchTerm)
       }
       
-      const response = await fetch(`${fetchEndpoint}?${params}`, { 
-        credentials: "include" 
+      const response = await fetch(`${backendUrl}${fetchEndpoint}?${params}`, {
+        credentials: "include"
       })
       
       if (!response.ok) {

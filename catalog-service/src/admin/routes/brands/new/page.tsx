@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { backendUrl } from "../../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -48,7 +49,7 @@ const BrandCreatePage = () => {
   useEffect(() => {
     const fetchBrandCategories = async () => {
       try {
-        const response = await fetch("/admin/brand-categories?limit=1000", {
+        const response = await fetch(`${backendUrl}/admin/brand-categories?limit=1000`, {
           credentials: "include",
         })
         const data = await response.json()
@@ -63,7 +64,7 @@ const BrandCreatePage = () => {
   // Image upload handler
   const handleImageUpload = async (base64String: string): Promise<string | null> => {
     try {
-      const response = await fetch("/admin/media", {
+      const response = await fetch(`${backendUrl}/admin/media`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -120,7 +121,7 @@ const BrandCreatePage = () => {
         category_id: brandCategoryId || null,
       }
       
-      const response = await fetch("/admin/brands", {
+      const response = await fetch(`${backendUrl}/admin/brands`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

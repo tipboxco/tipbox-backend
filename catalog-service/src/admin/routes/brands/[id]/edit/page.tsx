@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { backendUrl } from "../../../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -74,7 +75,7 @@ const BrandEditPage = () => {
     
     setLoading(true)
     try {
-      const response = await fetch(`/admin/brands/${id}`, { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/brands/${id}`, { credentials: "include" })
       if (!response.ok) {
         toast.error("Hata", { description: "Marka bulunamadı" })
         navigate(`/brands/${id}`)
@@ -111,7 +112,7 @@ const BrandEditPage = () => {
   useEffect(() => {
     const fetchBrandCategories = async () => {
       try {
-        const response = await fetch("/admin/brand-categories?limit=1000", {
+        const response = await fetch(`${backendUrl}/admin/brand-categories?limit=1000`, {
           credentials: "include",
         })
         const data = await response.json()
@@ -126,7 +127,7 @@ const BrandEditPage = () => {
   // Image upload handler
   const handleImageUpload = async (base64String: string): Promise<string | null> => {
     try {
-      const response = await fetch("/admin/media", {
+      const response = await fetch(`${backendUrl}/admin/media`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -183,7 +184,7 @@ const BrandEditPage = () => {
         category_id: brandCategoryId || null,
       }
       
-      const response = await fetch(`/admin/brands/${id}`, {
+      const response = await fetch(`${backendUrl}/admin/brands/${id}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { backendUrl } from "../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -81,7 +82,7 @@ const BrandCategoriesPage = () => {
         params.append("q", search)
       }
       
-      const response = await fetch(`/admin/brand-categories?${params}`, {
+      const response = await fetch(`${backendUrl}/admin/brand-categories?${params}`, {
         credentials: "include",
       })
       const data: BrandCategoriesResponse = await response.json()
@@ -139,7 +140,7 @@ const BrandCategoriesPage = () => {
     setSaving(true)
     try {
       if (editingBrandCategory) {
-        const response = await fetch(`/admin/brand-categories/${editingBrandCategory.id}`, {
+        const response = await fetch(`${backendUrl}/admin/brand-categories/${editingBrandCategory.id}`, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -157,7 +158,7 @@ const BrandCategoriesPage = () => {
           fetchBrandCategories(currentPage, itemsPerPage, searchQuery)
         }
       } else {
-        const response = await fetch("/admin/brand-categories", {
+        const response = await fetch(`${backendUrl}/admin/brand-categories`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -196,7 +197,7 @@ const BrandCategoriesPage = () => {
     if (!confirmed) return
 
     try {
-      const response = await fetch(`/admin/brand-categories/${brandCategory.id}`, {
+      const response = await fetch(`${backendUrl}/admin/brand-categories/${brandCategory.id}`, {
         method: "DELETE",
         credentials: "include",
       })

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { backendUrl } from "../../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -99,8 +100,8 @@ const BrandCategoryDetailPage = () => {
     try {
       const offset = (page - 1) * limit
       const [categoryResponse, brandsResponse] = await Promise.all([
-        fetch(`/admin/brand-categories/${id}`, { credentials: "include" }),
-        fetch(`/admin/brand-categories/${id}/brands?limit=${limit}&offset=${offset}`, { credentials: "include" })
+        fetch(`${backendUrl}/admin/brand-categories/${id}`, { credentials: "include" }),
+        fetch(`${backendUrl}/admin/brand-categories/${id}/brands?limit=${limit}&offset=${offset}`, { credentials: "include" })
       ])
       
       const categoryData = await categoryResponse.json()
@@ -219,7 +220,7 @@ const BrandCategoryDetailPage = () => {
   // Handle brand picker confirm
   const handleBrandPickerConfirm = async (brandIds: string[]) => {
     try {
-      const response = await fetch(`/admin/brand-categories/${id}/brands`, {
+      const response = await fetch(`${backendUrl}/admin/brand-categories/${id}/brands`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -252,7 +253,7 @@ const BrandCategoryDetailPage = () => {
     try {
       const brandIds = Array.from(selectedBrands)
       const deletePromises = brandIds.map(brandId =>
-        fetch(`/admin/brand-categories/${id}/brands`, {
+        fetch(`${backendUrl}/admin/brand-categories/${id}/brands`, {
           method: "DELETE",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -282,7 +283,7 @@ const BrandCategoryDetailPage = () => {
 
     setSaving(true)
     try {
-      const response = await fetch(`/admin/brand-categories/${id}`, {
+      const response = await fetch(`${backendUrl}/admin/brand-categories/${id}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -320,7 +321,7 @@ const BrandCategoryDetailPage = () => {
 
     setDeleting(true)
     try {
-      const response = await fetch(`/admin/brand-categories/${id}`, {
+      const response = await fetch(`${backendUrl}/admin/brand-categories/${id}`, {
         method: "DELETE",
         credentials: "include",
       })
@@ -346,7 +347,7 @@ const BrandCategoryDetailPage = () => {
     setDeletingAllBrands(true)
     try {
       // Tüm brandleri getir
-      const allBrandsResponse = await fetch(`/admin/brand-categories/${id}/brands/all`, {
+      const allBrandsResponse = await fetch(`${backendUrl}/admin/brand-categories/${id}/brands/all`, {
         credentials: "include",
       })
       const allBrandsData: BrandsResponse = await allBrandsResponse.json()
@@ -360,7 +361,7 @@ const BrandCategoryDetailPage = () => {
       }
 
       const deletePromises = allBrandsData.brands.map(brand =>
-        fetch(`/admin/brand-categories/${id}/brands`, {
+        fetch(`${backendUrl}/admin/brand-categories/${id}/brands`, {
           method: "DELETE",
           credentials: "include",
           headers: { "Content-Type": "application/json" },

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { backendUrl } from "../../../lib/config"
 import { 
   Container, 
   Heading, 
@@ -110,8 +111,8 @@ const BrandDetailPage = () => {
     try {
       const offset = (page - 1) * limit
       const [brandResponse, productsResponse] = await Promise.all([
-        fetch(`/admin/brands/${id}`, { credentials: "include" }),
-        fetch(`/admin/brands/${id}/products?limit=${limit}&offset=${offset}`, { credentials: "include" })
+        fetch(`${backendUrl}/admin/brands/${id}`, { credentials: "include" }),
+        fetch(`${backendUrl}/admin/brands/${id}/products?limit=${limit}&offset=${offset}`, { credentials: "include" })
       ])
       
       const brandData = await brandResponse.json()
@@ -216,7 +217,7 @@ const BrandDetailPage = () => {
 
     setDeleting(true)
     try {
-      const response = await fetch(`/admin/brands/${id}`, { method: "DELETE", credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/brands/${id}`, { method: "DELETE", credentials: "include" })
       if (response.ok) {
         toast.success("Başarılı", { description: "Marka silindi" })
         navigate("/brands")
@@ -237,7 +238,7 @@ const BrandDetailPage = () => {
     
     setDeletingAllProducts(true)
     try {
-      const response = await fetch(`/admin/brands/${id}/products/all`, {
+      const response = await fetch(`${backendUrl}/admin/brands/${id}/products/all`, {
         method: "DELETE",
         credentials: "include",
       })
@@ -272,7 +273,7 @@ const BrandDetailPage = () => {
       const batch = productIds.slice(i, i + batchSize)
       const results = await Promise.allSettled(
         batch.map(productId =>
-          fetch(`/admin/brands/${id}/products`, {
+          fetch(`${backendUrl}/admin/brands/${id}/products`, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
@@ -290,7 +291,7 @@ const BrandDetailPage = () => {
   const handleRemoveProduct = async (productId: string) => {
     if (!id) return
     try {
-      const response = await fetch(`/admin/brands/${id}/products`, {
+      const response = await fetch(`${backendUrl}/admin/brands/${id}/products`, {
         method: "DELETE",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -310,7 +311,7 @@ const BrandDetailPage = () => {
     try {
       await Promise.all(
         Array.from(selectedBrandProducts).map(productId =>
-          fetch(`/admin/brands/${id}/products`, {
+          fetch(`${backendUrl}/admin/brands/${id}/products`, {
             method: "DELETE",
             credentials: "include",
             headers: { "Content-Type": "application/json" },

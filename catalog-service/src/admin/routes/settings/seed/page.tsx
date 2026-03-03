@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import { backendUrl } from "../../../lib/config"
 import {
   Container,
   Heading,
@@ -60,7 +61,7 @@ const SeedPage = () => {
   const fetchSeedData = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/admin/seed", { credentials: "include" })
+      const response = await fetch(`${backendUrl}/admin/seed`, { credentials: "include" })
       const data = await response.json()
       setSeedData(data.seed_data)
     } catch (error) {
@@ -81,7 +82,7 @@ const SeedPage = () => {
     setStatus((prev) => ({ ...prev, [type]: "installing" }))
     
     try {
-      const response = await fetch(`/admin/seed/${type}`, {
+      const response = await fetch(`${backendUrl}/admin/seed/${type}`, {
         method: "POST",
         credentials: "include",
       })
@@ -180,7 +181,7 @@ const SeedPage = () => {
 
     setDeleting(true)
     try {
-      const response = await fetch(`/admin/seed/${deleteType}`, {
+      const response = await fetch(`${backendUrl}/admin/seed/${deleteType}`, {
         method: "DELETE",
         credentials: "include",
       })
