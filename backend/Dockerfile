@@ -8,7 +8,7 @@ RUN apk add --no-cache python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/pyth
 # pnpm kullan (monorepo ile uyumlu)
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Package files, pnpm config ve Prisma schema'yi kopyala
+# Package files, pnpm config ve Prisma schema'yi kopyala 
 COPY package.json .npmrc ./
 COPY pnpm-lock.yaml* ./
 COPY prisma ./prisma
