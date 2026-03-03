@@ -234,6 +234,7 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
       - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
+      - MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-https://api-test.tipbox.co/catalog}
       - STORE_CORS=${STORE_CORS:-https://api-test.tipbox.co,http://localhost:8000,http://localhost:3000}
       - ADMIN_CORS=${ADMIN_CORS:-https://api-test.tipbox.co,http://localhost:5175}
       - AUTH_CORS=${AUTH_CORS:-https://api-test.tipbox.co,http://localhost:5175,http://localhost:8000}
