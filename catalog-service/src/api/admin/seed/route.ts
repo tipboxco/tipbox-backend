@@ -3,6 +3,39 @@ import * as fs from "fs"
 import * as path from "path"
 import Papa from "papaparse"
 
+const CHUNK_SIZE = 100
+
+/**
+ * CSV dosyasını streaming ile okur, belleğe tamamını yüklemeden
+ * CHUNK_SIZE'lık parçalar halinde işler ve satır sayısını döndürür.
+ */
+function countCsvRows(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(filePath)) {
+      resolve(0)
+      return
+    }
+
+    let count = 0
+    const readStream = fs.createReadStream(filePath, { encoding: "utf-8" })
+
+    Papa.parse(readStream, {
+      header: true,
+      skipEmptyLines: true,
+      chunkSize: CHUNK_SIZE,
+      chunk: (results: Papa.ParseResult<Record<string, unknown>>) => {
+        count += results.data.length
+      },
+      complete: () => {
+        resolve(count)
+      },
+      error: (error: Error) => {
+        reject(error)
+      },
+    })
+  })
+}
+
 /**
  * GET /admin/seed
  * Seed dataların bilgilerini döndürür
@@ -10,67 +43,46 @@ import Papa from "papaparse"
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
     const csvDataPath = path.join(process.cwd(), "src", "scripts", "tipbox-datas")
-    
-    // CSV dosyalarını oku ve sayıları hesapla
+
+    const categoriesCsvPath = path.join(csvDataPath, "categories.csv")
+    const brandsCsvPath = path.join(csvDataPath, "brands_2.csv")
+    const productsCsvPath = path.join(csvDataPath, "products_with_images.csv")
+
     let categoriesCount = 0
     let brandsCount = 0
     let productsCount = 0
-    
+
     try {
-      const categoriesCsvPath = path.join(csvDataPath, "categories.csv")
-      if (fs.existsSync(categoriesCsvPath)) {
-        const categoriesCsvContent = fs.readFileSync(categoriesCsvPath, "utf-8")
-        const categoriesData = Papa.parse(categoriesCsvContent, {
-          header: true,
-          skipEmptyLines: true,
-        }).data as any[]
-        categoriesCount = categoriesData?.length
-      }
+      categoriesCount = await countCsvRows(categoriesCsvPath)
     } catch (error) {
       console.error("Categories CSV okuma hatası:", error)
     }
-    
+
     try {
-      const brandsCsvPath = path.join(csvDataPath, "brands_2.csv")
-      if (fs.existsSync(brandsCsvPath)) {
-        const brandsCsvContent = fs.readFileSync(brandsCsvPath, "utf-8")
-        const brandsData = Papa.parse(brandsCsvContent, {
-          header: true,
-          skipEmptyLines: true,
-        }).data as any[]
-        brandsCount = brandsData?.length
-      }
+      brandsCount = await countCsvRows(brandsCsvPath)
     } catch (error) {
       console.error("Brands CSV okuma hatası:", error)
     }
-    
+
     try {
-      const productsCsvPath = path.join(csvDataPath, "products_with_images.csv")
-      if (fs.existsSync(productsCsvPath)) {
-        const productsCsvContent = fs.readFileSync(productsCsvPath, "utf-8")
-        const productsData = Papa.parse(productsCsvContent, {
-          header: true,
-          skipEmptyLines: true,
-        }).data as any[]
-        productsCount = productsData.length
-      }
+      productsCount = await countCsvRows(productsCsvPath)
     } catch (error) {
       console.error("Products CSV okuma hatası:", error)
     }
-    
+
     res.json({
       seed_data: {
         categories: {
           count: categoriesCount,
-          file_exists: fs.existsSync(path.join(csvDataPath, "categories.csv")),
+          file_exists: fs.existsSync(categoriesCsvPath),
         },
         brands: {
           count: brandsCount,
-          file_exists: fs.existsSync(path.join(csvDataPath, "brands_2.csv")),
+          file_exists: fs.existsSync(brandsCsvPath),
         },
         products: {
           count: productsCount,
-          file_exists: fs.existsSync(path.join(csvDataPath, "products_with_images.csv")),
+          file_exists: fs.existsSync(productsCsvPath),
         },
       },
     })
