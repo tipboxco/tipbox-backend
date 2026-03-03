@@ -19,6 +19,7 @@ import { BrandRow, type Brand } from "./brand-row"
 import { ProductListSkeleton, ProductRowSkeleton } from "../skeleton"
 import { backendUrl } from "../../lib/config"
 
+
 type BrandsResponse = {
   brands: Brand[]
   count: number
