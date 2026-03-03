@@ -2,8 +2,9 @@ import { loadEnv, defineConfig, Modules } from '@medusajs/framework/utils'
 
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 module.exports = defineConfig({
-  admin:{
-        backendUrl: process.env.MEDUSA_BACKEND_URL || "http://localhost:5175",
+  admin: {
+    path: process.env.MEDUSA_ADMIN_PATH || "/app",
+    backendUrl: process.env.MEDUSA_BACKEND_URL || undefined,
   },
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
