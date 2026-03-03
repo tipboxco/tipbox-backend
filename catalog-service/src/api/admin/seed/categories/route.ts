@@ -110,8 +110,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
  * DELETE /admin/seed/categories
  * Tüm kategorileri siler
  *
- * Optimize: Tek seferde tüm kategoriler yüklenir, topological sort (leaf-first) yapılır,
- * batch halinde silinir. Eski yöntem: her iterasyonda TÜM kategoriler yeniden yükleniyordu.
+ * Strateji: Iteratif leaf-first silme.
+ * Her turda child'i olmayan kategorileri (leaf) bulup siler,
+ * bu sayede parent'lar bir sonraki turda leaf olur.
+ * parent_category_id alanina bagimsiz calisir (category_children relation kullanir).
  */
 export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
@@ -120,13 +122,13 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
     const productService = container.resolve(Modules.PRODUCT)
 
-    // 1. Tek seferde tüm kategorileri yükle (sadece id + parent_category_id)
-    const { data: categories } = await query.graph({
+    // Ilk sayimi al
+    const { data: allCategories } = await query.graph({
       entity: "product_category",
-      fields: ["id", "parent_category_id"],
+      fields: ["id"],
     })
 
-    if (!categories || categories.length === 0) {
+    if (!allCategories || allCategories.length === 0) {
       return res.json({
         success: true,
         message: "Silinecek kategori bulunamadı",
@@ -134,104 +136,82 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
       })
     }
 
-    logger.info(`[Seed DELETE] ${categories.length} kategori silinecek...`)
+    const totalCount = allCategories.length
+    logger.info(`[Seed DELETE] ${totalCount} kategori silinecek...`)
 
-    // 2. Topological sort: leaf-first (en derin child'lar önce, parent'lar sona)
-    const childrenMap = new Map<string, string[]>()
-    const categoryIds = new Set<string>()
-
-    for (const cat of categories) {
-      categoryIds.add(cat.id)
-      if (cat.parent_category_id) {
-        const children = childrenMap.get(cat.parent_category_id)
-        if (children) {
-          children.push(cat.id)
-        } else {
-          childrenMap.set(cat.parent_category_id, [cat.id])
-        }
-      }
-    }
-
-    // Kahn's algorithm — leaf-first (reverse topological order)
-    const inDegree = new Map<string, number>()
-    for (const id of categoryIds) {
-      inDegree.set(id, 0)
-    }
-    for (const [, children] of childrenMap) {
-      for (const childId of children) {
-        if (categoryIds.has(childId)) {
-          inDegree.set(childId, (inDegree.get(childId) ?? 0) + 1)
-        }
-      }
-    }
-
-    // Parent'lar üzerinden child'lara baktığımızda, "in-degree" burada
-    // parent → children yönünde. Leaf node'lar = child'ı olmayanlar.
-    // Leaf-first silme için: child'ı olmayanlardan başla, onları sildikçe parent'ları da leaf olur.
-    const leafDegree = new Map<string, number>()
-    for (const id of categoryIds) {
-      leafDegree.set(id, (childrenMap.get(id) ?? []).filter(c => categoryIds.has(c)).length)
-    }
-
-    const queue: string[] = []
-    for (const [id, degree] of leafDegree) {
-      if (degree === 0) queue.push(id)
-    }
-
-    const sortedIds: string[] = []
-    while (queue.length > 0) {
-      const id = queue.shift()!
-      sortedIds.push(id)
-
-      // Bu node'un parent'ının child sayısını azalt
-      const cat = categories.find(c => c.id === id)
-      if (cat?.parent_category_id && categoryIds.has(cat.parent_category_id)) {
-        const parentDegree = (leafDegree.get(cat.parent_category_id) ?? 1) - 1
-        leafDegree.set(cat.parent_category_id, parentDegree)
-        if (parentDegree === 0) {
-          queue.push(cat.parent_category_id)
-        }
-      }
-    }
-
-    // Circular reference varsa, kalan ID'leri de ekle
-    if (sortedIds.length < categories.length) {
-      const sortedSet = new Set(sortedIds)
-      for (const id of categoryIds) {
-        if (!sortedSet.has(id)) sortedIds.push(id)
-      }
-      logger.warn(`[Seed DELETE] ${categories.length - sortedIds.length + (categories.length - new Set(sortedIds).size)} kategori circular reference nedeniyle zorla eklendi`)
-    }
-
-    // 3. Batch halinde sil (leaf-first sırayla, 50'lik batch)
-    const DELETE_BATCH_SIZE = 50
     let deletedCount = 0
-    let failedBatches = 0
+    let round = 0
+    const MAX_ROUNDS = 20 // sonsuz donguye karsi koruma
 
-    for (let i = 0; i < sortedIds.length; i += DELETE_BATCH_SIZE) {
-      const batchIds = sortedIds.slice(i, i + DELETE_BATCH_SIZE)
-      try {
-        await productService.deleteProductCategories(batchIds)
-        deletedCount += batchIds.length
-      } catch (err: unknown) {
-        failedBatches++
-        const errMsg = err instanceof Error ? err.message : String(err)
-        logger.warn(`[Seed DELETE] Kategori batch ${Math.floor(i / DELETE_BATCH_SIZE) + 1} silinirken hata: ${errMsg}`)
+    while (round < MAX_ROUNDS) {
+      round++
+
+      // Her turda tum kategorileri children bilgisiyle cek
+      const { data: categories } = await query.graph({
+        entity: "product_category",
+        fields: ["id", "category_children.id"],
+      })
+
+      if (!categories || categories.length === 0) break
+
+      // Leaf kategorileri bul (child'i olmayanlar)
+      const leafIds = categories
+        .filter((cat) => {
+          const children = (cat as Record<string, unknown>).category_children as
+            | { id: string }[]
+            | undefined
+          return !children || children.length === 0
+        })
+        .map((cat) => cat.id)
+
+      if (leafIds.length === 0) {
+        logger.warn(
+          `[Seed DELETE] Tur ${round}: Leaf kategori bulunamadi, ${categories.length} kategori kaldi (circular reference olabilir)`,
+        )
+        // Circular reference durumunda tek tek silmeyi dene
+        for (const cat of categories) {
+          try {
+            await productService.deleteProductCategories([cat.id])
+            deletedCount++
+          } catch {
+            // skip
+          }
+        }
+        break
       }
 
-      if ((i / DELETE_BATCH_SIZE + 1) % 5 === 0) {
-        logger.info(`[Seed DELETE] Kategori ilerleme: ${deletedCount}/${categories.length}`)
+      // Leaf'leri batch halinde sil
+      const BATCH_SIZE = 50
+      for (let i = 0; i < leafIds.length; i += BATCH_SIZE) {
+        const batch = leafIds.slice(i, i + BATCH_SIZE)
+        try {
+          await productService.deleteProductCategories(batch)
+          deletedCount += batch.length
+        } catch {
+          // Batch basarisiz olursa tek tek sil
+          for (const id of batch) {
+            try {
+              await productService.deleteProductCategories([id])
+              deletedCount++
+            } catch {
+              // skip
+            }
+          }
+        }
       }
+
+      logger.info(
+        `[Seed DELETE] Tur ${round}: ${leafIds.length} leaf silindi, toplam ${deletedCount}/${totalCount}`,
+      )
     }
 
-    logger.info(`[Seed DELETE] Tamamlandı: ${deletedCount}/${categories.length} kategori silindi`)
+    logger.info(`[Seed DELETE] Tamamlandı: ${deletedCount}/${totalCount} kategori silindi`)
 
     res.json({
-      success: failedBatches === 0,
+      success: deletedCount === totalCount,
       message: `${deletedCount} kategori silindi`,
       deleted_count: deletedCount,
-      total_count: categories.length,
-      failed_batches: failedBatches,
+      total_count: totalCount,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
