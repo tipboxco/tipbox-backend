@@ -2,7 +2,7 @@ import {
   MedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http"
-import { Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { Modules } from "@medusajs/framework/utils"
 import { IEventBusModuleService } from "@medusajs/framework/types"
 import { BRAND_MODULE } from "../../../../modules/brand"
 import BrandModuleService from "../../../../modules/brand/service"
@@ -13,10 +13,10 @@ type UpdateBrandType = {
   website_url?: string | null
   logo_url?: string | null
   banner_url?: string | null
-  metadata?: any | null
+  metadata?: Record<string, unknown> | null
   rank?: number | null
   ispopular?: boolean | null
-  tags?: any | null
+  tags?: Record<string, unknown> | null
   category_id?: string | null
 }
 
@@ -26,34 +26,18 @@ export const GET = async (
   res: MedusaResponse
 ) => {
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const { id } = req.params
-  
-  const brand = await brandModuleService.retrieveBrand(id)
-  
-  // Category bilgisini getir
-  let category = null
-  if (brand.category_id) {
-    try {
-      const { data: categoryData } = await query.graph({
-        entity: "brand_category",
-        fields: ["id", "title"],
-        filters: {
-          id: brand.category_id,
-        },
-      })
-      if (categoryData[0]) {
-        category = {
-          id: categoryData[0].id,
-          title: categoryData[0].title,
-        }
-      }
-    } catch {
-      // Category bulunamazsa null
-    }
-  }
-  
-  res.json({ 
+
+  // Tek sorgu ile brand + category relation
+  const brand = await brandModuleService.retrieveBrand(id, {
+    relations: ["category"],
+  })
+
+  const category = brand.category
+    ? { id: (brand.category as Record<string, unknown>).id, title: (brand.category as Record<string, unknown>).title }
+    : null
+
+  res.json({
     brand: {
       ...brand,
       category,
@@ -69,22 +53,19 @@ export const PUT = async (
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
   const eventBus = req.scope.resolve<IEventBusModuleService>(Modules.EVENT_BUS)
   const { id } = req.params
-  
+
   const updateData = req.body as UpdateBrandType
-  
+
   try {
     // Güncellemeden önce mevcut brand'i al (değişiklikleri karşılaştırmak için)
     const previousBrand = await brandModuleService.retrieveBrand(id)
-    
-    const brands = await brandModuleService.updateBrands({...updateData,id})
-    
-    // updateBrands array döndürür, ilk elemanı al
-    const brand = Array.isArray(brands) ? brands[0] : brands
-    
-    // Güncellenmiş brand'i tekrar çek
-    const updatedBrand = await brandModuleService.retrieveBrand(id)
-    
-    // Event emit - Tam veri ile
+
+    const brands = await brandModuleService.updateBrands({ ...updateData, id })
+
+    // updateBrands döndürdüğü sonucu kullan — gereksiz re-fetch kaldırıldı
+    const updatedBrand = Array.isArray(brands) ? brands[0] : brands
+
+    // Event emit
     await eventBus.emit({
       name: "brand.updated",
       data: {
@@ -100,13 +81,14 @@ export const PUT = async (
         changes: updateData,
       },
     })
-    
-    res.json({ brand: updatedBrand || brand })
-  } catch (error: any) {
-    console.error("Brand update error:", error)
-    res.status(500).json({ 
+
+    res.json({ brand: updatedBrand })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand update error:", message)
+    res.status(500).json({
       error: "Marka güncellenirken hata oluştu",
-      message: error.message 
+      message,
     })
   }
 }
@@ -119,7 +101,7 @@ export const DELETE = async (
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
   const eventBus = req.scope.resolve<IEventBusModuleService>(Modules.EVENT_BUS)
   const { id } = req.params
-  
+
   // Silmeden önce brand bilgisini al (event için tam veri)
   let brandData: Record<string, unknown> = { id }
   try {
@@ -135,15 +117,14 @@ export const DELETE = async (
   } catch {
     // Brand bulunamazsa sadece id ile devam et
   }
-  
+
   await brandModuleService.deleteBrands(id)
-  
-  // Event emit - Tam veri ile
+
+  // Event emit
   await eventBus.emit({
     name: "brand.deleted",
     data: brandData,
   })
-  
+
   res.json({ id, object: "brand", deleted: true })
 }
-

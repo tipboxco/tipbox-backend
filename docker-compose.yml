@@ -1,5 +1,7 @@
 # Tüm servisler proje kökündeki .env dosyasını kullanır.
 # cp .env.example .env ile oluşturun.
+#
+# 4GB RAM sunucu için optimize edilmiş development yapılandırması
 services:
   postgres:
     image: postgres:15-alpine
@@ -15,6 +17,22 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - tipbox_network
+    command: >
+      postgres
+        -c shared_buffers=128MB
+        -c effective_cache_size=256MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c max_connections=50
+        -c checkpoint_completion_target=0.9
+        -c wal_buffers=4MB
+        -c random_page_cost=1.1
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -36,6 +54,12 @@ services:
         condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     networks:
       - tipbox_network
 
@@ -50,8 +74,15 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_CACHE: "off"
     volumes:
       - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
     networks:
       - tipbox_network
     healthcheck:
@@ -69,7 +100,13 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     networks:
       - tipbox_network
     healthcheck:
@@ -92,7 +129,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=768
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tipbox_dev}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -133,6 +170,12 @@ services:
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
     working_dir: /app
     command: pnpm run dev
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     networks:
       - tipbox_network
     healthcheck:
@@ -154,6 +197,12 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
     networks:
       - tipbox_network
     healthcheck:
@@ -179,6 +228,12 @@ services:
       - ./backend/prisma:/app/prisma:ro
     working_dir: /app
     command: sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm add prisma@6.19.2 @prisma/client@6.19.2 && npx prisma studio --port 5555 --browser none"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+        reservations:
+          memory: 64M
     networks:
       - tipbox_network
 
@@ -202,7 +257,7 @@ services:
     environment:
       - PORT=5175
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=3072
+      - NODE_OPTIONS=--max-old-space-size=896
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
@@ -221,14 +276,14 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
     volumes:
       - ./catalog-service:/server
-      - /server/node_modules
+      - catalog_service_node_modules:/server/node_modules
     working_dir: /server
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 1200M
         reservations:
-          memory: 1G
+          memory: 384M
     networks:
       - tipbox_network
     healthcheck:
@@ -257,6 +312,12 @@ services:
       - admin_panel_node_modules:/app/node_modules
     working_dir: /app
     command: pnpm run dev
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 128M
     networks:
       - tipbox_network
 

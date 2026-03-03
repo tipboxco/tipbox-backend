@@ -2,12 +2,11 @@ import {
   MedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http"
-import { 
+import {
   updateBrandCategoryWorkflow,
 } from "../../../../workflows/update-brand-category"
 import { BRAND_MODULE } from "../../../../modules/brand"
 import BrandModuleService from "../../../../modules/brand/service"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 type PutAdminUpdateBrandCategoryType = {
   title?: string
@@ -20,47 +19,48 @@ export const GET = async (
   res: MedusaResponse
 ) => {
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const { id } = req.params
 
   try {
     const brandCategory = await brandModuleService.retrieveBrandCategory(id)
-    
+
     if (!brandCategory) {
       return res.status(404).json({
         error: "Brand kategorisi bulunamadı",
       })
     }
 
-    // Brand'leri getir - category_id'si bu kategoriye eşit olan brandleri bul
-    let brands: any[] = []
-    try {
-      const allBrands = await brandModuleService.listBrands()
-      brands = allBrands
-        .filter((brand: any) => brand.category_id === id)
-        .map((brand: any) => ({
-          id: brand.id,
-          name: brand.name,
-          logo_url: brand.logo_url || null,
-        }))
-    } catch (error) {
-      console.error("Brand'ler yüklenirken hata:", error)
-    }
+    // DB seviyesinde filtreleme — sadece bu kategoriye ait brand'leri çek
+    const brands = await brandModuleService.listBrands(
+      { category_id: id },
+      { select: ["id", "name", "logo_url"] }
+    )
+
+    const formattedBrands = brands.map((brand: Record<string, unknown>) => ({
+      id: brand.id,
+      name: brand.name,
+      logo_url: brand.logo_url || null,
+    }))
 
     res.json({
       brand_category: {
         id: brandCategory.id,
         title: brandCategory.title,
         thumbnail: brandCategory.thumbnail || null,
-        created_at: brandCategory.created_at?.toISOString(),
-        updated_at: brandCategory.updated_at?.toISOString(),
-        brands,
+        created_at: brandCategory.created_at instanceof Date
+          ? brandCategory.created_at.toISOString()
+          : brandCategory.created_at,
+        updated_at: brandCategory.updated_at instanceof Date
+          ? brandCategory.updated_at.toISOString()
+          : brandCategory.updated_at,
+        brands: formattedBrands,
       },
     })
-  } catch (error: any) {
-    console.error("Brand kategorisi yüklenirken hata:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand kategorisi yüklenirken hata:", message)
     res.status(500).json({
-      error: error.message || "Brand kategorisi yüklenirken bir hata oluştu",
+      error: message || "Brand kategorisi yüklenirken bir hata oluştu",
     })
   }
 }
@@ -93,11 +93,11 @@ export const DELETE = async (
   try {
     await brandModuleService.deleteBrandCategories(id)
     res.status(204).send()
-  } catch (error: any) {
-    console.error("Brand kategorisi silinirken hata:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand kategorisi silinirken hata:", message)
     res.status(500).json({
-      error: error.message || "Brand kategorisi silinirken bir hata oluştu",
+      error: message || "Brand kategorisi silinirken bir hata oluştu",
     })
   }
 }
-

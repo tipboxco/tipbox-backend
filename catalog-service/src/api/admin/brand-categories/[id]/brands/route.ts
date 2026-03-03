@@ -13,49 +13,49 @@ type BulkLinkBrandsType = {
   brand_ids: string[]
 }
 
-// GET /admin/brand-categories/:id/brands - Brand category'ye bağlı brandleri getir
+// GET /admin/brand-categories/:id/brands - Brand category'ye bağlı brandleri getir (DB-level pagination)
 export const GET = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
   const { id: brandCategoryId } = req.params
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  
-  // Query parametreleri
+
   const limit = parseInt(req.query.limit as string) || 20
   const offset = parseInt(req.query.offset as string) || 0
-  
+
   try {
-    // Tüm brandleri getir
-    const allBrands = await brandModuleService.listBrands()
-    
-    // category_id'si bu kategoriye eşit olan brandleri filtrele
-    const categoryBrands = allBrands.filter((brand: any) => brand.category_id === brandCategoryId)
-    
-    // Pagination uygula
-    const totalCount = categoryBrands.length
-    const brands = categoryBrands.slice(offset, offset + limit)
-    
-    // Date'leri string'e çevir
-    const formattedBrands = brands.map((brand: any) => ({
+    // DB seviyesinde filtreleme ve pagination
+    const [brands, totalCount] = await brandModuleService.listAndCountBrands(
+      { category_id: brandCategoryId },
+      {
+        skip: offset,
+        take: limit,
+        order: { name: "ASC" },
+        select: ["id", "name", "logo_url", "category_id", "created_at", "updated_at"],
+      }
+    )
+
+    const formattedBrands = brands.map((brand: Record<string, unknown>) => ({
       id: brand.id,
       name: brand.name,
       logo_url: brand.logo_url || null,
       category_id: brand.category_id || null,
-      created_at: brand.created_at?.toISOString(),
-      updated_at: brand.updated_at?.toISOString(),
+      created_at: brand.created_at instanceof Date ? brand.created_at.toISOString() : brand.created_at,
+      updated_at: brand.updated_at instanceof Date ? brand.updated_at.toISOString() : brand.updated_at,
     }))
-    
-    res.json({ 
+
+    res.json({
       brands: formattedBrands,
       count: totalCount,
       limit,
       offset,
     })
-  } catch (error: any) {
-    console.error("Brand'ler yüklenirken hata:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand'ler yüklenirken hata:", message)
     res.status(500).json({
-      error: error.message || "Brand'ler yüklenirken bir hata oluştu",
+      error: message || "Brand'ler yüklenirken bir hata oluştu",
     })
   }
 }
@@ -68,35 +68,36 @@ export const POST = async (
   const { id: brandCategoryId } = req.params
   const body = req.body as LinkBrandType | BulkLinkBrandsType
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  
+
   try {
-    // Toplu işlem kontrolü
     if ("brand_ids" in body && Array.isArray(body.brand_ids)) {
-      // Bulk işlem
+      // Bulk işlem — paralel batch (10'arlı)
       const brandIds = body.brand_ids
+      const BATCH_SIZE = 10
       const results: Array<{ brand_id: string; success: boolean; error?: string }> = []
-      
-      for (const brandId of brandIds) {
-        try {
-          // Brand'in category_id'sini güncelle
-          await brandModuleService.updateBrands({
-            id: brandId,
-            category_id: brandCategoryId,
+
+      for (let i = 0; i < brandIds.length; i += BATCH_SIZE) {
+        const batch = brandIds.slice(i, i + BATCH_SIZE)
+        const batchResults = await Promise.all(
+          batch.map(async (brandId) => {
+            try {
+              await brandModuleService.updateBrands({
+                id: brandId,
+                category_id: brandCategoryId,
+              })
+              return { brand_id: brandId, success: true }
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : "Brand güncellenemedi"
+              return { brand_id: brandId, success: false, error: message }
+            }
           })
-          
-          results.push({ brand_id: brandId, success: true })
-        } catch (error: any) {
-          results.push({ 
-            brand_id: brandId, 
-            success: false, 
-            error: error.message || "Brand güncellenemedi" 
-          })
-        }
+        )
+        results.push(...batchResults)
       }
-      
+
       const successCount = results.filter(r => r.success).length
       const failCount = results.filter(r => !r.success).length
-      
+
       return res.json({
         success: failCount === 0,
         brand_category_id: brandCategoryId,
@@ -108,23 +109,23 @@ export const POST = async (
     } else {
       // Tek brand işlemi
       const { brand_id: brandId } = body as LinkBrandType
-      
-      // Brand'in category_id'sini güncelle
+
       await brandModuleService.updateBrands({
         id: brandId,
         category_id: brandCategoryId,
       })
-      
-      res.json({ 
-        success: true, 
-        brand_category_id: brandCategoryId, 
-        brand_id: brandId 
+
+      res.json({
+        success: true,
+        brand_category_id: brandCategoryId,
+        brand_id: brandId,
       })
     }
-  } catch (error: any) {
-    console.error("Brand category'ye brand eklenirken hata:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand category'ye brand eklenirken hata:", message)
     res.status(500).json({
-      error: error.message || "Brand category'ye brand eklenirken bir hata oluştu",
+      error: message || "Brand category'ye brand eklenirken bir hata oluştu",
     })
   }
 }
@@ -137,30 +138,28 @@ export const DELETE = async (
   const { id: brandCategoryId } = req.params
   const { brand_id: brandId } = req.body as LinkBrandType
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  
+
   try {
-    // Brand'in mevcut category_id'sini kontrol et
     const brand = await brandModuleService.retrieveBrand(brandId)
-    
-    // Eğer brand'in category_id'si bu kategoriye eşitse, null yap
+
     if (brand.category_id === brandCategoryId) {
       await brandModuleService.updateBrands({
         id: brandId,
         category_id: null,
       })
     }
-    
-    res.json({ 
-      success: true, 
-      brand_category_id: brandCategoryId, 
+
+    res.json({
+      success: true,
+      brand_category_id: brandCategoryId,
       brand_id: brandId,
-      deleted: true 
+      deleted: true,
     })
-  } catch (error: any) {
-    console.error("Brand category'den brand kaldırılırken hata:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata"
+    console.error("Brand category'den brand kaldırılırken hata:", message)
     res.status(500).json({
-      error: error.message || "Brand category'den brand kaldırılırken bir hata oluştu",
+      error: message || "Brand category'den brand kaldırılırken bir hata oluştu",
     })
   }
 }
-

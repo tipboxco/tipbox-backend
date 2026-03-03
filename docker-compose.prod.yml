@@ -1,5 +1,7 @@
 # Production: Proje kökündeki tek .env kullanılır.
 # cp .env.example .env ile oluşturup production değerlerini girin.
+#
+# 4GB RAM sunucu için optimize edilmiş production yapılandırması
 services:
   postgres:
     image: postgres:15-alpine
@@ -15,6 +17,22 @@ services:
       - postgres_prod_data:/var/lib/postgresql/data
     networks:
       - tipbox_network
+    command: >
+      postgres
+        -c shared_buffers=128MB
+        -c effective_cache_size=256MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c max_connections=50
+        -c checkpoint_completion_target=0.9
+        -c wal_buffers=4MB
+        -c random_page_cost=1.1
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user}"]
       interval: 10s
@@ -33,10 +51,17 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_CACHE: "off"
     volumes:
       - minio_prod_data:/data
     networks:
       - tipbox_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -54,9 +79,15 @@ services:
       - redis_prod_data:/data
     networks:
       - tipbox_network
-    command: redis-server --appendonly yes --requirepass tipbox_redis_prod
+    command: redis-server --appendonly yes --requirepass tipbox_redis_prod --maxmemory 200mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "redis-cli", "-a", "tipbox_redis_prod", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -72,7 +103,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=768
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - PORT=3000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_prod_password}@postgres:5432/${POSTGRES_DB:-tipbox_prod}
@@ -96,6 +127,12 @@ services:
     volumes:
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     networks:
       - tipbox_network
     healthcheck:
@@ -121,6 +158,12 @@ services:
       - NODE_ENV=production
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     networks:
       - tipbox_network
 
@@ -138,6 +181,12 @@ services:
     depends_on:
       - backend
       - admin-panel
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
     networks:
       - tipbox_network
     healthcheck:
@@ -145,6 +194,37 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # catalog-service prod'da da gerekli ise aşağıdaki bloğu aktifleştirin:
+  # catalog-service:
+  #   build:
+  #     context: ./catalog-service
+  #     dockerfile: Dockerfile.prod
+  #   container_name: tipbox_catalog_service_prod
+  #   restart: always
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #   expose:
+  #     - "5175"
+  #   environment:
+  #     - PORT=5175
+  #     - NODE_ENV=production
+  #     - NODE_OPTIONS=--max-old-space-size=896
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 1200M
+  #       reservations:
+  #         memory: 384M
+  #   networks:
+  #     - tipbox_network
 
 volumes:
   postgres_prod_data:

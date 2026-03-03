@@ -2,7 +2,7 @@ import {
   MedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http"
-import { 
+import {
   createBrandCategoryWorkflow,
 } from "../../../workflows/create-brand-category"
 import { BRAND_MODULE } from "../../../modules/brand"
@@ -13,52 +13,44 @@ type PostAdminCreateBrandCategoryType = {
   thumbnail?: string | null
 }
 
-type BrandCategoryBase = {
-  id: string
-  title: string
-  thumbnail?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-// GET /admin/brand-categories - Brand kategorilerini listele
+// GET /admin/brand-categories - Brand kategorilerini listele (DB-level pagination, search)
 export const GET = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
-  
-  // Query parametreleri
+
   const limit = parseInt(req.query.limit as string) || 20
   const offset = parseInt(req.query.offset as string) || 0
   const search = (req.query.q as string) || ""
 
-  // Tüm brand kategorilerini getir
-  const brandCategoriesFromService = await brandModuleService.listBrandCategories()
-  // Date'leri string'e çevir
-  let allBrandCategories: BrandCategoryBase[] = brandCategoriesFromService.map((brandCategory: any) => ({
-    id: brandCategory.id,
-    title: brandCategory.title,
-    thumbnail: brandCategory.thumbnail || null,
-    created_at: brandCategory.created_at?.toISOString(),
-    updated_at: brandCategory.updated_at?.toISOString(),
-  }))
-
-  // Search filtresi uygula
+  // DB seviyesinde filtre
+  const filters: Record<string, unknown> = {}
   if (search) {
-    const searchLower = search.toLowerCase()
-    allBrandCategories = allBrandCategories.filter((brandCategory: BrandCategoryBase) => 
-      brandCategory.title.toLowerCase().includes(searchLower)
-    )
+    filters.title = { $like: `%${search}%` }
   }
 
-  const totalCount = allBrandCategories.length
+  // DB seviyesinde pagination ve filtreleme
+  const [brandCategories, totalCount] = await brandModuleService.listAndCountBrandCategories(
+    filters,
+    {
+      skip: offset,
+      take: limit,
+      order: { title: "ASC" },
+      select: ["id", "title", "thumbnail", "created_at", "updated_at"],
+    }
+  )
 
-  // Pagination uygula
-  const paginatedBrandCategories = allBrandCategories.slice(offset, offset + limit)
+  const formattedCategories = brandCategories.map((cat: Record<string, unknown>) => ({
+    id: cat.id,
+    title: cat.title,
+    thumbnail: cat.thumbnail || null,
+    created_at: cat.created_at instanceof Date ? cat.created_at.toISOString() : cat.created_at,
+    updated_at: cat.updated_at instanceof Date ? cat.updated_at.toISOString() : cat.updated_at,
+  }))
 
   res.json({
-    brand_categories: paginatedBrandCategories,
+    brand_categories: formattedCategories,
     count: totalCount,
     limit,
     offset,

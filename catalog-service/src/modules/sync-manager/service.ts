@@ -229,12 +229,20 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
 
   /**
    * Çalışan job var mı kontrol eder
+   * Optimize: Tüm job'ları yüklemek yerine count sorgusu
    */
   async hasRunningJob(syncConfigId: string): Promise<boolean> {
-    const jobs = await this.listSyncJobs({
-      sync_config_id: syncConfigId,
-    })
-    return jobs.some(job => job.status === "running" || job.status === "pending")
+    const [, runningCount] = await this.listAndCountSyncJobs(
+      { sync_config_id: syncConfigId, status: "running" } as Record<string, unknown>,
+      { take: 0 }
+    )
+    if (runningCount > 0) return true
+
+    const [, pendingCount] = await this.listAndCountSyncJobs(
+      { sync_config_id: syncConfigId, status: "pending" } as Record<string, unknown>,
+      { take: 0 }
+    )
+    return pendingCount > 0
   }
 
   /**
@@ -333,21 +341,39 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
 
   /**
    * Sync istatistiklerini getirir
+   * Optimize: Status bazlı count sorguları ile — tüm job'ları belleğe yüklemek yerine
+   * son job ve processed_records için minimal veri çekiliyor
    */
   async getSyncStats(configId: string) {
-    const jobs = await this.listSyncJobs({ sync_config_id: configId })
-    
-    const total = jobs.length
-    const completed = jobs.filter(j => j.status === "completed").length
-    const failed = jobs.filter(j => j.status === "failed").length
-    const running = jobs.filter(j => j.status === "running").length
-    
-    const successfulJobs = jobs.filter(j => j.status === "completed")
-    const totalRecordsSynced = successfulJobs.reduce((acc, j) => acc + (j.processed_records || 0), 0)
-    
-    const lastJob = jobs.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )[0]
+    // Paralel count sorguları — her biri hafif bir DB count sorgusu
+    const [
+      [, total],
+      [, completed],
+      [, failed],
+      [, running],
+      completedJobs,
+      lastJobs,
+    ] = await Promise.all([
+      this.listAndCountSyncJobs({ sync_config_id: configId }, { take: 0 }),
+      this.listAndCountSyncJobs({ sync_config_id: configId, status: "completed" } as Record<string, unknown>, { take: 0 }),
+      this.listAndCountSyncJobs({ sync_config_id: configId, status: "failed" } as Record<string, unknown>, { take: 0 }),
+      this.listAndCountSyncJobs({ sync_config_id: configId, status: "running" } as Record<string, unknown>, { take: 0 }),
+      // processed_records toplamı için sadece completed job'ların minimal field'larını çek
+      this.listSyncJobs(
+        { sync_config_id: configId, status: "completed" } as Record<string, unknown>,
+        { select: ["id", "processed_records"] }
+      ),
+      // Son job için tek kayıt
+      this.listSyncJobs(
+        { sync_config_id: configId },
+        { order: { created_at: "DESC" }, take: 1 }
+      ),
+    ])
+
+    const totalRecordsSynced = completedJobs.reduce(
+      (acc: number, j: Record<string, unknown>) => acc + ((j.processed_records as number) || 0),
+      0
+    )
 
     return {
       total_jobs: total,
@@ -356,7 +382,7 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
       running_jobs: running,
       total_records_synced: totalRecordsSynced,
       success_rate: total > 0 ? Math.round((completed / total) * 100) : 0,
-      last_job: lastJob || null,
+      last_job: lastJobs[0] || null,
     }
   }
 
@@ -365,34 +391,39 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
    * 2 dakikadan fazla güncellenmeyen running job'lar stale kabul edilir
    */
   async checkAndMarkStaleJobs(syncConfigId?: string): Promise<number> {
-    const filter: Record<string, unknown> = {}
+    // Sadece running/pending job'ları çek (tüm job'lar değil)
+    const runningFilter: Record<string, unknown> = { status: "running" }
+    const pendingFilter: Record<string, unknown> = { status: "pending" }
     if (syncConfigId) {
-      filter.sync_config_id = syncConfigId
+      runningFilter.sync_config_id = syncConfigId
+      pendingFilter.sync_config_id = syncConfigId
     }
-    
-    const jobs = await this.listSyncJobs(filter)
+
+    const [runningJobs, pendingJobs] = await Promise.all([
+      this.listSyncJobs(runningFilter),
+      this.listSyncJobs(pendingFilter),
+    ])
+    const activeJobs = [...runningJobs, ...pendingJobs]
+
     const staleThreshold = 2 * 60 * 1000 // 2 dakika
     const now = Date.now()
     let markedCount = 0
-    
-    for (const job of jobs) {
-      if (job.status === "running" || job.status === "pending") {
-        const updatedAt = new Date(job.updated_at).getTime()
-        const timeSinceUpdate = now - updatedAt
-        
-        if (timeSinceUpdate > staleThreshold) {
-          // Job takılmış, stale olarak işaretle
-          await this.updateJob(job.id, {
-            status: "failed",
-            error_message: `Job ${timeSinceUpdate > 60000 ? Math.round(timeSinceUpdate / 60000) + " dakika" : Math.round(timeSinceUpdate / 1000) + " saniye"} boyunca yanıt vermedi. İşlem kesintiye uğramış olabilir.`,
-            completed_at: new Date(),
-          })
-          markedCount++
-          console.log(`[SyncManager] Marked stale job ${job.id} as failed (no update for ${Math.round(timeSinceUpdate / 1000)}s)`)
-        }
+
+    for (const job of activeJobs) {
+      const updatedAt = new Date(job.updated_at).getTime()
+      const timeSinceUpdate = now - updatedAt
+
+      if (timeSinceUpdate > staleThreshold) {
+        await this.updateJob(job.id, {
+          status: "failed",
+          error_message: `Job ${timeSinceUpdate > 60000 ? Math.round(timeSinceUpdate / 60000) + " dakika" : Math.round(timeSinceUpdate / 1000) + " saniye"} boyunca yanıt vermedi. İşlem kesintiye uğramış olabilir.`,
+          completed_at: new Date(),
+        })
+        markedCount++
+        console.log(`[SyncManager] Marked stale job ${job.id} as failed (no update for ${Math.round(timeSinceUpdate / 1000)}s)`)
       }
     }
-    
+
     return markedCount
   }
 

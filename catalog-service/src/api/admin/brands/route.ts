@@ -2,7 +2,7 @@ import {
   MedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http"
-import { 
+import {
   createBrandWorkflow,
 } from "../../../workflows/create-brand"
 import { BRAND_MODULE } from "../../../modules/brand"
@@ -15,139 +15,123 @@ type PostAdminCreateBrandType = {
   website_url?: string | null
   logo_url?: string | null
   banner_url?: string | null
-  metadata?: any | null
+  metadata?: Record<string, unknown> | null
   rank?: number | null
   ispopular?: boolean | null
-  tags?: any | null
+  tags?: Record<string, unknown> | null
   category_id?: string | null
 }
 
-type BrandWithCount = {
-  id: string
-  name: string
-  product_count: number
-  created_at?: string
-  updated_at?: string
-}
-
-type BrandBase = {
-  id: string
-  name: string
-  logo_url?: string | null
-  category_id?: string | null
-  category?: {
-    id: string
-    title: string
-  } | null
-  created_at?: string
-  updated_at?: string
-}
-
-// GET /admin/brands - Brandleri listele (pagination, search, ürün sayısı desteği)
+// GET /admin/brands - Brandleri listele (DB-level pagination, search, sort)
 export const GET = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
   const brandModuleService: BrandModuleService = req.scope.resolve(BRAND_MODULE)
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-  
+
   // Query parametreleri
   const limit = parseInt(req.query.limit as string) || 20
   const offset = parseInt(req.query.offset as string) || 0
   const search = (req.query.q as string) || ""
   const includeProductCount = req.query.include_product_count !== "false"
-  
-  // Brand'leri tek seferde relation ile çek (deterministik sonuç için ayrıca sort uygulanacak)
-  const brandsFromService = await brandModuleService.listBrands(
-    {},
+
+  // DB seviyesinde filtre oluştur
+  const filters: Record<string, unknown> = {}
+  if (search) {
+    filters.name = { $like: `%${search}%` }
+  }
+
+  // DB seviyesinde pagination, sort ve filtreleme
+  const [brands, totalCount] = await brandModuleService.listAndCountBrands(
+    filters,
     {
+      skip: offset,
+      take: limit,
+      order: { name: "ASC" },
       relations: ["category"],
+      select: ["id", "name", "logo_url", "category_id", "created_at", "updated_at"],
     }
   )
 
-  const toISOStringSafe = (value: any): string | undefined => {
+  const toISOStringSafe = (value: unknown): string | undefined => {
     if (!value) return undefined
     if (value instanceof Date) return value.toISOString()
     if (typeof value === "string") return value
-    if (typeof value?.toISOString === "function") return value.toISOString()
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "toISOString" in value &&
+      typeof (value as { toISOString: () => string }).toISOString === "function"
+    ) {
+      return (value as { toISOString: () => string }).toISOString()
+    }
     return undefined
   }
 
-  // Brand'leri stabil bir şekilde sırala (DB order opsiyonu her zaman garanti olmayabilir)
-  const normalized = brandsFromService
-    .slice()
-    .sort((a: any, b: any) =>
-      String(a?.name || "").localeCompare(String(b?.name || ""), "tr", { sensitivity: "base" })
-    )
+  type BrandResult = {
+    id: string
+    name: string
+    logo_url: string | null
+    category_id: string | null
+    category: { id: string; title: string } | null
+    created_at?: string
+    updated_at?: string
+    product_count?: number
+  }
 
-  let allBrands: BrandBase[] = normalized.map((brand: any) => ({
-    id: brand.id,
-    name: brand.name,
-    logo_url: brand.logo_url || null,
-    category_id: brand.category?.id || brand.category_id || null,
-    category: brand.category
-      ? { id: brand.category.id, title: brand.category.title }
-      : null,
-    created_at: toISOStringSafe(brand.created_at),
-    updated_at: toISOStringSafe(brand.updated_at),
-  }))
-  
-  // Search filtresi uygula
-  if (search) {
-    const searchLower = search.toLowerCase()
-    allBrands = allBrands.filter((brand: BrandBase) => 
-      brand.name.toLowerCase().includes(searchLower)
-    )
+  const brandRecord = (brand: Record<string, unknown>) => {
+    const category = brand.category as Record<string, unknown> | null | undefined
+    return {
+      id: brand.id as string,
+      name: brand.name as string,
+      logo_url: (brand.logo_url as string) || null,
+      category_id: category?.id as string || (brand.category_id as string) || null,
+      category: category
+        ? { id: category.id as string, title: category.title as string }
+        : null,
+      created_at: toISOStringSafe(brand.created_at),
+      updated_at: toISOStringSafe(brand.updated_at),
+    }
   }
-  
-  const totalCount = allBrands.length
-  
-  // Pagination uygula
-  const paginatedBrands = allBrands.slice(offset, offset + limit)
-  
-  // Product count isteniyorsa ekle
-  let brandsResult: (BrandBase | BrandWithCount)[]
-  
-  if (includeProductCount) {
-    brandsResult = await Promise.all(
-      paginatedBrands.map(async (brand: BrandBase) => {
-        try {
-          const { data: brandData } = await query.graph({
-            entity: "brand",
-            fields: ["id", "product.id"],
-            filters: {
-              id: brand.id,
-            },
-          })
-          
-          const brandWithProducts = brandData[0]
-          let productCount = 0
-          
-          if (brandWithProducts?.product) {
-            if (Array.isArray(brandWithProducts.product)) {
-              productCount = brandWithProducts.product.length
-            } else if (brandWithProducts.product) {
-              productCount = 1
-            }
-          }
-          
-          return {
-            ...brand,
-            product_count: productCount,
-          }
-        } catch {
-          return {
-            ...brand,
-            product_count: 0,
-          }
-        }
+
+  let brandsResult: BrandResult[] = brands.map(brandRecord)
+
+  // Product count: tek batch sorgusu ile tüm sayfa brand'lerinin ürün sayılarını al
+  if (includeProductCount && brandsResult.length > 0) {
+    const brandIds = brandsResult.map(b => b.id)
+
+    try {
+      const { data: brandsWithProducts } = await query.graph({
+        entity: "brand",
+        fields: ["id", "product.id"],
+        filters: { id: brandIds },
       })
-    )
-  } else {
-    brandsResult = paginatedBrands
+
+      // Brand ID → product count map oluştur
+      const productCountMap = new Map<string, number>()
+      for (const brandData of brandsWithProducts) {
+        let count = 0
+        if (brandData.product) {
+          count = Array.isArray(brandData.product) ? brandData.product.length : 1
+        }
+        productCountMap.set(brandData.id, count)
+      }
+
+      brandsResult = brandsResult.map(brand => ({
+        ...brand,
+        product_count: productCountMap.get(brand.id) || 0,
+      }))
+    } catch {
+      // Product count alınamazsa 0 olarak devam et
+      brandsResult = brandsResult.map(brand => ({
+        ...brand,
+        product_count: 0,
+      }))
+    }
   }
-  
-  res.json({ 
+
+  res.json({
     brands: brandsResult,
     count: totalCount,
     limit,

@@ -9,6 +9,15 @@ module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
+    // Connection pool — 4GB RAM sunucu, max_connections=50 PG ile uyumlu
+    databaseDriverOptions: {
+      pool: {
+        min: 2,
+        max: 20,
+        acquireTimeoutMillis: 30000,
+        idleTimeoutMillis: 30000,
+      },
+    },
     
     http: {
       
