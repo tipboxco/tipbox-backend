@@ -1,4 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { Response } from "express"
 import { SYNC_MANAGER_MODULE } from "../../../../../modules/sync-manager"
 import type SyncManagerService from "../../../../../modules/sync-manager/service"
 
@@ -6,14 +7,10 @@ import type SyncManagerService from "../../../../../modules/sync-manager/service
  * GET /admin/sync/:id/stream
  * Server-Sent Events ile real-time sync güncellemeleri
  *
- * Önceki sorunlar:
- * - 500ms interval → saniyede 6 DB sorgusu → connection pool tükenmesi
- * - Concurrent SSE bağlantıları pool'u dolduruyordu
- *
- * Düzeltmeler:
- * - Interval 3000ms'e çıkarıldı (saniyede 1 sorgu)
- * - Concurrent sorgu sayısı azaltıldı
- * - Guard: önceki sorgu bitmeden yeni sorgu başlamaz
+ * Optimize:
+ * - res.flush() eklendi — veri anında client'a gönderiliyor
+ * - Config + stats + jobs paralel çekiliyor (Promise.all)
+ * - 2s interval (flush sayesinde daha kısa interval güvenli)
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const syncManager = req.scope.resolve<SyncManagerService>(SYNC_MANAGER_MODULE)
@@ -31,8 +28,18 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
   let isFirstUpdate = true
   let interval: ReturnType<typeof setInterval> | null = null
-  let isSending = false // Guard: aynı anda iki sorgu çalışmasın
+  let isSending = false
   let closed = false
+
+  const flush = () => {
+    try {
+      if (typeof (res as unknown as Response).flush === "function") {
+        ;(res as unknown as Response).flush()
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   const cleanup = () => {
     closed = true
@@ -58,9 +65,12 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         isFirstUpdate = false
       }
 
-      const config = await syncManager.retrieveSyncConfig(id)
-      const stats = await syncManager.getSyncStats(id)
-      const jobs = await syncManager.getJobsBySyncConfig(id, 20)
+      // Paralel çekim — sequential yerine
+      const [config, stats, jobs] = await Promise.all([
+        syncManager.retrieveSyncConfig(id),
+        syncManager.getSyncStats(id),
+        syncManager.getJobsBySyncConfig(id, 20),
+      ])
 
       if (closed) return true
 
@@ -72,6 +82,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       }
 
       res.write(`data: ${JSON.stringify(data)}\n\n`)
+      flush()
 
       const hasRunning = jobs.some(
         (j: { status: string }) => j.status === "running" || j.status === "pending"
@@ -88,7 +99,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   // İlk güncellemeyi gönder
   await sendUpdate()
 
-  // 3 saniye interval — pool baskısını azaltır
+  // 2 saniye interval
   interval = setInterval(async () => {
     try {
       const noRunningNow = await sendUpdate()
@@ -97,13 +108,14 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         interval = null
         if (!closed) {
           res.write(`data: ${JSON.stringify({ type: "stream_end", reason: "no_running_jobs" })}\n\n`)
+          flush()
           res.end()
         }
       }
     } catch {
       // ignore
     }
-  }, 3000)
+  }, 2000)
 
   req.on("close", cleanup)
   req.on("error", cleanup)
