@@ -214,6 +214,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           db_user: tipbox_user
+          db_name: tipbox_test
 
       # ── 6. Migrations ──
       - name: Run migrations
