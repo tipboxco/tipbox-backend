@@ -43,9 +43,13 @@ fi
 if [ ! -d "node_modules/.prisma" ] || [ ! -d "node_modules/@prisma/client" ]; then
   echo "🔄 node_modules eksik, yükleniyor..."
   pnpm install
-  pnpm exec prisma generate
-  echo "✅ Bağımlılıklar ve Prisma Client hazır!"
+  echo "✅ Bağımlılıklar yüklendi!"
 fi
+
+# Prisma Client her zaman üret — schema değişikliklerinin yansıması için zorunlu
+echo "🔧 Prisma Client oluşturuluyor..."
+pnpm exec prisma generate
+echo "✅ Prisma Client hazır!"
 
 # ── Migration kontrolü ──
 if [ "${SKIP_DB_MIGRATIONS}" = "1" ] || [ "${SKIP_DB_MIGRATIONS}" = "true" ]; then

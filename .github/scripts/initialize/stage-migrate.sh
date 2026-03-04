@@ -4,10 +4,11 @@ set -e
 echo "📊 Running database migrations..."
 cd "$PROJECT_DIR" || exit 1
 
-# Prisma generate + migrate tek container'da (2 container start yerine 1, 1 entrypoint döngüsü)
-echo "🔧 Generating Prisma Client and deploying migrations..."
+# Prisma generate entrypoint tarafından her zaman çalıştırılır.
+# Burada sadece migrate deploy yeterli.
+echo "📊 Deploying migrations..."
 MIGRATE_OUTPUT=$(docker compose -f "$COMPOSE_FILE" run --rm backend \
-  sh -c "npx prisma generate && npx prisma migrate deploy" 2>&1) || {
+  npx prisma migrate deploy 2>&1) || {
   echo "$MIGRATE_OUTPUT"
   # P3005: DB dolu ama migration history yok → baseline uygula
   if echo "$MIGRATE_OUTPUT" | grep -q "P3005"; then
