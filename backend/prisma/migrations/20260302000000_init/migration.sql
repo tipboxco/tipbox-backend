@@ -894,6 +894,9 @@ CREATE TABLE "achievement_goals" (
     "reward_badge_id" UUID,
     "points_required" INTEGER NOT NULL,
     "difficulty" "achievement_difficulty" NOT NULL,
+    "keywords" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "allowed_post_types" "content_post_type"[] DEFAULT ARRAY[]::"content_post_type"[],
+    "is_passive" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "achievement_goals_pkey" PRIMARY KEY ("id")
 );
