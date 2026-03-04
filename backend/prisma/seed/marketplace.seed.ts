@@ -7,10 +7,10 @@ export async function seedMarketplace(): Promise<void> {
   if (!anyUser) return;
   await prisma.marketplaceBanner.create({
     data: {
-      title: 'Yeni Sezon NFT Koleksiyonu',
-      description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!',
+      title: 'Yeni Sezon Kozmetik NFT Koleksiyonu',
+      description: 'Sınırlı sayıda özel kozmetik NFT\'ler şimdi satışta!',
       imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800',
-      linkUrl: '/marketplace/listings?type=BADGE',
+      linkUrl: '/marketplace/listings?type=COSMETIC',
       isActive: true,
       displayOrder: 1,
     },
