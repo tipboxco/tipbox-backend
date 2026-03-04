@@ -141,22 +141,59 @@ runs:
               echo "✅ Infrastructure services started"
               ;;
             wait-db)
-              echo "⏳ Waiting for database to be ready..."
+              echo "⏳ Waiting for infrastructure services to be ready..."
               cd "$PROJECT_DIR" || exit 1
-              sleep 5
-              for i in {1..20}; do
+
+              # 1. Postgres process hazır mı (pg_isready)
+              echo "🐘 Waiting for PostgreSQL process..."
+              for i in $(seq 1 30); do
                 if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$DB_USER" > /dev/null 2>&1; then
-                  echo "✅ Database is ready!"
+                  echo "✅ PostgreSQL process is ready!"
                   break
                 fi
-                if [ $i -eq 20 ]; then
-                  echo "❌ Database not ready after 20 attempts"
+                if [ "$i" -eq 30 ]; then
+                  echo "❌ PostgreSQL not ready after 30 attempts"
                   docker compose -f "$COMPOSE_FILE" logs postgres
                   exit 1
                 fi
-                echo "⏳ Waiting for database... ($i/20)"
+                echo "⏳ Waiting for PostgreSQL process... ($i/30)"
+                sleep 3
+              done
+
+              # 2. Hedef DB'ye gerçek bağlantı testi (migration için gerekli)
+              echo "🐘 Waiting for target database to accept connections..."
+              for i in $(seq 1 20); do
+                if docker compose -f "$COMPOSE_FILE" exec -T postgres \
+                  psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
+                  echo "✅ Database '$DB_NAME' is accepting connections!"
+                  break
+                fi
+                if [ "$i" -eq 20 ]; then
+                  echo "❌ Database '$DB_NAME' not accepting connections after 20 attempts"
+                  docker compose -f "$COMPOSE_FILE" logs postgres
+                  exit 1
+                fi
+                echo "⏳ Waiting for database connection... ($i/20)"
+                sleep 3
+              done
+
+              # 3. Redis bekle
+              echo "🔴 Waiting for Redis..."
+              for i in $(seq 1 20); do
+                if docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+                  echo "✅ Redis is ready!"
+                  break
+                fi
+                if [ "$i" -eq 20 ]; then
+                  echo "❌ Redis not ready after 20 attempts"
+                  docker compose -f "$COMPOSE_FILE" logs redis
+                  exit 1
+                fi
+                echo "⏳ Waiting for Redis... ($i/20)"
                 sleep 2
               done
+
+              echo "✅ All infrastructure services are ready"
               ;;
             migrate)
               echo "📊 Running database migrations..."
@@ -171,18 +208,36 @@ runs:
               
               # 2. Migration'ları uygula
               echo "📊 Deploying migrations..."
-              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
-                echo "❌ Migration failed! Check the logs above."
-                echo "📋 Migration logs:"
-                docker compose -f "$COMPOSE_FILE" logs backend | tail -50
-                exit 1
+              MIGRATE_OUTPUT=$(docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy 2>&1) || {
+                echo "$MIGRATE_OUTPUT"
+                # P3005: DB dolu ama migration history yok → baseline uygula
+                if echo "$MIGRATE_OUTPUT" | grep -q "P3005"; then
+                  echo "⚠️  Database not empty without migration history. Applying baseline..."
+                  MIGRATION_NAME=$(docker compose -f "$COMPOSE_FILE" run --rm backend \
+                    sh -c "ls prisma/migrations | grep -v migration_lock | head -1" 2>/dev/null | tr -d '\r' | xargs)
+                  if [ -n "$MIGRATION_NAME" ]; then
+                    docker compose -f "$COMPOSE_FILE" run --rm backend \
+                      npx prisma migrate resolve --applied "$MIGRATION_NAME" || {
+                        echo "❌ Baseline failed!"
+                        exit 1
+                      }
+                    echo "✅ Baseline applied: $MIGRATION_NAME"
+                    # Baseline sonrası tekrar deploy
+                    docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
+                      echo "❌ Migration failed after baseline!"
+                      exit 1
+                    }
+                  else
+                    echo "❌ No migration found to baseline"
+                    exit 1
+                  fi
+                else
+                  echo "$MIGRATE_OUTPUT"
+                  echo "❌ Migration failed! Check the logs above."
+                  exit 1
+                fi
               }
-              
-              # 3. Schema sync yap (eksik kolonları ekle)
-              echo "🔄 Syncing schema..."
-              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss || {
-                echo "⚠️  Schema push failed, but migration succeeded. Continuing..."
-              }
+              echo "$MIGRATE_OUTPUT"
               
               echo "✅ Migrations completed"
               ;;
@@ -221,34 +276,69 @@ runs:
             health)
               echo "🏥 Checking backend health..."
               cd "$PROJECT_DIR" || exit 1
-              sleep 15
-              MAX_RETRIES=60
-              RETRY_COUNT=0
-              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                HTTP_STATUS=$(docker compose -f "$COMPOSE_FILE" exec -T backend wget -q -O /dev/null -S http://localhost:3000/health 2>&1 | grep "HTTP/" | awk '{print $2}' || echo "000")
-                if [ "$HTTP_STATUS" = "200" ]; then
-                  echo "✅ Backend is healthy!"
+
+              # 1. Önce backend container'ının ayağa kalkmasını bekle (running durumu)
+              echo "⏳ Waiting for backend container to start..."
+              for i in $(seq 1 20); do
+                CONTAINER_STATUS=$(docker compose -f "$COMPOSE_FILE" ps backend --format json 2>/dev/null | grep -o '"Status":"[^"]*"' | head -1 || echo "")
+                RUNNING=$(docker compose -f "$COMPOSE_FILE" ps backend 2>/dev/null | grep -E "Up|running" | head -1 || echo "")
+                if [ -n "$RUNNING" ]; then
+                  echo "✅ Backend container is running"
                   break
                 fi
+                if [ "$i" -eq 20 ]; then
+                  echo "❌ Backend container did not start"
+                  docker compose -f "$COMPOSE_FILE" logs --tail=50 backend
+                  exit 1
+                fi
+                echo "⏳ Waiting for container... ($i/20)"
+                sleep 3
+              done
 
-                # Alternatif: node ile kontrol
-                if docker compose -f "$COMPOSE_FILE" exec -T backend node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
-                  echo "✅ Backend is healthy!"
+              # 2. Docker healthcheck durumunu bekle (Dockerfile'daki HEALTHCHECK)
+              echo "⏳ Waiting for Docker healthcheck to pass..."
+              for i in $(seq 1 30); do
+                HEALTH=$(docker inspect --format='{{.State.Health.Status}}' \
+                  "$(docker compose -f "$COMPOSE_FILE" ps -q backend 2>/dev/null)" 2>/dev/null || echo "none")
+                if [ "$HEALTH" = "healthy" ]; then
+                  echo "✅ Docker healthcheck passed!"
+                  break
+                elif [ "$HEALTH" = "unhealthy" ]; then
+                  echo "❌ Docker healthcheck reported unhealthy"
+                  docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
+                  exit 1
+                elif [ "$HEALTH" = "none" ] || [ -z "$HEALTH" ]; then
+                  # HEALTHCHECK tanımlı değilse direkt HTTP kontrol yap
+                  echo "ℹ️  No Docker healthcheck defined, falling back to HTTP check"
+                  break
+                fi
+                echo "⏳ Healthcheck status: $HEALTH ($i/30)"
+                sleep 5
+              done
+
+              # 3. HTTP /health endpoint kontrolü
+              echo "🌐 Checking HTTP health endpoint..."
+              MAX_RETRIES=40
+              RETRY_COUNT=0
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if docker compose -f "$COMPOSE_FILE" exec -T backend \
+                  node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+                  echo "✅ Backend HTTP health check passed!"
                   break
                 fi
 
                 RETRY_COUNT=$((RETRY_COUNT + 1))
                 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-                  echo "⚠️ Health check failed after $MAX_RETRIES attempts"
-                  echo "📋 Backend logs (last 30 lines):"
-                  docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
+                  echo "⚠️ HTTP health check failed after $MAX_RETRIES attempts"
+                  echo "📋 Backend logs (last 40 lines):"
+                  docker compose -f "$COMPOSE_FILE" logs --tail=40 backend
                   echo ""
                   echo "📊 Container status:"
                   docker compose -f "$COMPOSE_FILE" ps
                   exit 1
                 fi
                 if [ $((RETRY_COUNT % 10)) -eq 0 ]; then
-                  echo "⏳ Waiting for backend... ($RETRY_COUNT/$MAX_RETRIES)"
+                  echo "⏳ Waiting for HTTP health... ($RETRY_COUNT/$MAX_RETRIES)"
                 fi
                 sleep 3
               done
