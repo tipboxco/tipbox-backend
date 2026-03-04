@@ -95,165 +95,113 @@ jobs:
           EOC
           chmod 600 ~/.ssh/config
 
-      - name: Prepare & Build
+      # ── 1. Prepare: git pull ──
+      - name: Prepare deployment
         if: steps.check-secrets.outputs.available == 'true'
-        env:
-          DEPLOY_BRANCH: ${{ github.event.inputs.branch || github.ref_name }}
-          FORCE_REBUILD: ${{ github.event.inputs.force_rebuild == true && 'true' || 'false' }}
-          SKIP_BACKUP: ${{ github.event.inputs.skip_backup == 'true' && 'true' || 'false' }}
-        run: |
-          ssh hetzner-deploy "export DEPLOY_BRANCH='$DEPLOY_BRANCH' FORCE_REBUILD='$FORCE_REBUILD' SKIP_BACKUP='$SKIP_BACKUP' && bash -s" << 'DEPLOY_SCRIPT'
-            set -euo pipefail
-            PROJECT_DIR="/opt/tipbox-backend"
-            COMPOSE_FILE="docker-compose.test.yml"
-            DB_USER="${DB_USER:-tipbox_user}"
-            DB_NAME="${DB_NAME:-tipbox_test}"
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: prepare
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          deploy_branch: ${{ github.event.inputs.branch || github.ref_name }}
+          env_file: .env.test
 
-            # ── 1. Prepare: git pull ──
-            echo "📥 Pulling branch: $DEPLOY_BRANCH"
-            cd "$PROJECT_DIR"
-            git fetch origin
-            git checkout "$DEPLOY_BRANCH"
-            git reset --hard "origin/$DEPLOY_BRANCH"
-            # git clean ile .env dosyalarını ve backups'ı koruyoruz
-            git clean -fd -e ".env*" -e "backups/"
+      # ── 2. Backup (skip_backup=true ise atlanır) ──
+      - name: Backup database
+        if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.skip_backup != 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: backup
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
+          db_name: tipbox_test
 
-            # .env.test kontrolü (compose dosyası proje kökündeki .env.test kullanıyor)
-            if [ ! -f ".env.test" ]; then
-              echo "❌ .env.test not found in project root!"
-              echo "📋 Files in project root:"
-              ls -la *.env* 2>/dev/null || echo "  No .env files found"
-              exit 1
-            fi
-            echo "✅ .env.test found"
-
-            # ── 2. Backup (servisler hala çalışırken) ──
-            if [ "$SKIP_BACKUP" != "true" ]; then
-              echo "💾 Database backup..."
-              BACKUP_DIR="${PROJECT_DIR}/backups"
-              mkdir -p "$BACKUP_DIR"
-              docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" \
-                > "$BACKUP_DIR/backup-$(date +%Y%m%d-%H%M%S).sql" 2>/dev/null || \
-                echo "⚠️  Backup skipped (db not accessible)"
-            fi
-
-            # ── 3. Build (servisler hala çalışırken - zero downtime) ──
-            echo "🔨 Starting Docker build..."
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
-            if [ "$FORCE_REBUILD" = "true" ]; then
-              echo "🔄 Force rebuild requested - building without cache"
-              docker compose -f "$COMPOSE_FILE" build --no-cache 2>&1
-            else
-              echo "⚡ Building with cache..."
-              docker compose -f "$COMPOSE_FILE" build 2>&1
-            fi
-            echo "✅ Build completed successfully"
-          DEPLOY_SCRIPT
-
-      - name: Deploy & Migrate
+      # ── 3. Build (servisler çalışırken, zero-downtime) ──
+      - name: Build images
         if: steps.check-secrets.outputs.available == 'true'
-        env:
-          RUN_SEED: ${{ github.event.inputs.run_seed == 'true' && 'true' || 'false' }}
-        run: |
-          ssh hetzner-deploy "export RUN_SEED='$RUN_SEED' && bash -s" << 'DEPLOY_SCRIPT'
-            set -euo pipefail
-            PROJECT_DIR="/opt/tipbox-backend"
-            COMPOSE_FILE="docker-compose.test.yml"
-            DB_USER="${DB_USER:-tipbox_user}"
-            DB_NAME="${DB_NAME:-tipbox_test}"
-            cd "$PROJECT_DIR"
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: build
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          force_rebuild: ${{ github.event.inputs.force_rebuild == 'true' && 'true' || 'false' }}
 
-            # ── 4. Infrastructure'ın çalıştığından emin ol ──
-            echo "🚀 Ensuring infrastructure is up..."
-            docker compose -f "$COMPOSE_FILE" up -d postgres redis minio
-            echo "✅ Infrastructure services started"
+      # ── 4. Infrastructure (postgres, redis, minio) ──
+      - name: Start infrastructure services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: infrastructure
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
 
-            # DB hazır olana kadar bekle
-            echo "⏳ Waiting for database..."
-            for i in $(seq 1 20); do
-              if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$DB_USER" > /dev/null 2>&1; then
-                echo "✅ Database ready"
-                break
-              fi
-              if [ "$i" -eq 20 ]; then
-                echo "❌ Database not ready after 20 attempts"
-                exit 1
-              fi
-              sleep 2
-            done
+      # ── 5. Wait for DB ──
+      - name: Wait for database
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: wait-db
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
 
-            # ── 5. Migrations ──
-            echo "📊 Running Prisma generate..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate 2>&1
-            echo "✅ Prisma generate completed"
+      # ── 6. Migrations ──
+      - name: Run migrations
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: migrate
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
 
-            echo "📊 Running migrations..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy 2>&1 || {
-              echo "❌ Migration failed!"
-              exit 1
-            }
-            echo "✅ Migrations completed"
+      # ── 7. Seed (sadece manuel + istenirse) ──
+      - name: Run seeds
+        if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.run_seed == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: seed
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
+          db_name: tipbox_test
 
-            echo "🔄 Schema push..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss 2>&1 || \
-              echo "⚠️  Schema push failed, continuing..."
+      # ── 8. Start all services ──
+      - name: Start all services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: start
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
 
-            # ── 6. Seed (sadece manuel + istenirse) ──
-            if [ "$RUN_SEED" = "true" ]; then
-              HAS_DATA=$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -c \
-                "SELECT COUNT(*) FROM users WHERE email LIKE '%@tipbox.%' LIMIT 1;" 2>/dev/null | xargs || echo "0")
-              if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
-                echo "🌱 Running seeds..."
-                docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts --all || \
-                  docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts || \
-                  echo "⚠️  Seed failed, continuing..."
-              else
-                echo "⏭️  Database already has seed data"
-              fi
-            fi
-
-            # ── 7. Start/restart tüm servisleri (sadece değişenler recreate edilir) ──
-            echo "🚀 Starting all services..."
-            docker compose -f "$COMPOSE_FILE" up -d 2>&1
-            echo "✅ All services started"
-
-            # Container durumunu göster
-            echo "📊 Container status:"
-            docker compose -f "$COMPOSE_FILE" ps
-          DEPLOY_SCRIPT
-
+      # ── 9. Health check ──
       - name: Health check
         if: steps.check-secrets.outputs.available == 'true'
-        run: |
-          ssh hetzner-deploy bash -s << 'HEALTH_SCRIPT'
-            set -e
-            cd /opt/tipbox-backend
-            COMPOSE_FILE="docker-compose.test.yml"
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: health
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
 
-            echo "🏥 Health check..."
-            sleep 15
-            for i in $(seq 1 60); do
-              if docker compose -f "$COMPOSE_FILE" exec -T backend \
-                node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
-                echo "✅ Backend is healthy!"
-                break
-              fi
-              [ "$i" -eq 60 ] && {
-                echo "⚠️ Health check failed after 60 attempts"
-                docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
-                docker compose -f "$COMPOSE_FILE" ps
-                exit 1
-              }
-              [ $((i % 10)) -eq 0 ] && echo "⏳ Waiting... ($i/60)"
-              sleep 3
-            done
-
-            # Cleanup
-            docker image prune -f > /dev/null 2>&1
-            echo "📊 Container status:"
-            docker compose -f "$COMPOSE_FILE" ps
-          HEALTH_SCRIPT
+      # ── 10. Cleanup ──
+      - name: Cleanup deployment
+        if: always() && steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: cleanup
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
 
       - name: Deployment Summary
         if: success()
