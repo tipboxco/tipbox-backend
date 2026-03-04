@@ -1,10 +1,10 @@
 # Test: Proje kökündeki .env.test kullanılır.
 # cp .env.example .env.test ile oluşturup test değerlerini (isteğe bağlı) girin.
 #
-# 4GB RAM sunucu için optimize edilmiş yapılandırma
+# 4GB RAM sunucu için optimize edilmiş yapılandırma (swap önerilir)
 # Toplam bellek dağılımı:
-#   PostgreSQL ~512MB | Backend ~1GB | Catalog ~1.2GB | Redis 256MB
-#   MinIO 256MB | Nginx 64MB | Admin 384MB | pgadmin 256MB | prisma-studio 192MB
+#   PostgreSQL 512MB | Backend 1.5GB | Catalog 2GB | Redis 384MB
+#   MinIO 256MB | Nginx 128MB | Admin 384MB | pgadmin 256MB | prisma-studio 192MB
 services:
   postgres:
     image: postgres:15-alpine
@@ -110,9 +110,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
         reservations:
-          memory: 64M
+          memory: 128M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -131,7 +131,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=test
-      - NODE_OPTIONS=--max-old-space-size=896
+      - NODE_OPTIONS=--max-old-space-size=1200
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -178,9 +178,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 1536M
         reservations:
-          memory: 256M
+          memory: 384M
     networks:
       - tipbox_network
     healthcheck:
@@ -217,9 +217,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          memory: 128M
         reservations:
-          memory: 16M
+          memory: 32M
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
@@ -252,7 +252,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 320M
+          memory: 192M
         reservations:
           memory: 64M
     networks:
@@ -307,7 +307,7 @@ services:
     environment:
       - PORT=5175
       - NODE_ENV=test
-      - NODE_OPTIONS=--max-old-space-size=1400
+      - NODE_OPTIONS=--max-old-space-size=1600
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
@@ -333,7 +333,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1800M
+          memory: 2G
         reservations:
           memory: 512M
     networks:
