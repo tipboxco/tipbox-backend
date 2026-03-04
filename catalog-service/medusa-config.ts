@@ -1,6 +1,20 @@
 import { loadEnv, defineConfig, Modules } from '@medusajs/framework/utils'
 
+// Docker/process env değerlerini loadEnv'in üzerine yazmasına karşı koru
+const _backendUrl = process.env.MEDUSA_BACKEND_URL
+const _adminPath = process.env.MEDUSA_ADMIN_PATH
+const _adminCors = process.env.ADMIN_CORS
+const _authCors = process.env.AUTH_CORS
+const _storeCors = process.env.STORE_CORS
+
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
+
+if (_backendUrl) process.env.MEDUSA_BACKEND_URL = _backendUrl
+if (_adminPath) process.env.MEDUSA_ADMIN_PATH = _adminPath
+if (_adminCors) process.env.ADMIN_CORS = _adminCors
+if (_authCors) process.env.AUTH_CORS = _authCors
+if (_storeCors) process.env.STORE_CORS = _storeCors
+
 module.exports = defineConfig({
   admin: {
     path: process.env.MEDUSA_ADMIN_PATH || "/app",
