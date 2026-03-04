@@ -6,7 +6,7 @@ cd "$PROJECT_DIR" || exit 1
 # Dangling image'ları sil
 docker image prune -f
 # Build cache'i temizle (en çok yer kaplayan)
-docker builder prune -f --keep-storage=2gb 2>/dev/null || docker builder prune -f
+docker builder prune -f --keep-storage=5gb 2>/dev/null || docker builder prune -f --keep-storage=3gb 2>/dev/null || true
 # Kullanılmayan container'ları sil
 docker container prune -f
 echo "💾 Disk usage after cleanup:"

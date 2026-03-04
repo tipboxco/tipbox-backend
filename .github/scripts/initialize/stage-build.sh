@@ -10,7 +10,7 @@ echo "💾 Current disk usage: ${DISK_USAGE}%"
 if [ "$DISK_USAGE" -gt 85 ]; then
   echo "⚠️  Disk usage above 85%, cleaning up before build..."
   docker image prune -af
-  docker builder prune -f
+  docker builder prune -f --keep-storage=1gb
   docker container prune -f
   echo "💾 Disk usage after cleanup: $(df / | tail -1 | awk '{print $5}')"
 fi

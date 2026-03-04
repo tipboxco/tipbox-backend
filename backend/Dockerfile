@@ -22,8 +22,9 @@ COPY pnpm-lock.yaml* ./
 COPY prisma ./prisma
 
 # 3) Dependencies'leri yükle
-#    postinstall script'i prisma generate'ı otomatik çalıştırır
-RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+#    BuildKit cache mount: pnpm store sunucuda kalıcı tutulur, tekrar download olmaz
+RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
 # 4) Source code'u kopyala (en sık değişen layer en sona)
 COPY . .
