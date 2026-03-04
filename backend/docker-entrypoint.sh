@@ -39,10 +39,11 @@ if [ $attempt -eq $max_attempts ]; then
 fi
 
 # ── node_modules kontrolü ──
-# Named volume boş olabilir (ilk çalıştırma veya volume silindiğinde)
-if [ ! -d "node_modules/.prisma" ] || [ ! -d "node_modules/@prisma/client" ]; then
+# pnpm sanal store'u: .pnpm dizini var mı kontrol et (node_modules/.prisma pnpm'de oluşmaz)
+if [ ! -d "node_modules/.pnpm" ]; then
   echo "🔄 node_modules eksik, yükleniyor..."
-  pnpm install
+  # --ignore-scripts: postinstall'daki prisma generate'i atla, aşağıda zaten çalıştırıyoruz
+  pnpm install --ignore-scripts
   echo "✅ Bağımlılıklar yüklendi!"
 fi
 
