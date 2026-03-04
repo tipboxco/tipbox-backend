@@ -80,15 +80,16 @@ const SeedPage = () => {
 
   const handleInstall = async (type: "categories" | "brands" | "products") => {
     setStatus((prev) => ({ ...prev, [type]: "installing" }))
-    
+
     try {
       const response = await fetch(`${backendUrl}/admin/seed/${type}`, {
         method: "POST",
         credentials: "include",
+        signal: AbortSignal.timeout(600_000), // 10 dakika timeout
       })
-      
+
       const data = await response.json()
-      
+
       if (response.ok) {
         setStatus((prev) => ({ ...prev, [type]: "success" }))
         toast.success("Başarılı", {
@@ -101,9 +102,12 @@ const SeedPage = () => {
         })
       }
     } catch (error) {
+      const isTimeout = error instanceof DOMException && error.name === "TimeoutError"
       setStatus((prev) => ({ ...prev, [type]: "error" }))
-      toast.error("Hata", {
-        description: `${type} yüklenirken bir hata oluştu`,
+      toast.error(isTimeout ? "Zaman Aşımı" : "Hata", {
+        description: isTimeout
+          ? `${type} yükleme işlemi çok uzun sürdü. İşlem arka planda devam ediyor olabilir.`
+          : `${type} yüklenirken bir hata oluştu`,
       })
     }
   }
@@ -184,10 +188,11 @@ const SeedPage = () => {
       const response = await fetch(`${backendUrl}/admin/seed/${deleteType}`, {
         method: "DELETE",
         credentials: "include",
+        signal: AbortSignal.timeout(600_000), // 10 dakika timeout
       })
-      
+
       const data = await response.json()
-      
+
       if (response.ok) {
         toast.success("Başarılı", {
           description: data.message || `${getDeleteTypeLabel(deleteType)} başarıyla silindi`,
@@ -202,8 +207,11 @@ const SeedPage = () => {
         })
       }
     } catch (error) {
-      toast.error("Hata", {
-        description: `${getDeleteTypeLabel(deleteType)} silinirken bir hata oluştu`,
+      const isTimeout = error instanceof DOMException && error.name === "TimeoutError"
+      toast.error(isTimeout ? "Zaman Aşımı" : "Hata", {
+        description: isTimeout
+          ? `${getDeleteTypeLabel(deleteType)} silme işlemi çok uzun sürdü. İşlem arka planda devam ediyor olabilir.`
+          : `${getDeleteTypeLabel(deleteType)} silinirken bir hata oluştu`,
       })
     } finally {
       setDeleting(false)

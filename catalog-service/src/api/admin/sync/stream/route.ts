@@ -1,4 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { Response } from "express"
 import { SYNC_MANAGER_MODULE } from "../../../../modules/sync-manager"
 import type SyncManagerService from "../../../../modules/sync-manager/service"
 
@@ -6,10 +7,10 @@ import type SyncManagerService from "../../../../modules/sync-manager/service"
  * GET /admin/sync/stream
  * Server-Sent Events ile tüm sync konfigürasyonları için real-time güncellemeler
  *
- * Düzeltmeler:
- * - 500ms → 3000ms interval (pool baskısı %83 azaltıldı)
- * - Guard: önceki sorgu bitmeden yeni sorgu başlamaz
- * - Client disconnect durumunda interval temizleniyor
+ * Optimize:
+ * - res.flush() eklendi — veri anında client'a gönderiliyor
+ * - Stats paralel çekiliyor (Promise.all) — N×latency yerine 1×latency
+ * - 2s interval (3s'ten düşürüldü — flush ile pool baskısı zaten azaldı)
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const syncManager = req.scope.resolve<SyncManagerService>(SYNC_MANAGER_MODULE)
@@ -28,6 +29,16 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   let isSending = false
   let closed = false
 
+  const flush = () => {
+    try {
+      if (typeof (res as unknown as Response).flush === "function") {
+        ;(res as unknown as Response).flush()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const sendUpdate = async (): Promise<void> => {
     if (isSending || closed) return
     isSending = true
@@ -39,18 +50,19 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       }
 
       const configs = await syncManager.listSyncConfigs()
+      if (closed) return
 
-      // Her config için stats al — sequential yaparak pool baskısını azalt
-      const configsWithStats: Record<string, unknown>[] = []
-      for (const config of configs) {
-        if (closed) return
-        const stats = await syncManager.getSyncStats(config.id)
-        configsWithStats.push({
-          ...config,
-          stats,
-          is_running: stats.running_jobs > 0,
+      // Paralel stats çekimi — sequential yerine
+      const configsWithStats = await Promise.all(
+        configs.map(async (config) => {
+          const stats = await syncManager.getSyncStats(config.id)
+          return {
+            ...config,
+            stats,
+            is_running: stats.running_jobs > 0,
+          }
         })
-      }
+      )
 
       if (closed) return
 
@@ -60,6 +72,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       }
 
       res.write(`data: ${JSON.stringify(data)}\n\n`)
+      flush()
     } catch (error) {
       console.error("[SSE] Error:", error)
     } finally {
@@ -70,14 +83,14 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   // İlk güncelleme
   await sendUpdate()
 
-  // 3 saniye interval
+  // 2 saniye interval
   const interval = setInterval(async () => {
     try {
       await sendUpdate()
     } catch {
       // Ignore
     }
-  }, 3000)
+  }, 2000)
 
   const cleanup = () => {
     closed = true
