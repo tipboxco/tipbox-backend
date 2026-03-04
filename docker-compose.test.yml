@@ -2,6 +2,7 @@
 # cp .env.example .env.test ile oluşturup test değerlerini (isteğe bağlı) girin.
 #
 # 4GB RAM sunucu için optimize edilmiş yapılandırma (swap önerilir)
+name: tipbox-test
 # Toplam bellek dağılımı:
 #   PostgreSQL 512MB | Backend 1.5GB | Catalog 2GB | Redis 384MB
 #   MinIO 256MB | Nginx 128MB | Admin 384MB | pgadmin 256MB | prisma-studio 192MB

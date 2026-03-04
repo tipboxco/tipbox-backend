@@ -94,6 +94,16 @@ runs:
             build)
               echo "🔨 Building Docker images..."
               cd "$PROJECT_DIR" || exit 1
+              # Disk %85'in üzerindeyse build öncesi temizlik yap
+              DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              echo "💾 Current disk usage: ${DISK_USAGE}%"
+              if [ "$DISK_USAGE" -gt 85 ]; then
+                echo "⚠️  Disk usage above 85%, cleaning up before build..."
+                docker image prune -af
+                docker builder prune -f
+                docker container prune -f
+                echo "💾 Disk usage after cleanup: $(df / | tail -1 | awk '{print $5}')"
+              fi
               export DOCKER_BUILDKIT=1
               export COMPOSE_DOCKER_CLI_BUILD=1
               # Trim whitespace from CHANGED_SERVICES
@@ -244,9 +254,18 @@ runs:
               done
               ;;
             cleanup)
-              echo "🧹 Cleaning up old Docker images..."
+              echo "🧹 Cleaning up old Docker resources..."
               cd "$PROJECT_DIR" || exit 1
+              # Dangling image'ları sil
               docker image prune -f
+              # Build cache'i temizle (en çok yer kaplayan)
+              docker builder prune -f --keep-storage=2gb 2>/dev/null || docker builder prune -f
+              # Kullanılmayan container'ları sil
+              docker container prune -f
+              echo "💾 Disk usage after cleanup:"
+              df -h / | tail -1
+              echo "🐳 Docker disk usage:"
+              docker system df
               echo "📊 Container status:"
               docker compose -f "$COMPOSE_FILE" ps
               echo "✅ Test environment deployment completed successfully!"

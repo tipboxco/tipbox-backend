@@ -2,6 +2,7 @@
 # cp .env.example .env ile oluşturun.
 #
 # 4GB RAM sunucu için optimize edilmiş development yapılandırması
+name: tipbox-dev
 services:
   postgres:
     image: postgres:15-alpine

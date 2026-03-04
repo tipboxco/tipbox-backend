@@ -2,6 +2,7 @@
 # cp .env.example .env ile oluşturup production değerlerini girin.
 #
 # 4GB RAM sunucu için optimize edilmiş production yapılandırması
+name: tipbox-prod
 services:
   postgres:
     image: postgres:15-alpine

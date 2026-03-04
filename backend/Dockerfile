@@ -9,6 +9,11 @@ RUN apk add --no-cache python3 make g++ \
 # pnpm aktif et
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
+# pnpm store path'i /app içine sabitle (root'a yazma hatasını önler)
+ENV PNPM_HOME=/app/.pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN pnpm config set store-dir /app/.pnpm-store
+
 # 1) Sadece dependency dosyalarını kopyala (layer cache için)
 COPY package.json .npmrc ./
 COPY pnpm-lock.yaml* ./
