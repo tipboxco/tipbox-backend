@@ -106,7 +106,18 @@ services:
       - redis_test_data:/data
     networks:
       - tipbox_network
-    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru --save "" --stop-writes-on-bgsave-error no
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 200mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --stop-writes-on-bgsave-error
+      - "no"
     deploy:
       resources:
         limits:
