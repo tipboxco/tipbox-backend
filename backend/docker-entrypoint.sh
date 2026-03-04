@@ -73,7 +73,8 @@ else
         echo "⚠️  Migration bulunamadı, devam ediliyor..."
       fi
     else
-      echo "⚠️  Migration hatası, devam ediliyor..."
+      echo "❌ Migration hatası! Container durduruluyor."
+      exit 1
     fi
   fi
 fi

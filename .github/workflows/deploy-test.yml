@@ -62,50 +62,13 @@ jobs:
 
       - name: Detect changed services
         id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          OUTPUT_FILE: ${{ github.output }}
         run: |
-          # workflow_dispatch ise tüm servisleri build et
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "📋 Manual dispatch - building all services"
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "admin=true" >> $GITHUB_OUTPUT
-            echo "catalog=true" >> $GITHUB_OUTPUT
-            echo "changed_services=" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          echo "Changed files:"
-          echo "$CHANGED"
-
-          BACKEND=false
-          ADMIN=false
-          CATALOG=false
-          SERVICES=""
-
-          if echo "$CHANGED" | grep -q "^backend/"; then
-            BACKEND=true
-            SERVICES="$SERVICES backend"
-          fi
-          if echo "$CHANGED" | grep -q "^admin-panel/"; then
-            ADMIN=true
-            SERVICES="$SERVICES admin-panel"
-          fi
-          if echo "$CHANGED" | grep -q "^catalog-service/"; then
-            CATALOG=true
-            SERVICES="$SERVICES catalog-service"
-          fi
-
-          # docker-compose veya workflow dosyaları değiştiyse tümünü build et
-          if echo "$CHANGED" | grep -qE "^docker-compose|^\.github/"; then
-            echo "⚠️  Shared config changed - building all services"
-            SERVICES=""
-          fi
-
-          echo "backend=$BACKEND" >> $GITHUB_OUTPUT
-          echo "admin=$ADMIN" >> $GITHUB_OUTPUT
-          echo "catalog=$CATALOG" >> $GITHUB_OUTPUT
-          echo "changed_services=$(echo $SERVICES | xargs)" >> $GITHUB_OUTPUT
-          echo "Services to build: $(echo $SERVICES | xargs || echo 'all')"
+          EVENT_NAME="${{ github.event_name }}" \
+          OUTPUT_FILE="$GITHUB_OUTPUT" \
+          bash .github/scripts/initialize/detect-changes.sh
 
   deploy:
     name: Deploy to Test Server
@@ -170,7 +133,7 @@ jobs:
           deploy_branch: ${{ github.event.inputs.branch || github.ref_name }}
           env_file: .env.test
 
-      # ── 2. Backup (skip_backup=true ise atlanır) ──
+      # ── 2. Backup (skip_backup=true ise atlanır) — stop öncesi, postgres hâlâ ayakta ──
       - name: Backup database
         if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.skip_backup != 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -182,7 +145,17 @@ jobs:
           db_user: tipbox_user
           db_name: tipbox_test
 
-      # ── 3. Build (sadece değişen servisler) ──
+      # ── 3. Stop (backup sonrası eski container'ları durdur) ──
+      - name: Stop running services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: stop
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      # ── 4. Build (sadece değişen servisler) ──
       - name: Build images
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -194,7 +167,9 @@ jobs:
           force_rebuild: ${{ github.event.inputs.force_rebuild == 'true' && 'true' || 'false' }}
           changed_services: ${{ needs.detect-changes.outputs.changed_services }}
 
-      # ── 4. Infrastructure (postgres, redis, minio) ──
+      # ── 5. Infrastructure (postgres, redis, minio) ──
+      # docker compose run --rm backend (migrate) depends_on: service_healthy ile bu servislerin
+      # hazır olmasını zaten bekler — ayrı wait-db stage'e gerek yok.
       - name: Start infrastructure services
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -203,18 +178,6 @@ jobs:
           stage: infrastructure
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
-
-      # ── 5. Wait for DB ──
-      - name: Wait for database
-        if: steps.check-secrets.outputs.available == 'true'
-        uses: ./.github/actions/execute-remote-stage
-        with:
-          ssh_host: hetzner-deploy
-          stage: wait-db
-          project_dir: /opt/tipbox-backend
-          compose_file: docker-compose.test.yml
-          db_user: tipbox_user
-          db_name: tipbox_test
 
       # ── 6. Migrations ──
       - name: Run migrations
