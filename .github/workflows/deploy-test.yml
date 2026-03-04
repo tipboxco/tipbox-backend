@@ -167,29 +167,31 @@ jobs:
           force_rebuild: ${{ github.event.inputs.force_rebuild == 'true' && 'true' || 'false' }}
           changed_services: ${{ needs.detect-changes.outputs.changed_services }}
 
-      # ── 5. Infrastructure (postgres, redis, minio) ──
-      # docker compose run --rm backend (migrate) depends_on: service_healthy ile bu servislerin
-      # hazır olmasını zaten bekler — ayrı wait-db stage'e gerek yok.
-      - name: Start infrastructure services
+      # ── 5. Start all services ──
+      # docker compose up -d: depends_on: service_healthy ile postgres/redis/minio önce başlar,
+      # sonra backend container başlar. Entrypoint: node_modules, prisma generate, migrate, pnpm dev.
+      - name: Start all services
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
           ssh_host: hetzner-deploy
-          stage: infrastructure
+          stage: start
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
 
-      # ── 6. Migrations ──
-      - name: Run migrations
+      # ── 6. Health check ──
+      # /health endpoint'i yalnızca migration + server başlatma tamamlandıktan sonra yanıt verir.
+      - name: Health check
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
           ssh_host: hetzner-deploy
-          stage: migrate
+          stage: health
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
 
-      # ── 7. Seed (sadece manuel + istenirse) ──
+      # ── 7. Seed (sadece manuel + istenirse) — health sonrası, backend ayakta ──
+      # docker compose exec: çalışan backend container içinde çalışır, entrypoint çalışmaz.
       - name: Run seeds
         if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.run_seed == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -201,27 +203,7 @@ jobs:
           db_user: tipbox_user
           db_name: tipbox_test
 
-      # ── 8. Start all services ──
-      - name: Start all services
-        if: steps.check-secrets.outputs.available == 'true'
-        uses: ./.github/actions/execute-remote-stage
-        with:
-          ssh_host: hetzner-deploy
-          stage: start
-          project_dir: /opt/tipbox-backend
-          compose_file: docker-compose.test.yml
-
-      # ── 9. Health check ──
-      - name: Health check
-        if: steps.check-secrets.outputs.available == 'true'
-        uses: ./.github/actions/execute-remote-stage
-        with:
-          ssh_host: hetzner-deploy
-          stage: health
-          project_dir: /opt/tipbox-backend
-          compose_file: docker-compose.test.yml
-
-      # ── 10. Cleanup ──
+      # ── 8. Cleanup ──
       - name: Cleanup deployment
         if: always() && steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage

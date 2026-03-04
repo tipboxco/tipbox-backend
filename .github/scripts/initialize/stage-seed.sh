@@ -10,11 +10,11 @@ HAS_DATA=$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER"
 if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
   echo "🌱 Running database seeds..."
 
-  # Not: migrate aşamasında prisma generate çalıştırıldı, named volume persist ediyor → regenerate gereksiz
-  # Seed'i çalıştır
-  docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts --all || {
+  # docker compose exec: çalışan backend container içinde çalışır (entrypoint yok, yeni container yok)
+  # node_modules, prisma client, env vars zaten mevcut
+  docker compose -f "$COMPOSE_FILE" exec -T backend npx ts-node scripts/clear-and-seed.ts --all || {
     echo "⚠️  Full seed failed, trying minimal seed..."
-    docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts || {
+    docker compose -f "$COMPOSE_FILE" exec -T backend npx ts-node scripts/clear-and-seed.ts || {
       echo "⚠️  Seed failed, continuing without seed data..."
     }
   }
