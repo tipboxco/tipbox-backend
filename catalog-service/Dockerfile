@@ -5,16 +5,19 @@ FROM node:20-alpine
 # Install dos2unix, postgresql-client and unzip
 RUN apk add --no-cache dos2unix postgresql-client unzip
 
+# pnpm aktif et
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
 # Set working directory
 WORKDIR /server
 
 # 1) Sadece dependency dosyalarini kopyala (layer cache icin)
 COPY package.json ./
-COPY package-lock.json* ./
+COPY pnpm-lock.yaml* ./
 
-# 2) Dependencies'leri yukle (BuildKit cache mount ile npm cache'lenir)
-RUN --mount=type=cache,id=npm-cache-catalog,target=/root/.npm \
-    npm install --legacy-peer-deps
+# 2) Dependencies'leri yukle (BuildKit cache mount ile pnpm store cache'lenir)
+RUN --mount=type=cache,id=pnpm-store-catalog,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile || pnpm install
 
 # 3) Source code'u kopyala
 COPY . .

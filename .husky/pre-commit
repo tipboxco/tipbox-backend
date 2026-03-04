@@ -1,23 +1,16 @@
 #!/usr/bin/env sh
 
+# --- lint-staged (prettier) ---
+npx lint-staged
+
 # --- Backend versiyon guncelleme (sadece test/staging) ---
 CURRENT_BRANCH=$(git branch --show-current)
 
 if [ "$CURRENT_BRANCH" = "test" ] || [ "$CURRENT_BRANCH" = "staging" ]; then
-  # Commit mesajini kontrol et (eger varsa)
-  COMMIT_MSG_FILE=$(git rev-parse --git-dir)/COMMIT_EDITMSG
-  if [ -f "$COMMIT_MSG_FILE" ]; then
-    COMMIT_MSG=$(cat "$COMMIT_MSG_FILE" 2>/dev/null || echo "")
-    if echo "$COMMIT_MSG" | grep -qiE "bump version|\[skip version\]"; then
-      echo "ℹ️  Versiyon guncelleme atlandi (commit mesajinda skip var)"
-      exit 0
-    fi
-  fi
-
-  # Mevcut versiyonu kaydet (backend dizininden)
+  # Mevcut versiyonu kaydet
   OLD_VERSION=$(node -p "require('./backend/package.json').version" 2>/dev/null || echo "")
 
-  # Versiyonu guncelle (backend dizininde calistir)
+  # Versiyonu guncelle
   cd backend && npx ts-node scripts/bump-version.ts > /tmp/bump-version.log 2>&1
   BUMP_EXIT_CODE=$?
   cd ..
@@ -28,12 +21,12 @@ if [ "$CURRENT_BRANCH" = "test" ] || [ "$CURRENT_BRANCH" = "staging" ]; then
     exit 0
   fi
 
-  # Yeni versiyonu al
   NEW_VERSION=$(node -p "require('./backend/package.json').version" 2>/dev/null || echo "")
 
-  # Eger versiyon degistiyse, package.json'i stage'e ekle
   if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+    # Prettier ile formatla (JSON.stringify farkli formatlayabilir)
+    npx prettier --write backend/package.json > /dev/null 2>&1
     git add backend/package.json
-    echo "✅ Versiyon otomatik guncellendi: $OLD_VERSION -> $NEW_VERSION (commit'e dahil edildi)"
+    echo "✅ Versiyon: $OLD_VERSION -> $NEW_VERSION"
   fi
 fi
