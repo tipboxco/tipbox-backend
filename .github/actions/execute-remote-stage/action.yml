@@ -50,6 +50,30 @@ runs:
         FORCE_REBUILD: ${{ inputs.force_rebuild }}
         CHANGED_SERVICES: ${{ inputs.changed_services }}
       run: |
-        SCRIPT_PATH="$PROJECT_DIR/.github/scripts/initialize/stage-${STAGE}.sh"
-        ssh "$SSH_HOST" \
-          "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' CHANGED_SERVICES='$CHANGED_SERVICES' && bash '$SCRIPT_PATH'"
+        # prepare stage özeldir: git pull yapmadan önce sunucuda script dosyaları yok.
+        # Bu yüzden prepare inline heredoc ile çalışır; diğer tüm stage'ler script çağırır.
+        if [ "$STAGE" = "prepare" ]; then
+          ssh "$SSH_HOST" "export PROJECT_DIR='$PROJECT_DIR' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' && bash -s" << 'PREPARE_INLINE'
+            set -e
+            echo "🚀 Starting deployment..."
+            echo "📌 Deploying branch: $DEPLOY_BRANCH"
+            cd "$PROJECT_DIR" || { echo "❌ Project directory not found: $PROJECT_DIR"; exit 1; }
+            echo "📥 Pulling latest changes from branch: $DEPLOY_BRANCH"
+            git fetch origin
+            git checkout "$DEPLOY_BRANCH"
+            echo "🧹 Cleaning local changes..."
+            git reset --hard "origin/$DEPLOY_BRANCH"
+            git clean -fd -e ".env*" -e "backups/"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "❌ $ENV_FILE file not found! Please create it first."
+              echo "📋 Available env files:"
+              ls -la "$PROJECT_DIR"/.env* 2>/dev/null || echo "  No .env files found"
+              exit 1
+            fi
+            echo "✅ Preparation completed"
+        PREPARE_INLINE
+        else
+          SCRIPT_PATH="$PROJECT_DIR/.github/scripts/initialize/stage-${STAGE}.sh"
+          ssh "$SSH_HOST" \
+            "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' CHANGED_SERVICES='$CHANGED_SERVICES' && bash '$SCRIPT_PATH'"
+        fi
