@@ -1,8 +1,5 @@
 #!/usr/bin/env sh
 
-# --- lint-staged (prettier) ---
-npx lint-staged
-
 # --- Backend versiyon guncelleme (sadece test/staging) ---
 CURRENT_BRANCH=$(git branch --show-current)
 
@@ -24,8 +21,6 @@ if [ "$CURRENT_BRANCH" = "test" ] || [ "$CURRENT_BRANCH" = "staging" ]; then
   NEW_VERSION=$(node -p "require('./backend/package.json').version" 2>/dev/null || echo "")
 
   if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
-    # Prettier ile formatla (JSON.stringify farkli formatlayabilir)
-    npx prettier --write backend/package.json > /dev/null 2>&1
     git add backend/package.json
     echo "✅ Versiyon: $OLD_VERSION -> $NEW_VERSION"
   fi

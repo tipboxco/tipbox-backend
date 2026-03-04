@@ -103,7 +103,7 @@ jobs:
           SKIP_BACKUP: ${{ github.event.inputs.skip_backup == 'true' && 'true' || 'false' }}
         run: |
           ssh hetzner-deploy "export DEPLOY_BRANCH='$DEPLOY_BRANCH' FORCE_REBUILD='$FORCE_REBUILD' SKIP_BACKUP='$SKIP_BACKUP' && bash -s" << 'DEPLOY_SCRIPT'
-            set -e
+            set -euo pipefail
             PROJECT_DIR="/opt/tipbox-backend"
             COMPOSE_FILE="docker-compose.test.yml"
             DB_USER="${DB_USER:-tipbox_user}"
@@ -115,12 +115,17 @@ jobs:
             git fetch origin
             git checkout "$DEPLOY_BRANCH"
             git reset --hard "origin/$DEPLOY_BRANCH"
-            git clean -fd
+            # git clean ile .env dosyalarını ve backups'ı koruyoruz
+            git clean -fd -e ".env*" -e "backups/"
 
-            if [ ! -f "backend/.env.test" ]; then
-              echo "❌ backend/.env.test not found!"
+            # .env.test kontrolü (compose dosyası proje kökündeki .env.test kullanıyor)
+            if [ ! -f ".env.test" ]; then
+              echo "❌ .env.test not found in project root!"
+              echo "📋 Files in project root:"
+              ls -la *.env* 2>/dev/null || echo "  No .env files found"
               exit 1
             fi
+            echo "✅ .env.test found"
 
             # ── 2. Backup (servisler hala çalışırken) ──
             if [ "$SKIP_BACKUP" != "true" ]; then
@@ -133,16 +138,17 @@ jobs:
             fi
 
             # ── 3. Build (servisler hala çalışırken - zero downtime) ──
+            echo "🔨 Starting Docker build..."
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
             if [ "$FORCE_REBUILD" = "true" ]; then
-              echo "🔨 Building images (no-cache)..."
-              docker compose -f "$COMPOSE_FILE" build --no-cache
+              echo "🔄 Force rebuild requested - building without cache"
+              docker compose -f "$COMPOSE_FILE" build --no-cache 2>&1
             else
-              echo "🔨 Building images (cached)..."
-              docker compose -f "$COMPOSE_FILE" build
+              echo "⚡ Building with cache..."
+              docker compose -f "$COMPOSE_FILE" build 2>&1
             fi
-            echo "✅ Build completed"
+            echo "✅ Build completed successfully"
           DEPLOY_SCRIPT
 
       - name: Deploy & Migrate
@@ -151,7 +157,7 @@ jobs:
           RUN_SEED: ${{ github.event.inputs.run_seed == 'true' && 'true' || 'false' }}
         run: |
           ssh hetzner-deploy "export RUN_SEED='$RUN_SEED' && bash -s" << 'DEPLOY_SCRIPT'
-            set -e
+            set -euo pipefail
             PROJECT_DIR="/opt/tipbox-backend"
             COMPOSE_FILE="docker-compose.test.yml"
             DB_USER="${DB_USER:-tipbox_user}"
@@ -161,6 +167,7 @@ jobs:
             # ── 4. Infrastructure'ın çalıştığından emin ol ──
             echo "🚀 Ensuring infrastructure is up..."
             docker compose -f "$COMPOSE_FILE" up -d postgres redis minio
+            echo "✅ Infrastructure services started"
 
             # DB hazır olana kadar bekle
             echo "⏳ Waiting for database..."
@@ -169,18 +176,27 @@ jobs:
                 echo "✅ Database ready"
                 break
               fi
-              [ "$i" -eq 20 ] && { echo "❌ Database not ready"; exit 1; }
+              if [ "$i" -eq 20 ]; then
+                echo "❌ Database not ready after 20 attempts"
+                exit 1
+              fi
               sleep 2
             done
 
             # ── 5. Migrations ──
+            echo "📊 Running Prisma generate..."
+            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate 2>&1
+            echo "✅ Prisma generate completed"
+
             echo "📊 Running migrations..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
+            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy 2>&1 || {
               echo "❌ Migration failed!"
               exit 1
             }
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss || \
+            echo "✅ Migrations completed"
+
+            echo "🔄 Schema push..."
+            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss 2>&1 || \
               echo "⚠️  Schema push failed, continuing..."
 
             # ── 6. Seed (sadece manuel + istenirse) ──
@@ -199,8 +215,12 @@ jobs:
 
             # ── 7. Start/restart tüm servisleri (sadece değişenler recreate edilir) ──
             echo "🚀 Starting all services..."
-            docker compose -f "$COMPOSE_FILE" up -d
-            echo "✅ Services started"
+            docker compose -f "$COMPOSE_FILE" up -d 2>&1
+            echo "✅ All services started"
+
+            # Container durumunu göster
+            echo "📊 Container status:"
+            docker compose -f "$COMPOSE_FILE" ps
           DEPLOY_SCRIPT
 
       - name: Health check
