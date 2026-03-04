@@ -245,15 +245,14 @@ services:
     command: >
       sh -c "
         if [ ! -d node_modules/prisma ]; then
-          corepack enable && corepack prepare pnpm@9.15.0 --activate &&
-          pnpm add prisma @prisma/client;
+          npm install prisma @prisma/client --no-fund --no-audit;
         fi &&
         npx prisma studio --port 5555 --hostname 0.0.0.0 --browser none
       "
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 320M
         reservations:
           memory: 64M
     networks:
