@@ -12,6 +12,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /server
 
 # 1) Sadece dependency dosyalarini kopyala (layer cache icin)
+COPY .npmrc ./
 COPY package.json ./
 COPY pnpm-lock.yaml* ./
 

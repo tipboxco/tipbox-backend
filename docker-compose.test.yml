@@ -131,7 +131,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=test
-      - NODE_OPTIONS=--max-old-space-size=768
+      - NODE_OPTIONS=--max-old-space-size=896
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -228,7 +228,7 @@ services:
       start_period: 30s
 
   prisma-studio:
-    image: node:23-alpine
+    image: node:20-alpine
     container_name: tipbox_prisma_studio_test
     restart: always
     ports:
@@ -245,9 +245,9 @@ services:
     command: >
       sh -c "
         if [ ! -d node_modules/prisma ]; then
-          npm install prisma @prisma/client --no-fund --no-audit;
+          npm install prisma@6 @prisma/client@6 --no-fund --no-audit;
         fi &&
-        npx prisma studio --port 5555 --hostname 0.0.0.0 --browser none
+        BROWSER=none npx prisma studio --port 5555 --hostname 0.0.0.0
       "
     deploy:
       resources:
@@ -324,8 +324,8 @@ services:
       - S3_REGION=${S3_REGION:-eu-central-1}
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
-      - MEDUSA_ADMIN_PATH=/catalog/app
-      - MEDUSA_ADMIN_BACKEND_URL=${MEDUSA_ADMIN_BACKEND_URL:-https://api-test.tipbox.co/catalog}
+      - MEDUSA_ADMIN_PATH=${MEDUSA_ADMIN_PATH:-/catalog/app}
+      - MEDUSA_ADMIN_BACKEND_URL=${MEDUSA_ADMIN_BACKEND_URL:-http://localhost/catalog}
     volumes:
       - ./catalog-service:/server
       - catalog_service_test_node_modules:/server/node_modules
