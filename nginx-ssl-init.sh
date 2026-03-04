@@ -48,7 +48,8 @@ server {
     # Admin panel dashboard
     location /dashboard/ {
         set $admin http://admin-panel:5174;
-        proxy_pass $admin/;
+        rewrite ^/dashboard/(.*)$ /$1 break;
+        proxy_pass $admin;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -104,7 +105,8 @@ server {
     # Catalog service API
     location /catalog/ {
         set $catalog http://catalog-service:5175;
-        proxy_pass $catalog/;
+        rewrite ^/catalog/(.*)$ /$1 break;
+        proxy_pass $catalog;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -121,13 +123,14 @@ server {
 
     location /health {
         set $backend http://backend:3000;
-        proxy_pass $backend/health;
+        proxy_pass $backend;
         access_log off;
     }
 
     location /media/ {
         set $minio http://minio:9000;
-        proxy_pass $minio/tipbox-media/;
+        rewrite ^/media/(.*)$ /tipbox-media/$1 break;
+        proxy_pass $minio;
         limit_except GET HEAD OPTIONS { deny all; }
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;

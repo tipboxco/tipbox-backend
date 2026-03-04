@@ -199,10 +199,16 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx-ssl-init.sh:/docker-entrypoint.d/40-ssl-init.sh:ro
+      - ./nginx-ssl-init.sh:/docker-entrypoint.d/40-ssl-init.sh
       - ./logs/nginx:/var/log/nginx
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        chmod +x /docker-entrypoint.d/40-ssl-init.sh 2>/dev/null
+        /docker-entrypoint.sh nginx -g "daemon off;"
     depends_on:
       backend:
         condition: service_healthy
