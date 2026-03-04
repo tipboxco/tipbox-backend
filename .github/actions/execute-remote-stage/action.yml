@@ -29,6 +29,10 @@ inputs:
     description: 'Force rebuild without cache'
     required: false
     default: 'false'
+  changed_services:
+    description: 'Space-separated list of services to build (empty = all)'
+    required: false
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -44,8 +48,9 @@ runs:
         DB_USER: ${{ inputs.db_user }}
         DB_NAME: ${{ inputs.db_name }}
         FORCE_REBUILD: ${{ inputs.force_rebuild }}
+        CHANGED_SERVICES: ${{ inputs.changed_services }}
       run: |
-        ssh "$SSH_HOST" "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' && bash -s" << 'STAGE_SCRIPT'
+        ssh "$SSH_HOST" "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' CHANGED_SERVICES='$CHANGED_SERVICES' && bash -s" << 'STAGE_SCRIPT'
           set -e
           
           case "$STAGE" in
@@ -91,12 +96,17 @@ runs:
               cd "$PROJECT_DIR" || exit 1
               export DOCKER_BUILDKIT=1
               export COMPOSE_DOCKER_CLI_BUILD=1
+              # Trim whitespace from CHANGED_SERVICES
+              SERVICES=$(echo "$CHANGED_SERVICES" | xargs)
               if [ "$FORCE_REBUILD" = "true" ]; then
                 echo "🔄 Force rebuild requested - building without cache"
-                docker compose -f "$COMPOSE_FILE" build --no-cache
-              else
+                docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES
+              elif [ -z "$SERVICES" ]; then
                 echo "⚡ Building all services with cache (BuildKit)..."
                 docker compose -f "$COMPOSE_FILE" build
+              else
+                echo "⚡ Building only changed services with cache (BuildKit): $SERVICES"
+                docker compose -f "$COMPOSE_FILE" build $SERVICES
               fi
               echo "✅ Images built successfully"
               ;;

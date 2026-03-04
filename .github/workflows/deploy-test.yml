@@ -45,9 +45,72 @@ permissions:
   pull-requests: read
 
 jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      admin: ${{ steps.changes.outputs.admin }}
+      catalog: ${{ steps.changes.outputs.catalog }}
+      changed_services: ${{ steps.changes.outputs.changed_services }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          # workflow_dispatch ise tüm servisleri build et
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "📋 Manual dispatch - building all services"
+            echo "backend=true" >> $GITHUB_OUTPUT
+            echo "admin=true" >> $GITHUB_OUTPUT
+            echo "catalog=true" >> $GITHUB_OUTPUT
+            echo "changed_services=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          BACKEND=false
+          ADMIN=false
+          CATALOG=false
+          SERVICES=""
+
+          if echo "$CHANGED" | grep -q "^backend/"; then
+            BACKEND=true
+            SERVICES="$SERVICES backend"
+          fi
+          if echo "$CHANGED" | grep -q "^admin-panel/"; then
+            ADMIN=true
+            SERVICES="$SERVICES admin-panel"
+          fi
+          if echo "$CHANGED" | grep -q "^catalog-service/"; then
+            CATALOG=true
+            SERVICES="$SERVICES catalog-service"
+          fi
+
+          # docker-compose veya workflow dosyaları değiştiyse tümünü build et
+          if echo "$CHANGED" | grep -qE "^docker-compose|^\.github/"; then
+            echo "⚠️  Shared config changed - building all services"
+            SERVICES=""
+          fi
+
+          echo "backend=$BACKEND" >> $GITHUB_OUTPUT
+          echo "admin=$ADMIN" >> $GITHUB_OUTPUT
+          echo "catalog=$CATALOG" >> $GITHUB_OUTPUT
+          echo "changed_services=$(echo $SERVICES | xargs)" >> $GITHUB_OUTPUT
+          echo "Services to build: $(echo $SERVICES | xargs || echo 'all')"
+
   deploy:
     name: Deploy to Test Server
     runs-on: ubuntu-latest
+    needs: detect-changes
 
     steps:
       - name: Checkout code
@@ -119,7 +182,7 @@ jobs:
           db_user: tipbox_user
           db_name: tipbox_test
 
-      # ── 3. Build (servisler çalışırken, zero-downtime) ──
+      # ── 3. Build (sadece değişen servisler) ──
       - name: Build images
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -129,6 +192,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           force_rebuild: ${{ github.event.inputs.force_rebuild == 'true' && 'true' || 'false' }}
+          changed_services: ${{ needs.detect-changes.outputs.changed_services }}
 
       # ── 4. Infrastructure (postgres, redis, minio) ──
       - name: Start infrastructure services
