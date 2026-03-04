@@ -144,10 +144,11 @@ runs:
               echo "⏳ Waiting for infrastructure services to be ready..."
               cd "$PROJECT_DIR" || exit 1
 
-              # 1. Postgres process hazır mı (pg_isready)
+              # 1. Postgres process hazır mı (postgres DB'sine bağlan - her zaman var)
               echo "🐘 Waiting for PostgreSQL process..."
               for i in $(seq 1 30); do
-                if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$DB_USER" > /dev/null 2>&1; then
+                if docker compose -f "$COMPOSE_FILE" exec -T postgres \
+                  pg_isready -U "$DB_USER" -d postgres > /dev/null 2>&1; then
                   echo "✅ PostgreSQL process is ready!"
                   break
                 fi
@@ -161,7 +162,7 @@ runs:
               done
 
               # 2. Hedef DB'ye gerçek bağlantı testi (migration için gerekli)
-              echo "🐘 Waiting for target database to accept connections..."
+              echo "🐘 Waiting for target database '$DB_NAME' to accept connections..."
               for i in $(seq 1 20); do
                 if docker compose -f "$COMPOSE_FILE" exec -T postgres \
                   psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then

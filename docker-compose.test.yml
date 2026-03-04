@@ -39,7 +39,7 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user} -d ${POSTGRES_DB:-tipbox_test}"]
       interval: 10s
       timeout: 5s
       retries: 5
