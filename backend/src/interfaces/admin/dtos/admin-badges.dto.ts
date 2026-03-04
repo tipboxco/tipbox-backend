@@ -131,6 +131,7 @@ import type {
   AdminCreateCollectionSchema,
   AdminUpdateCollectionSchema,
   AdminCreateCollectionGoalSchema,
+  AdminUpdateCollectionGoalSchema,
   AdminCreateBadgeSchema,
   AdminUpdateBadgeSchema,
 } from '../schemas/admin-badges.schemas';
@@ -139,5 +140,6 @@ import type { z } from 'zod';
 export type AdminCreateCollectionInput = z.infer<typeof AdminCreateCollectionSchema>;
 export type AdminUpdateCollectionInput = z.infer<typeof AdminUpdateCollectionSchema>;
 export type AdminCreateCollectionGoalInput = z.infer<typeof AdminCreateCollectionGoalSchema>;
+export type AdminUpdateCollectionGoalInput = z.infer<typeof AdminUpdateCollectionGoalSchema>;
 export type AdminCreateBadgeInput = z.infer<typeof AdminCreateBadgeSchema>;
 export type AdminUpdateBadgeInput = z.infer<typeof AdminUpdateBadgeSchema>;

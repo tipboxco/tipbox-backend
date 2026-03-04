@@ -1,4 +1,4 @@
-import { PrismaClient, BadgeType, BadgeRarity, AchievementDifficulty, MainAction } from '@prisma/client';
+import { PrismaClient, BadgeType, BadgeRarity, AchievementDifficulty, MainAction, ContentPostType } from '@prisma/client';
 
 export async function seedGamificationCollections(prisma: PrismaClient) {
   console.log('🎮 Seeding Gamification Collections...');
@@ -271,8 +271,85 @@ export async function seedGamificationCollections(prisma: PrismaClient) {
     });
   }
 
+  // Create keyword-based Achievement Goals
+  if (postAction) {
+    // Keyword goal: Battery experience posts
+    const batteryExpertBadge = await prisma.badge.upsert({
+      where: { id: '10000000-0000-0000-0000-000000000007' },
+      update: {},
+      create: {
+        id: '10000000-0000-0000-0000-000000000007',
+        name: 'Battery Expert',
+        description: 'Shared 5 posts about battery and performance topics',
+        imageUrl: null,
+        type: BadgeType.COLLECTION,
+        rarity: BadgeRarity.RARE,
+        categoryId: collectionCategory.id,
+        collectionId: contentCreatorCollection.id,
+        boostMultiplier: 1.2,
+        rewardMultiplier: 1.1,
+      },
+    });
+
+    await prisma.achievementGoal.upsert({
+      where: { id: '20000000-0000-0000-0000-000000000006' },
+      update: {},
+      create: {
+        id: '20000000-0000-0000-0000-000000000006',
+        collectionId: contentCreatorCollection.id,
+        title: 'Battery Expert Achievement',
+        requirement: 'Share 5 experience posts about battery and performance',
+        mainAction: postAction.mainAction,
+        actionTypeId: postAction.id,
+        rewardBadgeId: batteryExpertBadge.id,
+        pointsRequired: 5,
+        difficulty: AchievementDifficulty.MEDIUM,
+        keywords: ['battery', 'performance'],
+        allowedPostTypes: [ContentPostType.EXPERIENCE],
+        isPassive: false,
+      },
+    });
+
+    // Passive keyword goal: Photography tracker (no badge awarded)
+    const photoTrackerBadge = await prisma.badge.upsert({
+      where: { id: '10000000-0000-0000-0000-000000000008' },
+      update: {},
+      create: {
+        id: '10000000-0000-0000-0000-000000000008',
+        name: 'Photography Enthusiast',
+        description: 'Passive tracker for photography content',
+        imageUrl: null,
+        type: BadgeType.COLLECTION,
+        rarity: BadgeRarity.COMMON,
+        categoryId: collectionCategory.id,
+        collectionId: contentCreatorCollection.id,
+        boostMultiplier: null,
+        rewardMultiplier: null,
+      },
+    });
+
+    await prisma.achievementGoal.upsert({
+      where: { id: '20000000-0000-0000-0000-000000000007' },
+      update: {},
+      create: {
+        id: '20000000-0000-0000-0000-000000000007',
+        collectionId: contentCreatorCollection.id,
+        title: 'Photography Content Tracker',
+        requirement: 'Track photography-related posts (passive)',
+        mainAction: postAction.mainAction,
+        actionTypeId: postAction.id,
+        rewardBadgeId: photoTrackerBadge.id,
+        pointsRequired: 10,
+        difficulty: AchievementDifficulty.EASY,
+        keywords: ['camera', 'photography'],
+        allowedPostTypes: [],
+        isPassive: true,
+      },
+    });
+  }
+
   console.log('✅ Gamification Collections seeded:');
   console.log('   - 3 BadgeCollections created');
-  console.log('   - 6 Badges created');
-  console.log('   - 5 AchievementGoals created');
+  console.log('   - 8 Badges created (including 2 keyword-based)');
+  console.log('   - 7 AchievementGoals created (including 2 keyword-based, 1 passive)');
 }

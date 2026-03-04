@@ -66,6 +66,7 @@ export default function EditableDrawer({
           <Select
             placeholder={field.placeholder ?? `Select ${field.label.toLowerCase()}`}
             options={field.options}
+            mode={field.mode}
             allowClear
           />
         );

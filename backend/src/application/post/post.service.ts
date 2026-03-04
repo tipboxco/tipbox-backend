@@ -673,6 +673,13 @@ export class PostService {
         logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
       });
 
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.FREE, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
       return {
         id: post.id,
         message: 'Post created successfully',
@@ -881,8 +888,15 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.TIPS, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
+      return {
         id: post.id,
         message: 'Tips & tricks post başarıyla oluşturuldu',
         success: true,
@@ -1060,8 +1074,15 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.QUESTION, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
+      return {
         id: post.id,
         message: 'Question post başarıyla oluşturuldu',
         success: true,
@@ -1338,8 +1359,15 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.COMPARE, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
+      return {
         id: post.id,
         message: 'Benchmark post başarıyla oluşturuldu',
         success: true,
@@ -1630,8 +1658,15 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.EXPERIENCE, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
+      return {
         id: post.id,
         message: 'Experience post başarıyla oluşturuldu',
         success: true,
@@ -1870,8 +1905,15 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Keyword-based badge progress (async, fire-and-forget)
+      this.achievementProgressService
+        .incrementKeywordProgress(userId, ContentPostType.UPDATE, request.description || '')
+        .catch((err) => {
+          logger.warn({ message: 'Failed to check keyword progress', userId, postId: post.id, error: getErrorMessage(err) });
+        });
+
+      return {
         id: post.id,
         message: 'Update post başarıyla oluşturuldu',
         success: true,

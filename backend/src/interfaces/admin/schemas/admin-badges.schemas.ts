@@ -36,6 +36,8 @@ export const AdminAddCollectionBadgeSchema = z.object({
 
 const AchievementDifficultyEnum = z.enum(['EASY', 'MEDIUM', 'HARD']);
 
+const ContentPostTypeEnum = z.enum(['FREE', 'TIPS', 'COMPARE', 'QUESTION', 'EXPERIENCE', 'UPDATE']);
+
 export const AdminCreateCollectionGoalSchema = z.object({
   actionTypeId: z.string().regex(UUID_REGEX, 'Invalid UUID format'),
   rewardBadgeId: z.string().regex(UUID_REGEX, 'Invalid UUID format'),
@@ -43,9 +45,22 @@ export const AdminCreateCollectionGoalSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   requirement: z.string().max(1000).optional(),
   difficulty: AchievementDifficultyEnum.default('MEDIUM'),
+  keywords: z.array(z.string().min(1).max(100)).max(10).optional().default([]),
+  allowedPostTypes: z.array(ContentPostTypeEnum).optional().default([]),
+  isPassive: z.boolean().optional().default(false),
 });
 
-export const AdminUpdateCollectionGoalSchema = AdminCreateCollectionGoalSchema.partial();
+export const AdminUpdateCollectionGoalSchema = z.object({
+  actionTypeId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional(),
+  rewardBadgeId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional(),
+  pointsRequired: z.coerce.number().int().min(1).optional(),
+  title: z.string().min(1).max(500).optional(),
+  requirement: z.string().max(1000).optional(),
+  difficulty: AchievementDifficultyEnum.optional(),
+  keywords: z.array(z.string().min(1).max(100)).max(10).optional(),
+  allowedPostTypes: z.array(ContentPostTypeEnum).optional(),
+  isPassive: z.boolean().optional(),
+});
 
 /* ========== Admin Badges ========== */
 
@@ -116,6 +131,7 @@ export type AdminCreateCollectionInput = z.infer<typeof AdminCreateCollectionSch
 export type AdminUpdateCollectionInput = z.infer<typeof AdminUpdateCollectionSchema>;
 export type AdminAddCollectionBadgeInput = z.infer<typeof AdminAddCollectionBadgeSchema>;
 export type AdminCreateCollectionGoalInput = z.infer<typeof AdminCreateCollectionGoalSchema>;
+export type AdminUpdateCollectionGoalInput = z.infer<typeof AdminUpdateCollectionGoalSchema>;
 export type AdminBadgesQuery = z.infer<typeof AdminBadgesQuerySchema>;
 export type AdminCreateBadgeInput = z.infer<typeof AdminCreateBadgeSchema>;
 export type AdminUpdateBadgeInput = z.infer<typeof AdminUpdateBadgeSchema>;

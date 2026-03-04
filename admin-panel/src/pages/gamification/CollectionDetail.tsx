@@ -22,9 +22,14 @@ import {
   TrophyOutlined,
   FolderOpenOutlined,
   GiftOutlined,
+  AimOutlined,
+  TagsOutlined,
+  CheckCircleOutlined,
+  PauseCircleOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import EditableFormSection from '../../components/form/EditableFormSection';
+import EditableDrawer from '../../components/form/EditableDrawer';
 import type { FieldConfig } from '../../components/form/types';
 import type { StatItemData } from '../../components/StatItem';
 import {
@@ -34,7 +39,11 @@ import {
   removeCollectionBadge,
   updateCollection,
   fetchCollectionCategories,
+  fetchCollectionGoals,
+  updateCollectionGoal,
+  deleteCollectionGoal,
   type AdminCollectionCategoryMain,
+  type AdminCollectionGoalListItem,
 } from '../../api/admin-badges-collections';
 import type {
   AdminCollectionDetailResponse,
@@ -53,6 +62,7 @@ function CollectionDetail() {
   const [activeTab, setActiveTab] = useState('summary');
   const [addBadgeModalOpen, setAddBadgeModalOpen] = useState(false);
   const [badgesRefreshKey, setBadgesRefreshKey] = useState(0);
+  const [goalsRefreshKey, setGoalsRefreshKey] = useState(0);
 
   const loadCollection = useCallback(async () => {
     if (!id) return;
@@ -128,6 +138,17 @@ function CollectionDetail() {
         />
       ),
     },
+    {
+      key: 'goals',
+      label: 'Goals',
+      children: (
+        <CollectionGoalsTab
+          collectionId={id}
+          onUpdated={loadCollection}
+          refreshKey={goalsRefreshKey}
+        />
+      ),
+    },
   ];
 
   const statsData: StatItemData[] = [
@@ -180,8 +201,9 @@ function CollectionDetail() {
           onClose={() => setAddBadgeModalOpen(false)}
           onSuccess={() => {
             loadCollection();
-            setBadgesRefreshKey((prev) => prev + 1); // Trigger badges reload
-            setActiveTab('badges'); // Switch to badges tab
+            setBadgesRefreshKey((prev) => prev + 1);
+            setGoalsRefreshKey((prev) => prev + 1);
+            setActiveTab('badges');
             setAddBadgeModalOpen(false);
           }}
         />
@@ -579,6 +601,267 @@ function CollectionBadgesTab({
         </Row>
       )}
     </Card>
+  );
+}
+
+/* ========== Goals Tab ========== */
+
+const POST_TYPE_LABELS: Record<string, string> = {
+  FREE: 'Free',
+  TIPS: 'Tips & Tricks',
+  COMPARE: 'Compare',
+  QUESTION: 'Question',
+  EXPERIENCE: 'Experience',
+  UPDATE: 'Update',
+};
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  EASY: 'green',
+  MEDIUM: 'orange',
+  HARD: 'red',
+};
+
+function CollectionGoalsTab({
+  collectionId,
+  onUpdated,
+  refreshKey,
+}: {
+  collectionId: string;
+  onUpdated: () => void;
+  refreshKey?: number;
+}) {
+  const [goals, setGoals] = useState<AdminCollectionGoalListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingGoal, setEditingGoal] = useState<AdminCollectionGoalListItem | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  const loadGoals = useCallback(async () => {
+    try {
+      const res = await fetchCollectionGoals(collectionId);
+      setGoals(res.data ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [collectionId]);
+
+  useEffect(() => {
+    loadGoals();
+  }, [loadGoals, refreshKey]);
+
+  const handleDelete = (goalId: string, title: string) => {
+    Modal.confirm({
+      title: 'Delete Goal',
+      content: `Goal "${title}" will be permanently deleted. Are you sure?`,
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteCollectionGoal(collectionId, goalId);
+          antdMessage.success('Goal deleted');
+          await loadGoals();
+          onUpdated();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
+        }
+      },
+    });
+  };
+
+  const handleEditSave = async (values: Record<string, unknown>) => {
+    if (!editingGoal) return;
+    setEditLoading(true);
+    try {
+      const keywords = Array.isArray(values.keywords)
+        ? (values.keywords as string[]).filter((k: string) => k.trim().length > 0)
+        : [];
+      const allowedPostTypes = Array.isArray(values.allowedPostTypes)
+        ? (values.allowedPostTypes as string[])
+        : [];
+      const isPassive = values.isPassive === 'true' || values.isPassive === true;
+
+      await updateCollectionGoal(collectionId, editingGoal.id, {
+        title: values.title as string,
+        requirement: values.requirement as string,
+        pointsRequired: Number(values.pointsRequired) || 1,
+        difficulty: values.difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+        keywords,
+        allowedPostTypes,
+        isPassive,
+      });
+      antdMessage.success('Goal updated');
+      setEditingGoal(null);
+      await loadGoals();
+      onUpdated();
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
+      throw e;
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const editFields: FieldConfig[] = [
+    { name: 'title', label: 'Title', type: 'text', required: true, maxLength: 500 },
+    { name: 'requirement', label: 'Requirement', type: 'textarea', rows: 2, maxLength: 1000 },
+    { name: 'pointsRequired', label: 'Points Required', type: 'number', required: true },
+    {
+      name: 'difficulty',
+      label: 'Difficulty',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Easy', value: 'EASY' },
+        { label: 'Medium', value: 'MEDIUM' },
+        { label: 'Hard', value: 'HARD' },
+      ],
+    },
+    {
+      name: 'keywords',
+      label: 'Keywords (English, AND logic)',
+      type: 'select',
+      mode: 'tags',
+      placeholder: 'Type keyword and press Enter',
+    },
+    {
+      name: 'allowedPostTypes',
+      label: 'Allowed Post Types (empty = all)',
+      type: 'select',
+      mode: 'multiple',
+      options: Object.entries(POST_TYPE_LABELS).map(([value, label]) => ({ label, value })),
+      placeholder: 'Select post types (leave empty for all)',
+    },
+    {
+      name: 'isPassive',
+      label: 'Passive Badge',
+      type: 'select',
+      options: [
+        { label: 'No - Grant badge on completion', value: 'false' },
+        { label: 'Yes - Track progress only, no badge', value: 'true' },
+      ],
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 48 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Card bordered title={`Achievement Goals (${goals.length})`}>
+        {goals.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="No goals defined yet. Add a badge to create goals."
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {goals.map((goal) => (
+              <Col xs={24} md={12} key={goal.id}>
+                <Card
+                  bordered
+                  size="small"
+                  title={
+                    <Space>
+                      <AimOutlined />
+                      <span>{goal.title}</span>
+                      {goal.isPassive && (
+                        <PauseCircleOutlined style={{ color: '#faad14' }} title="Passive" />
+                      )}
+                    </Space>
+                  }
+                  extra={
+                    <Space>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => setEditingGoal(goal)}
+                      />
+                      <Button
+                        type="link"
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDelete(goal.id, goal.title)}
+                      />
+                    </Space>
+                  }
+                >
+                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <Text type="secondary">{goal.requirement}</Text>
+                    <Space wrap size="small">
+                      <Text strong>
+                        <CheckCircleOutlined /> {goal.pointsRequired} pts
+                      </Text>
+                      <Text style={{ color: DIFFICULTY_COLORS[goal.difficulty] || '#666' }}>
+                        {goal.difficulty}
+                      </Text>
+                      <Text type="secondary">
+                        {goal.actionType.mainAction} / {goal.actionType.code}
+                      </Text>
+                      <Text type="secondary">{goal.usersCount} users</Text>
+                    </Space>
+                    {goal.rewardBadge && (
+                      <Text type="secondary">
+                        <TrophyOutlined /> {goal.rewardBadge.name} ({goal.rewardBadge.rarity})
+                      </Text>
+                    )}
+                    {goal.keywords.length > 0 && (
+                      <div>
+                        <TagsOutlined style={{ marginRight: 4 }} />
+                        {goal.keywords.map((kw) => (
+                          <Text
+                            key={kw}
+                            code
+                            style={{ marginRight: 4, fontSize: 12 }}
+                          >
+                            {kw}
+                          </Text>
+                        ))}
+                      </div>
+                    )}
+                    {goal.allowedPostTypes.length > 0 && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Post types: {goal.allowedPostTypes.map((t) => POST_TYPE_LABELS[t] || t).join(', ')}
+                      </Text>
+                    )}
+                    {goal.isPassive && (
+                      <Text type="warning" style={{ fontSize: 12 }}>
+                        Passive - progress only, no badge awarded
+                      </Text>
+                    )}
+                  </Space>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        )}
+      </Card>
+
+      <EditableDrawer
+        open={!!editingGoal}
+        title={editingGoal ? `Edit Goal: ${editingGoal.title}` : 'Edit Goal'}
+        fields={editFields}
+        initialData={
+          editingGoal
+            ? {
+                ...editingGoal,
+                isPassive: editingGoal.isPassive ? 'true' : 'false',
+              }
+            : {}
+        }
+        onSave={handleEditSave}
+        onClose={() => setEditingGoal(null)}
+        loading={editLoading}
+      />
+    </>
   );
 }
 

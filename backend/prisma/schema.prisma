@@ -1036,6 +1036,9 @@ model AchievementGoal {
   rewardBadgeId    String?               @map("reward_badge_id") @db.Uuid
   pointsRequired   Int                   @map("points_required")
   difficulty       AchievementDifficulty
+  keywords         String[]              @default([])
+  allowedPostTypes ContentPostType[]     @default([]) @map("allowed_post_types")
+  isPassive        Boolean               @default(false) @map("is_passive")
   chain            AchievementChain?    @relation(fields: [chainId], references: [id], onDelete: SetNull)
   collection       BadgeCollection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   actionType       ActionType            @relation(fields: [actionTypeId], references: [id])
