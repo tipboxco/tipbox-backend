@@ -144,7 +144,7 @@ services:
       - PORT=${PORT:-3000}
       - NODE_ENV=test
       - NODE_OPTIONS=--max-old-space-size=1200
-      - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
+      - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-1}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - CORS_ORIGINS=${CORS_ORIGINS:-https://api-test.tipbox.co,http://localhost:3000,http://localhost:3001,http://localhost:5175}

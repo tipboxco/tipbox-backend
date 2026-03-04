@@ -3,7 +3,7 @@ FROM node:23-alpine
 WORKDIR /app
 
 # python3/make/g++ → native modüller (utf-8-validate, bufferutil)
-RUN apk add --no-cache python3 make g++ \
+RUN apk add --no-cache python3 make g++ netcat-openbsd \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # pnpm aktif et

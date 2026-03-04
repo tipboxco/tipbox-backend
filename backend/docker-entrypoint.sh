@@ -52,8 +52,30 @@ if [ "${SKIP_DB_MIGRATIONS}" = "1" ] || [ "${SKIP_DB_MIGRATIONS}" = "true" ]; th
   echo "⏭️  SKIP_DB_MIGRATIONS aktif: migration atlanıyor."
 else
   echo "🔄 Veritabanı migration'ları uygulanıyor..."
-  npx prisma migrate deploy || echo "⚠️  Migration hatası, devam ediliyor..."
-  echo "✅ Migration'lar başarıyla uygulandı!"
+  MIGRATE_OUTPUT=$(npx prisma migrate deploy 2>&1)
+  MIGRATE_EXIT=$?
+
+  if [ $MIGRATE_EXIT -eq 0 ]; then
+    echo "✅ Migration'lar başarıyla uygulandı!"
+  else
+    echo "$MIGRATE_OUTPUT"
+    # P3005: DB dolu ama _prisma_migrations tablosu yok → baseline uygula
+    if echo "$MIGRATE_OUTPUT" | grep -q "P3005"; then
+      echo "⚠️  Mevcut DB tespit edildi, baseline uygulanıyor..."
+      MIGRATION_NAME=$(ls prisma/migrations | grep -v migration_lock | head -1 2>/dev/null | tr -d '\r')
+      if [ -n "$MIGRATION_NAME" ]; then
+        npx prisma migrate resolve --applied "$MIGRATION_NAME"
+        echo "✅ Baseline uygulandı: $MIGRATION_NAME"
+        # Baseline sonrası kalan migration'ları deploy et
+        npx prisma migrate deploy
+        echo "✅ Migration'lar başarıyla uygulandı!"
+      else
+        echo "⚠️  Migration bulunamadı, devam ediliyor..."
+      fi
+    else
+      echo "⚠️  Migration hatası, devam ediliyor..."
+    fi
+  fi
 fi
 
 # Gelen komutu çalıştır (pnpm run dev gibi)
