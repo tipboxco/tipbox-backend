@@ -199,12 +199,13 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
+      - ./nginx-ssl-init.sh:/docker-entrypoint.d/40-ssl-init.sh:ro
       - ./logs/nginx:/var/log/nginx
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - tipbox_network
     deploy:
@@ -217,7 +218,8 @@ services:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   prisma-studio:
     image: node:23-alpine
