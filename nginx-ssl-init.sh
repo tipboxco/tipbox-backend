@@ -75,6 +75,7 @@ server {
     # Medusa admin dashboard
     location /catalog/app {
         set $catalog http://catalog-service:5175;
+        rewrite ^/catalog(.*)$ $1 break;
         proxy_pass $catalog;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -86,6 +87,7 @@ server {
     # Catalog seed/sync API
     location ~ ^/catalog/admin/(seed|sync) {
         set $catalog http://catalog-service:5175;
+        rewrite ^/catalog(.*)$ $1 break;
         proxy_pass $catalog;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -105,7 +107,7 @@ server {
     # Catalog service API
     location /catalog/ {
         set $catalog http://catalog-service:5175;
-        rewrite ^/catalog/(.*)$ /$1 break;
+        rewrite ^/catalog(.*)$ $1 break;
         proxy_pass $catalog;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

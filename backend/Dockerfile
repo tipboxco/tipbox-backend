@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM node:23-alpine
 
 WORKDIR /app
@@ -17,10 +16,9 @@ COPY pnpm-lock.yaml* ./
 # 2) Prisma schema'yı kopyala (install öncesi - postinstall prisma generate çalıştırır)
 COPY prisma ./prisma
 
-# 3) Dependencies'leri yükle (BuildKit cache mount ile pnpm store cache'lenir)
+# 3) Dependencies'leri yükle
 #    postinstall script'i prisma generate'ı otomatik çalıştırır
-RUN --mount=type=cache,id=pnpm-store-backend,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
 # 4) Source code'u kopyala (en sık değişen layer en sona)
 COPY . .
