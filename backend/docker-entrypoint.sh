@@ -57,7 +57,7 @@ if [ "${SKIP_DB_MIGRATIONS}" = "1" ] || [ "${SKIP_DB_MIGRATIONS}" = "true" ]; th
   echo "⏭️  SKIP_DB_MIGRATIONS aktif: migration atlanıyor."
 else
   echo "🔄 Veritabanı migration'ları uygulanıyor..."
-  MIGRATE_OUTPUT=$(npx prisma migrate deploy 2>&1)
+  MIGRATE_OUTPUT=$(pnpm exec prisma migrate deploy 2>&1)
   MIGRATE_EXIT=$?
 
   if [ $MIGRATE_EXIT -eq 0 ]; then
@@ -69,10 +69,10 @@ else
       echo "⚠️  Mevcut DB tespit edildi, baseline uygulanıyor..."
       MIGRATION_NAME=$(ls prisma/migrations | grep -v migration_lock | head -1 2>/dev/null | tr -d '\r')
       if [ -n "$MIGRATION_NAME" ]; then
-        npx prisma migrate resolve --applied "$MIGRATION_NAME"
+        pnpm exec prisma migrate resolve --applied "$MIGRATION_NAME"
         echo "✅ Baseline uygulandı: $MIGRATION_NAME"
         # Baseline sonrası kalan migration'ları deploy et
-        npx prisma migrate deploy
+        pnpm exec prisma migrate deploy
         echo "✅ Migration'lar başarıyla uygulandı!"
       else
         echo "⚠️  Migration bulunamadı, devam ediliyor..."
