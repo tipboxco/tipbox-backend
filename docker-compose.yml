@@ -262,15 +262,16 @@ services:
     environment:
       - PORT=5175
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=896
+      - NODE_OPTIONS=--max-old-space-size=1024
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
       - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
-      - MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-http://localhost:5175}
-      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000}
-      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5175}
-      - AUTH_CORS=${AUTH_CORS:-http://localhost:5175,http://localhost:8000}
+      - MEDUSA_ADMIN_PATH=${MEDUSA_ADMIN_PATH:-/catalog/app}
+      - MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-https://api-test.tipbox.co/catalog}
+      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000,https://api-test.tipbox.co}
+      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5175,https://api-test.tipbox.co}
+      - AUTH_CORS=${AUTH_CORS:-http://localhost:5175,http://localhost:8000,https://api-test.tipbox.co}
       - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - S3_ENDPOINT_EXTERNAL=http://localhost:9000
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
@@ -286,9 +287,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1200M
+          memory: 1500M
         reservations:
-          memory: 384M
+          memory: 512M
     networks:
       - tipbox_network
     healthcheck:
