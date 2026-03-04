@@ -17,7 +17,7 @@ if (_storeCors) process.env.STORE_CORS = _storeCors
 
 module.exports = defineConfig({
   admin: {
-    path: process.env.MEDUSA_ADMIN_PATH || "/app",
+    path: process.env.MEDUSA_ADMIN_PATH || "/catalog/app",
     backendUrl: process.env.MEDUSA_BACKEND_URL || undefined,
   },
   projectConfig: {
