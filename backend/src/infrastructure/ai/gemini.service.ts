@@ -6,6 +6,7 @@ import { CacheService } from '../cache/cache.service';
 import { CACHE_KEYS } from '../cache/cache-keys';
 import { CACHE_TTL } from '../cache/cache-ttl';
 import { AIMetricsService } from './ai-metrics.service';
+import { AIPipelineLogger } from './ai-pipeline-logger';
 import crypto from 'crypto';
 
 // Input validation constants
@@ -133,79 +134,68 @@ export class GeminiService {
    * 2. Product and Usage Experience (Ürün ve Kullanım Deneyimi)
    */
   async splitExperience(request: SplitExperienceRequest): Promise<SplitExperienceResponse> {
-    const startTime = Date.now();
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'GeminiService',
+      operationName: 'splitExperience',
+      totalStages: 6,
+      metadata: { productName: request.productName, textLength: request.experienceText.length },
+    });
 
     try {
-      // 1. Input Validation
-      this.validateInput(request);
+      // [1/6] Input Validation
+      await pipeline.runStage('Validating input', () => this.validateInput(request));
 
-      // 2. Rate Limiting Check
-      await this.checkRateLimit();
+      // [2/6] Rate Limiting Check
+      await pipeline.runStage('Checking rate limit', () => this.checkRateLimit());
 
-      // 3. Generate Cache Key
+      // [3/6] Check Cache
       const cacheKey = this.generateCacheKey(request);
+      const cachedResult = await pipeline.runStage(
+        'Checking cache',
+        () => this.cache.get<SplitExperienceResponse>(cacheKey),
+      );
 
-      // 4. Check Cache
-      const cachedResult = await this.cache.get<SplitExperienceResponse>(cacheKey);
       if (cachedResult) {
-        this.metrics.recordSuccess(
-          cachedResult.metadata.tokensUsed,
-          Date.now() - startTime,
-          true // from cache
-        );
-        
-        logger.info({
-          message: 'Gemini AI cache hit',
-          productName: request.productName,
-          cacheKey,
-        });
+        this.metrics.recordSuccess(cachedResult.metadata.tokensUsed, pipeline.elapsed, true);
+        pipeline.skipStage('Calling Gemini API');
+        pipeline.skipStage('Parsing response');
+        pipeline.skipStage('Caching result');
+        pipeline.complete({ tokens: cachedResult.metadata.tokensUsed, cacheHit: true });
         return cachedResult;
       }
 
-      // 5. Call AI with Retry & Timeout
-      const aiResponse = await this.callAIWithRetry(request);
-      
-      const duration = Date.now() - startTime;
-      
-      // 6. Build Response with Metadata
-      const responseWithMetadata: SplitExperienceResponse = {
-        ...aiResponse,
-        metadata: {
-          tokensUsed: aiResponse.metadata.tokensUsed,
-          processingTimeMs: duration,
-          model: this.config.model,
-          promptVersion: 'v2.1'
-        }
-      };
-
-      // 7. Cache Result
-      await this.cache.set(cacheKey, responseWithMetadata, CACHE_TTL.AI_SPLIT_EXPERIENCE);
-
-      // 8. Record Metrics
-      this.metrics.recordSuccess(
-        aiResponse.metadata.tokensUsed,
-        duration,
-        false // not from cache
+      // [4/6] Call AI with Retry & Timeout
+      const aiResponse = await pipeline.runStage('Calling Gemini API', () =>
+        this.callAIWithRetry(request),
       );
 
-      logger.info({
-        message: 'Gemini AI deneyim ayrıştırması başarılı',
-        productName: request.productName,
-        duration: `${duration}ms`,
-        tokensUsed: aiResponse.metadata.tokensUsed,
-        hasPriceAndShopping: !!aiResponse.priceAndShopping?.content,
-        hasProductAndUsage: !!aiResponse.productAndUsage?.content,
-        cached: true,
+      // [5/6] Build Response with Metadata
+      const duration = pipeline.elapsed;
+      const responseWithMetadata = await pipeline.runStage('Parsing response', () => {
+        const result: SplitExperienceResponse = {
+          ...aiResponse,
+          metadata: {
+            tokensUsed: aiResponse.metadata.tokensUsed,
+            processingTimeMs: duration,
+            model: this.config.model,
+            promptVersion: 'v2.1',
+          },
+        };
+        return result;
       });
+
+      // [6/6] Cache Result
+      await pipeline.runStage('Caching result', () =>
+        this.cache.set(cacheKey, responseWithMetadata, CACHE_TTL.AI_SPLIT_EXPERIENCE),
+      );
+
+      this.metrics.recordSuccess(aiResponse.metadata.tokensUsed, duration, false);
+      pipeline.complete({ tokens: aiResponse.metadata.tokensUsed });
 
       return responseWithMetadata;
     } catch (error) {
-      const duration = Date.now() - startTime;
-      
-      // Detaylı hata bilgisi
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      
+
       // Record metrics for failure
       if (errorMessage.includes('rate limit')) {
         this.metrics.recordFailure('rate-limit');
@@ -218,15 +208,8 @@ export class GeminiService {
       } else {
         this.metrics.recordFailure('other');
       }
-      
-      logger.error({
-        message: 'Gemini AI deneyim ayrıştırması hatası',
-        productName: request.productName,
-        duration: `${duration}ms`,
-        error: errorMessage,
-        errorStack: errorStack,
-        errorDetails: error,
-      });
+
+      pipeline.fail(errorMessage, { productName: request.productName });
 
       // Kullanıcıya daha açıklayıcı hata mesajı
       if (errorMessage.includes('API key')) {
@@ -326,30 +309,36 @@ export class GeminiService {
 
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
-        logger.info({
-          message: 'Gemini API isteği gönderiliyor',
+        logger.info(`  [AI Pipeline] Gemini API attempt ${attempt}/${this.config.maxRetries}...`, {
           productName: request.productName,
           experienceLength: request.experienceText.length,
           attempt,
           maxRetries: this.config.maxRetries,
         });
 
-        // Call with timeout
         const result = await this.callAIWithTimeout(request);
+
+        if (attempt > 1) {
+          logger.info(`  [AI Pipeline] Gemini API attempt ${attempt}/${this.config.maxRetries} ✓ (recovered after ${attempt - 1} retries)`);
+        }
+
         return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        
-        logger.warn({
-          message: `Gemini API attempt ${attempt} failed`,
-          error: lastError.message,
-          willRetry: attempt < this.config.maxRetries,
-        });
 
-        // Exponential backoff: 1s, 2s, 4s
         if (attempt < this.config.maxRetries) {
           const backoffMs = Math.pow(2, attempt - 1) * 1000;
+          logger.warn(`  [AI Pipeline] Gemini API attempt ${attempt}/${this.config.maxRetries} ✗ | ${lastError.message} | retry in ${backoffMs}ms`, {
+            attempt,
+            backoffMs,
+            error: lastError.message,
+          });
           await this.sleep(backoffMs);
+        } else {
+          logger.error(`  [AI Pipeline] Gemini API attempt ${attempt}/${this.config.maxRetries} ✗ | ${lastError.message} | no more retries`, {
+            attempt,
+            error: lastError.message,
+          });
         }
       }
     }
@@ -649,123 +638,120 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
    * Post içeriği üret (title ve body)
    */
   async generatePostContent(
-    request: GeneratePostContentRequest
+    request: GeneratePostContentRequest,
   ): Promise<GeneratePostContentResponse> {
-    const startTime = Date.now();
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'GeminiService',
+      operationName: 'generatePostContent',
+      totalStages: 4,
+      metadata: { postType: request.postType, persona: request.persona },
+    });
 
     try {
-      // Rate limiting check
-      await this.checkRateLimit();
+      // [1/4] Rate limiting check
+      await pipeline.runStage('Checking rate limit', () => this.checkRateLimit());
 
-      // Build prompt
-      const prompt = this.buildPostContentPrompt(request);
+      // [2/4] Build prompt
+      const prompt = await pipeline.runStage('Building prompt', () =>
+        this.buildPostContentPrompt(request),
+      );
 
-      // Call AI with timeout
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`timeout: AI request timed out after ${this.config.timeout}ms`));
-        }, this.config.timeout);
-      });
-
-      const aiPromise = (async () => {
-        const result = await this.model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.8,
-            topP: 0.95,
-            topK: 40,
-            maxOutputTokens: 4000, // Artırıldı: thoughts + output için yeterli alan
-          },
+      // [3/4] Call AI with timeout
+      const aiResult = await pipeline.runStage('Calling Gemini API', async () => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`timeout: AI request timed out after ${this.config.timeout}ms`));
+          }, this.config.timeout);
         });
 
-        const response = await result.response;
-        
-        // Response'u al
-        let text = '';
-        let candidates: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> = [];
+        const aiPromise = (async () => {
+          const result = await this.model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.8,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 4000,
+            },
+          });
 
-        try {
-          text = response.text();
-        } catch (error) {
-          // Eğer text() metodu çalışmazsa, candidates'dan al
-          const responseRecord = response as unknown as Record<string, unknown>;
-          candidates = (Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []) as typeof candidates;
-          if (candidates.length > 0) {
-            const candidate = candidates[0];
-            const content = candidate.content;
-            if (content && content.parts) {
-              text = content.parts.map((part) => part.text || '').join('\n');
+          const response = await result.response;
+
+          let text = '';
+          let candidates: Array<{
+            content?: { parts?: Array<{ text?: string }> };
+            finishReason?: string;
+          }> = [];
+
+          try {
+            text = response.text();
+          } catch {
+            const responseRecord = response as unknown as Record<string, unknown>;
+            candidates = (
+              Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []
+            ) as typeof candidates;
+            if (candidates.length > 0) {
+              const candidate = candidates[0];
+              const content = candidate.content;
+              if (content && content.parts) {
+                text = content.parts.map((part) => part.text || '').join('\n');
+              }
             }
           }
-        }
 
-        // Finish reason kontrolü
-        if (candidates.length === 0) {
-          const responseRecord = response as unknown as Record<string, unknown>;
-          candidates = (Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []) as typeof candidates;
-        }
-        if (candidates.length > 0) {
-          const finishReason = candidates[0].finishReason;
+          if (candidates.length === 0) {
+            const responseRecord = response as unknown as Record<string, unknown>;
+            candidates = (
+              Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []
+            ) as typeof candidates;
+          }
+          if (candidates.length > 0) {
+            const finishReason = candidates[0].finishReason;
             if (finishReason === 'MAX_TOKENS') {
               logger.warn({
-                message: 'Gemini API MAX_TOKENS limitine ulaştı, response kesilmiş olabilir',
+                message: 'Gemini API MAX_TOKENS limitine ulaştı',
                 finishReason,
                 maxOutputTokens: 4000,
-                thoughtsTokenCount: (response as unknown as Record<string, Record<string, unknown>>).usageMetadata?.thoughtsTokenCount,
+                thoughtsTokenCount: (
+                  response as unknown as Record<string, Record<string, unknown>>
+                ).usageMetadata?.thoughtsTokenCount,
               });
             }
-        }
+          }
 
-        // Eğer hala boşsa, raw response'u logla
-        if (!text || text.trim().length === 0) {
-          logger.warn({
-            message: 'Gemini API response boş',
-            finishReason: candidates?.[0]?.finishReason,
-            response: JSON.stringify(response, null, 2).substring(0, 1000),
-          });
-          throw new Error('AI response boş geldi');
-        }
+          if (!text || text.trim().length === 0) {
+            throw new Error('AI response boş geldi');
+          }
 
-        // Token bilgisini al
-        const usageMetadata = response.usageMetadata;
-        const tokensUsed = usageMetadata?.totalTokenCount || null;
+          const usageMetadata = response.usageMetadata;
+          const tokensUsed = usageMetadata?.totalTokenCount || null;
 
-        // Parse response
-        const parsed = this.parsePostContentResponse(text);
+          return { text, tokensUsed };
+        })();
 
+        return Promise.race([aiPromise, timeoutPromise]);
+      });
+
+      // [4/4] Parse response
+      const result = await pipeline.runStage('Parsing response', () => {
+        const parsed = this.parsePostContentResponse(aiResult.text);
         return {
           ...parsed,
           metadata: {
-            tokensUsed,
-            processingTimeMs: Date.now() - startTime,
+            tokensUsed: aiResult.tokensUsed,
+            processingTimeMs: pipeline.elapsed,
             model: this.config.model,
           },
         };
-      })();
-
-      const result = await Promise.race([aiPromise, timeoutPromise]);
-
-      // Record metrics
-      this.metrics.recordSuccess(
-        result.metadata.tokensUsed,
-        result.metadata.processingTimeMs,
-        false
-      );
-
-      logger.info({
-        message: 'Gemini AI post içeriği üretildi',
-        postType: request.postType,
-        persona: request.persona,
-        duration: `${result.metadata.processingTimeMs}ms`,
-        tokensUsed: result.metadata.tokensUsed,
       });
+
+      this.metrics.recordSuccess(result.metadata.tokensUsed, result.metadata.processingTimeMs, false);
+      pipeline.complete({ tokens: result.metadata.tokensUsed });
 
       return result;
     } catch (error) {
-      const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Record metrics for failure
       if (errorMessage.includes('rate limit')) {
         this.metrics.recordFailure('rate-limit');
       } else if (errorMessage.includes('timeout')) {
@@ -774,13 +760,7 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
         this.metrics.recordFailure('other');
       }
 
-      logger.error({
-        message: 'Gemini AI post içeriği üretim hatası',
-        postType: request.postType,
-        persona: request.persona,
-        duration: `${duration}ms`,
-        error: errorMessage,
-      });
+      pipeline.fail(errorMessage, { postType: request.postType });
 
       throw new ExternalServiceError(`AI içerik üretim hatası: ${errorMessage}`);
     }
@@ -922,106 +902,144 @@ BAŞLIK: [başlık buraya]
    * Title gerektirmez, sadece body üretir
    */
   async batchGeneratePostContent(
-    batchRequest: BatchGeneratePostContentRequest
+    batchRequest: BatchGeneratePostContentRequest,
   ): Promise<BatchGeneratePostContentResponse> {
-    const startTime = Date.now();
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'GeminiService',
+      operationName: 'batchGeneratePostContent',
+      totalStages: 5,
+      metadata: { batchSize: batchRequest.requests.length },
+    });
+
     let lastError: Error | null = null;
 
-    // Retry mekanizması (timeout ve network hataları için)
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
-        // Rate limiting check (batch için tek istek sayılır)
-        await this.checkRateLimit();
-
-        // Batch size kontrolü (çok büyük batch'ler token limitini aşabilir)
-        const MAX_BATCH_SIZE = 10;
-        if (batchRequest.requests.length > MAX_BATCH_SIZE) {
-          throw new Error(`Batch size ${batchRequest.requests.length} çok büyük. Maksimum ${MAX_BATCH_SIZE} istek destekleniyor.`);
+        // [1/5] Rate limiting check
+        if (attempt === 1) {
+          await pipeline.runStage('Checking rate limit', () => this.checkRateLimit());
+        } else {
+          await this.checkRateLimit();
         }
 
-        // Build batch prompt
-        const prompt = this.buildBatchPostContentPrompt(batchRequest.requests);
+        // [2/5] Batch size kontrolü
+        if (attempt === 1) {
+          await pipeline.runStage('Validating batch size', () => {
+            const MAX_BATCH_SIZE = 10;
+            if (batchRequest.requests.length > MAX_BATCH_SIZE) {
+              throw new Error(
+                `Batch size ${batchRequest.requests.length} çok büyük. Maksimum ${MAX_BATCH_SIZE} istek destekleniyor.`,
+              );
+            }
+          });
+        }
 
-        // Batch için daha uzun timeout (batch'ler daha fazla token üretir)
-        // Normal timeout'un 2 katı (60 saniye)
+        // [3/5] Build batch prompt
+        const prompt = attempt === 1
+          ? await pipeline.runStage('Building batch prompt', () =>
+              this.buildBatchPostContentPrompt(batchRequest.requests),
+            )
+          : this.buildBatchPostContentPrompt(batchRequest.requests);
+
+        // [4/5] Call AI with timeout
         const batchTimeout = this.config.timeout * 2;
 
-        // Call AI with timeout
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`timeout: AI request timed out after ${batchTimeout}ms`));
-          }, batchTimeout);
+        logger.info(`  [AI Pipeline] Gemini API batch attempt ${attempt}/${this.config.maxRetries}...`, {
+          batchSize: batchRequest.requests.length,
+          attempt,
         });
 
-        const aiPromise = (async () => {
-          const result = await this.model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.8,
-              topP: 0.95,
-              topK: 40,
-              maxOutputTokens: 8000, // Batch için daha fazla token
-            },
+        const aiResult = await (async () => {
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error(`timeout: AI request timed out after ${batchTimeout}ms`));
+            }, batchTimeout);
           });
 
-          const response = await result.response;
-          let text = '';
-          let candidates: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> = [];
+          const aiPromise = (async () => {
+            const result = await this.model.generateContent({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.8,
+                topP: 0.95,
+                topK: 40,
+                maxOutputTokens: 8000,
+              },
+            });
 
-          try {
-            text = response.text();
-          } catch (error) {
-            candidates = (response as unknown as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> }).candidates || [];
-            if (candidates.length > 0) {
-              const candidate = candidates[0];
-              const content = candidate.content;
-              if (content && content.parts) {
-                text = content.parts.map((part: { text?: string }) => part.text || '').join('\n');
+            const response = await result.response;
+            let text = '';
+            let candidates: Array<{
+              content?: { parts?: Array<{ text?: string }> };
+              finishReason?: string;
+            }> = [];
+
+            try {
+              text = response.text();
+            } catch {
+              candidates = (
+                response as unknown as {
+                  candidates?: Array<{
+                    content?: { parts?: Array<{ text?: string }> };
+                    finishReason?: string;
+                  }>;
+                }
+              ).candidates || [];
+              if (candidates.length > 0) {
+                const candidate = candidates[0];
+                const content = candidate.content;
+                if (content && content.parts) {
+                  text = content.parts.map((part: { text?: string }) => part.text || '').join('\n');
+                }
               }
             }
-          }
 
-          if (!text || text.trim().length === 0) {
-            throw new Error('AI response boş geldi');
-          }
+            if (!text || text.trim().length === 0) {
+              throw new Error('AI response boş geldi');
+            }
 
-          // Token bilgisini al
-          const usageMetadata = response.usageMetadata;
-          const tokensUsed = usageMetadata?.totalTokenCount || null;
+            const usageMetadata = response.usageMetadata;
+            const tokensUsed = usageMetadata?.totalTokenCount || null;
 
-          // Parse batch response
-          const parsed = this.parseBatchPostContentResponse(text, batchRequest.requests.length);
+            return { text, tokensUsed };
+          })();
 
-          return {
-            results: parsed,
-            metadata: {
-              tokensUsed,
-              processingTimeMs: Date.now() - startTime,
-              model: this.config.model,
-              totalRequests: batchRequest.requests.length,
-              successfulRequests: parsed.filter(r => r.success).length,
-              failedRequests: parsed.filter(r => !r.success).length,
-            },
-          };
+          return Promise.race([aiPromise, timeoutPromise]);
         })();
 
-        const result = await Promise.race([aiPromise, timeoutPromise]);
+        if (attempt === 1) {
+          // Stage 4 log on first attempt only (retry logs are separate)
+          logger.info(`  [4/5] Calling Gemini API ✓ (${pipeline.elapsed}ms)`, {
+            pipeline: 'GeminiService',
+            operation: 'batchGeneratePostContent',
+            stage: 4,
+          });
+        }
 
-        // Record metrics
-        this.metrics.recordSuccess(
-          result.metadata.tokensUsed,
-          result.metadata.processingTimeMs,
-          false
-        );
+        // [5/5] Parse batch response
+        const parsed = attempt === 1
+          ? await pipeline.runStage('Parsing batch response', () =>
+              this.parseBatchPostContentResponse(aiResult.text, batchRequest.requests.length),
+            )
+          : this.parseBatchPostContentResponse(aiResult.text, batchRequest.requests.length);
 
-        logger.info({
-          message: 'Gemini AI batch post içeriği üretildi',
-          batchSize: batchRequest.requests.length,
+        const result: BatchGeneratePostContentResponse = {
+          results: parsed,
+          metadata: {
+            tokensUsed: aiResult.tokensUsed,
+            processingTimeMs: pipeline.elapsed,
+            model: this.config.model,
+            totalRequests: batchRequest.requests.length,
+            successfulRequests: parsed.filter((r) => r.success).length,
+            failedRequests: parsed.filter((r) => !r.success).length,
+          },
+        };
+
+        this.metrics.recordSuccess(result.metadata.tokensUsed, result.metadata.processingTimeMs, false);
+        pipeline.complete({
+          tokens: result.metadata.tokensUsed,
           successful: result.metadata.successfulRequests,
           failed: result.metadata.failedRequests,
-          duration: `${result.metadata.processingTimeMs}ms`,
-          tokensUsed: result.metadata.tokensUsed,
-          attempt,
         });
 
         return result;
@@ -1029,29 +1047,22 @@ BAŞLIK: [başlık buraya]
         lastError = error instanceof Error ? error : new Error(String(error));
         const errorMessage = lastError.message;
 
-        // Retry yapılabilir hatalar: timeout, network, rate limit (geçici)
-        const isRetryable = 
+        const isRetryable =
           errorMessage.includes('timeout') ||
           errorMessage.includes('network') ||
           (errorMessage.includes('rate limit') && attempt < this.config.maxRetries);
 
         if (isRetryable && attempt < this.config.maxRetries) {
-          const backoffMs = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
-          logger.warn({
-            message: `Gemini AI batch attempt ${attempt} failed, retrying...`,
-            batchSize: batchRequest.requests.length,
-            error: errorMessage,
-            nextAttempt: attempt + 1,
-            backoffMs,
-          });
+          const backoffMs = Math.pow(2, attempt - 1) * 1000;
+          logger.warn(
+            `  [AI Pipeline] batch attempt ${attempt}/${this.config.maxRetries} ✗ | ${errorMessage} | retry in ${backoffMs}ms`,
+            { attempt, backoffMs, batchSize: batchRequest.requests.length },
+          );
           await this.sleep(backoffMs);
-          continue; // Retry
+          continue;
         }
 
-        // Retry yapılamaz veya tüm retry'lar tükendi
-        const duration = Date.now() - startTime;
-
-        // Record metrics for failure
+        // Tüm retry'lar tükendi veya retry yapılamaz hata
         if (errorMessage.includes('rate limit')) {
           this.metrics.recordFailure('rate-limit');
         } else if (errorMessage.includes('timeout')) {
@@ -1060,15 +1071,9 @@ BAŞLIK: [başlık buraya]
           this.metrics.recordFailure('other');
         }
 
-        logger.error({
-          message: 'Gemini AI batch post içeriği üretim hatası',
-          batchSize: batchRequest.requests.length,
-          duration: `${duration}ms`,
-          error: errorMessage,
-          attempts: attempt,
-        });
+        pipeline.fail(errorMessage, { attempts: attempt, batchSize: batchRequest.requests.length });
 
-        // Hata durumunda fallback: Her istek için boş body döndür
+        // Fallback: Her istek için boş body döndür
         const fallbackResults = batchRequest.requests.map(() => ({
           title: '',
           body: '',
@@ -1080,7 +1085,7 @@ BAŞLIK: [başlık buraya]
           results: fallbackResults,
           metadata: {
             tokensUsed: null,
-            processingTimeMs: duration,
+            processingTimeMs: pipeline.elapsed,
             model: this.config.model,
             totalRequests: batchRequest.requests.length,
             successfulRequests: 0,
@@ -1090,7 +1095,6 @@ BAŞLIK: [başlık buraya]
       }
     }
 
-    // Buraya gelmemeli (yukarıdaki catch'te return var) ama TypeScript için
     throw lastError || new Error('Batch generation failed after all retries');
   }
 

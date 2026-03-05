@@ -4563,16 +4563,24 @@ async function seedRemainingSystemTables() {
       const badgeId = userBadges[i]
       const visibility = visibilities[Math.floor(Math.random() * visibilities.length)]
       
-      await prisma.userBadge.create({
-        data: {
-          userId: user.id,
-          badgeId,
-          isVisible: Math.random() > 0.2, // %80 visible
+      await prisma.userBadge.upsert({
+        where: { userId_badgeId: { userId: user.id, badgeId } },
+        update: {
+          isVisible: Math.random() > 0.2,
           displayOrder: i + 1,
           visibility,
-          claimed: Math.random() > 0.3, // %70 claimed
+          claimed: Math.random() > 0.3,
           claimedAt: Math.random() > 0.3 ? new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000) : null,
-        }
+        },
+        create: {
+          userId: user.id,
+          badgeId,
+          isVisible: Math.random() > 0.2,
+          displayOrder: i + 1,
+          visibility,
+          claimed: Math.random() > 0.3,
+          claimedAt: Math.random() > 0.3 ? new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000) : null,
+        },
       })
       totalUserBadges++
     }

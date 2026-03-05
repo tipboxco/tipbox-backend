@@ -1,4 +1,5 @@
 import { prisma } from './types';
+import { SeedPipelineLogger } from './helpers/seed-pipeline-logger';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } = require('./seed-metadata');
@@ -7,43 +8,73 @@ const { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } = require('./see
  * Seed data ile test sonrası eklenen datayı ayırt etmek için iki yöntem kullanılır:
  * 1. Timestamp bazlı: Seed çalıştırıldığında timestamp kaydedilir, sadece o tarihten önceki veriler seed data olarak kabul edilir
  * 2. ID bazlı: Seed'de kullanılan belirli ID'ler (TEST_USER_ID, vb.) kaydedilir
- * 
+ *
  * Clear seed data çalıştırıldığında:
  * - Eğer seed metadata varsa: Sadece seed timestamp'inden önceki veriler silinir
  * - Eğer seed metadata yoksa: TÜM veriler silinir (eski davranış)
  */
 export async function clearAllSeedData(forceClearAll: boolean = false): Promise<void> {
-  console.log('🗑️  Seed verileri temizleniyor...');
-  
-  // Eğer forceClearAll true ise, metadata'ya bakmadan tüm verileri sil
+  // forceClearAll veya metadata yoksa → 2 stage (TRUNCATE + metadata)
+  // metadata varsa → 3 stage (load metadata + selective clear + metadata)
   if (forceClearAll) {
-    console.log('⚠️  FORCE MODE: TÜM veriler silinecek (metadata kontrolü yapılmıyor)!');
-    await clearAllData();
-    // Metadata'yı da temizle
-    clearSeedMetadata();
-    console.log('✅ Tüm veriler temizlendi');
+    const pipeline = new SeedPipelineLogger('clearAllSeedData [force]', 2);
+    try {
+      await pipeline.runStage('TRUNCATE all tables', () => clearAllData());
+      await pipeline.runStage('Clear seed metadata', () => {
+        clearSeedMetadata();
+        return Promise.resolve();
+      });
+      pipeline.complete();
+    } catch (error) {
+      pipeline.fail(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
     return;
   }
-  
-  const lastSeedRun = getLastSeedRunTime();
-  const seedUserIds = getSeedUserIds();
-  
+
+  const lastSeedRun = getLastSeedRunTime() as Date | null;
+  const seedUserIds = getSeedUserIds() as string[];
+
   if (!lastSeedRun) {
-    console.log('⚠️  Seed metadata bulunamadı, TÜM veriler silinecek!');
-    // Eski davranış: Tüm verileri sil
-    await clearAllData();
+    const pipeline = new SeedPipelineLogger('clearAllSeedData [no metadata]', 2);
+    try {
+      await pipeline.runStage('TRUNCATE all tables', () => clearAllData());
+      await pipeline.runStage('Clear seed metadata', () => {
+        clearSeedMetadata();
+        return Promise.resolve();
+      });
+      pipeline.complete();
+    } catch (error) {
+      pipeline.fail(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
     return;
   }
-  
-  console.log(`📅 Seed çalıştırma zamanı: ${lastSeedRun.toISOString()}`);
-  console.log(`👤 Seed kullanıcı sayısı: ${seedUserIds.length}`);
-  
-  // Seed timestamp'inden önceki verileri sil
-  await clearDataBeforeTimestamp(lastSeedRun, seedUserIds);
-  
-  // Metadata'yı temizle
-  clearSeedMetadata();
-  console.log('✅ Seed verileri temizlendi (metadata temizlendi)');
+
+  const pipeline = new SeedPipelineLogger('clearAllSeedData [selective]', 3);
+  try {
+    await pipeline.runStage(
+      'Load seed metadata',
+      () => Promise.resolve(),
+      `timestamp: ${lastSeedRun.toISOString()}, ${seedUserIds.length} users`,
+    );
+
+    await pipeline.runStage(
+      'Clear seed user data',
+      () => clearDataBeforeTimestamp(lastSeedRun, seedUserIds),
+      `${seedUserIds.length} users`,
+    );
+
+    await pipeline.runStage('Clear seed metadata', () => {
+      clearSeedMetadata();
+      return Promise.resolve();
+    });
+
+    pipeline.complete();
+  } catch (error) {
+    pipeline.fail(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 /**
@@ -55,8 +86,6 @@ export async function clearAllSeedData(forceClearAll: boolean = false): Promise<
  *   - Backend çalışırken çağrılsa bile sunucu kilitlenmez
  */
 async function clearAllData(): Promise<void> {
-  console.log('🗑️  TRUNCATE ile tüm veriler temizleniyor...');
-
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       feeds, feed_highlights, trending_posts,
@@ -90,8 +119,6 @@ async function clearAllData(): Promise<void> {
       users
     CASCADE
   `);
-
-  console.log('✅ Tüm veriler temizlendi');
 }
 
 /**
@@ -105,121 +132,147 @@ async function clearAllData(): Promise<void> {
  * NOT: Taxonomy (categories, badges, themes) ve products korunur.
  */
 async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]): Promise<void> {
-  console.log(`🗑️  ${timestamp.toISOString()} tarihinden önceki seed verileri temizleniyor...`);
-  console.log('ℹ️  Taxonomy (categories, badges, themes) ve products korunacak');
+  const hasUsers = seedUserIds.length > 0;
+  const stageCount = hasUsers ? 12 : 3;
+  const pipeline = new SeedPipelineLogger('clearDataBeforeTimestamp', stageCount);
 
-  await prisma.$transaction(
-    async (tx) => {
-      // FK constraint bypass — transaction-scoped, otomatik resetlenir
-      await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica;');
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        // [1] FK constraint bypass
+        await pipeline.runStage('FK constraint bypass', () =>
+          tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica;'),
+        );
 
-      if (seedUserIds.length > 0) {
-        console.log(`👤 Seed kullanıcılarının verileri temizleniyor: ${seedUserIds.length} kullanıcı`);
+        if (hasUsers) {
+          // [2] Feed & trending
+          await pipeline.runStage('Clear feed & trending', async () => {
+            await tx.feed.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.trendingPost.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+          });
 
-        // ── Feed & trending ──
-        await tx.feed.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.trendingPost.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+          // [3] Content (leaf → parent)
+          await pipeline.runStage('Clear content', async () => {
+            await tx.contentShare.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
+            await tx.contentFavorite.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
+            await tx.contentLike.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
+            await tx.contentCommentVote.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { comment: { userId: { in: seedUserIds } } }] } });
+            await tx.contentComment.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
+            await tx.contentPostView.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
+            await tx.contentPostTag.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+            await tx.topCommunityChoice.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+            await tx.postMedia.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.postComparisonScore.deleteMany({ where: { comparison: { post: { userId: { in: seedUserIds } } } } });
+            await tx.postComparison.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+            await tx.postTip.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+            await tx.postQuestion.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
+            await tx.contentPost.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── Content (leaf → parent sırasıyla) ──
-        await tx.contentShare.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
-        await tx.contentFavorite.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
-        await tx.contentLike.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
-        await tx.contentCommentVote.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { comment: { userId: { in: seedUserIds } } }] } });
-        await tx.contentComment.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
-        await tx.contentPostView.deleteMany({ where: { OR: [{ userId: { in: seedUserIds } }, { post: { userId: { in: seedUserIds } } }] } });
-        await tx.contentPostTag.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
-        await tx.topCommunityChoice.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
-        await tx.postMedia.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.postComparisonScore.deleteMany({ where: { comparison: { post: { userId: { in: seedUserIds } } } } });
-        await tx.postComparison.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
-        await tx.postTip.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
-        await tx.postQuestion.deleteMany({ where: { post: { userId: { in: seedUserIds } } } });
-        await tx.contentPost.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [4] Marketplace / NFT
+          await pipeline.runStage('Clear marketplace & NFT', async () => {
+            await tx.nFTMarketListing.deleteMany({ where: { listedByUserId: { in: seedUserIds } } });
+            await tx.nFTTransaction.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
+            await tx.nFTClaim.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.nFTAttribute.deleteMany({ where: { nft: { currentOwnerId: { in: seedUserIds } } } });
+            await tx.nFT.deleteMany({ where: { currentOwnerId: { in: seedUserIds } } });
+          });
 
-        // ── Marketplace / NFT ──
-        await tx.nFTMarketListing.deleteMany({ where: { listedByUserId: { in: seedUserIds } } });
-        await tx.nFTTransaction.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
-        await tx.nFTClaim.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.nFTAttribute.deleteMany({ where: { nft: { currentOwnerId: { in: seedUserIds } } } });
-        await tx.nFT.deleteMany({ where: { currentOwnerId: { in: seedUserIds } } });
+          // [5] Explore / Bridge
+          await pipeline.runStage('Clear explore & bridge', async () => {
+            await tx.eventStats.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.bridgeFollower.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.bridgePost.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── Explore / Bridge ──
-        await tx.eventStats.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.bridgeFollower.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.bridgePost.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [6] Inventory
+          await pipeline.runStage('Clear inventory', async () => {
+            await tx.inventoryMedia.deleteMany({ where: { inventory: { userId: { in: seedUserIds } } } });
+            await tx.inventory.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── Inventory ──
-        await tx.inventoryMedia.deleteMany({ where: { inventory: { userId: { in: seedUserIds } } } });
-        await tx.inventory.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [7] User related
+          await pipeline.runStage('Clear user data', async () => {
+            await tx.userCollection.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userTitle.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userBadge.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userAchievement.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userAvatar.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userMute.deleteMany({ where: { OR: [{ muterId: { in: seedUserIds } }, { mutedUserId: { in: seedUserIds } }] } });
+            await tx.userBlock.deleteMany({ where: { OR: [{ blockerId: { in: seedUserIds } }, { blockedUserId: { in: seedUserIds } }] } });
+            await tx.trustRelation.deleteMany({ where: { OR: [{ trusterId: { in: seedUserIds } }, { trustedUserId: { in: seedUserIds } }] } });
+            await tx.userTrustScore.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userRole.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userFeedPreferences.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.userSettings.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.profile.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── User related ──
-        await tx.userCollection.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userTitle.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userBadge.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userAchievement.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userAvatar.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userMute.deleteMany({ where: { OR: [{ muterId: { in: seedUserIds } }, { mutedUserId: { in: seedUserIds } }] } });
-        await tx.userBlock.deleteMany({ where: { OR: [{ blockerId: { in: seedUserIds } }, { blockedUserId: { in: seedUserIds } }] } });
-        await tx.trustRelation.deleteMany({ where: { OR: [{ trusterId: { in: seedUserIds } }, { trustedUserId: { in: seedUserIds } }] } });
-        await tx.userTrustScore.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userRole.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userFeedPreferences.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.userSettings.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.profile.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [8] Expert
+          await pipeline.runStage('Clear expert data', async () => {
+            await tx.expertAnswer.deleteMany({ where: { OR: [{ expertUserId: { in: seedUserIds } }, { request: { userId: { in: seedUserIds } } }] } });
+            await tx.expertRequestMedia.deleteMany({ where: { request: { userId: { in: seedUserIds } } } });
+            await tx.expertRequest.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── Expert ──
-        await tx.expertAnswer.deleteMany({ where: { OR: [{ expertUserId: { in: seedUserIds } }, { request: { userId: { in: seedUserIds } } }] } });
-        await tx.expertRequestMedia.deleteMany({ where: { request: { userId: { in: seedUserIds } } } });
-        await tx.expertRequest.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [9] Messaging
+          await pipeline.runStage('Clear messaging', async () => {
+            await tx.dMSupportSession.deleteMany({ where: { OR: [{ helperId: { in: seedUserIds } }, { thread: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } }] } });
+            await tx.supportRequestReport.deleteMany({ where: { OR: [{ reporterId: { in: seedUserIds } }, { request: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } }] } });
+            await tx.dMMessage.deleteMany({ where: { OR: [{ senderId: { in: seedUserIds } }, { thread: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } }] } });
+            await tx.dMRequest.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
+            await tx.dMThread.deleteMany({ where: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } });
+          });
 
-        // ── Messaging ──
-        await tx.dMSupportSession.deleteMany({ where: { OR: [{ helperId: { in: seedUserIds } }, { thread: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } }] } });
-        await tx.supportRequestReport.deleteMany({ where: { OR: [{ reporterId: { in: seedUserIds } }, { request: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } }] } });
-        await tx.dMMessage.deleteMany({ where: { OR: [{ senderId: { in: seedUserIds } }, { thread: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } }] } });
-        await tx.dMRequest.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
-        await tx.dMThread.deleteMany({ where: { OR: [{ userOneId: { in: seedUserIds } }, { userTwoId: { in: seedUserIds } }] } });
+          // [10] Crypto & Auth
+          await pipeline.runStage('Clear crypto & auth', async () => {
+            await tx.tipsTokenTransfer.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
+            await tx.lootbox.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.wallet.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.emailVerificationCode.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.passwordResetToken.deleteMany({ where: { userId: { in: seedUserIds } } });
+            await tx.loginAttempt.deleteMany({ where: { userId: { in: seedUserIds } } });
+          });
 
-        // ── Crypto ──
-        await tx.tipsTokenTransfer.deleteMany({ where: { OR: [{ fromUserId: { in: seedUserIds } }, { toUserId: { in: seedUserIds } }] } });
-        await tx.lootbox.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.wallet.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [11] Seed users
+          await pipeline.runStage('Delete seed users', () =>
+            tx.user.deleteMany({ where: { id: { in: seedUserIds } } }),
+          );
 
-        // ── Auth ──
-        await tx.emailVerificationCode.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.passwordResetToken.deleteMany({ where: { userId: { in: seedUserIds } } });
-        await tx.loginAttempt.deleteMany({ where: { userId: { in: seedUserIds } } });
+          // [12] Timestamp-based non-user data
+          await pipeline.runStage('Clear timestamp-based data', async () => {
+            await tx.marketplaceBanner.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.brandSurveyAnswer.deleteMany({ where: { question: { survey: { brand: { createdAt: { lt: timestamp } } } } } });
+            await tx.brandSurveyQuestion.deleteMany({ where: { survey: { brand: { createdAt: { lt: timestamp } } } } });
+            await tx.brandSurvey.deleteMany({ where: { brand: { createdAt: { lt: timestamp } } } });
+            await tx.brand.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.brandCategory.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.eventReward.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.event.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.bridgeReward.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.bridgeUserStats.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.bridgeLeaderboard.deleteMany({ where: { createdAt: { lt: timestamp } } });
+          });
+        } else {
+          // [2] Timestamp-only clear (no seed user IDs)
+          await pipeline.runStage('Clear by timestamp only', async () => {
+            await tx.feed.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.contentPost.deleteMany({ where: { createdAt: { lt: timestamp } } });
+            await tx.user.deleteMany({ where: { createdAt: { lt: timestamp } } });
+          }, 'no seed user IDs found');
 
-        // ── Seed kullanıcıları ──
-        await tx.user.deleteMany({ where: { id: { in: seedUserIds } } });
+          // [3] padding — not needed since total is 3
+          pipeline.skipStage('User-based cleanup');
+        }
+      },
+      { timeout: 300_000 },
+    );
 
-        // ── Timestamp bazlı non-user verileri ──
-        await tx.marketplaceBanner.deleteMany({ where: { createdAt: { lt: timestamp } } });
-
-        // Brand zinciri: answer → question → survey → brand → category
-        await tx.brandSurveyAnswer.deleteMany({ where: { question: { survey: { brand: { createdAt: { lt: timestamp } } } } } });
-        await tx.brandSurveyQuestion.deleteMany({ where: { survey: { brand: { createdAt: { lt: timestamp } } } } });
-        await tx.brandSurvey.deleteMany({ where: { brand: { createdAt: { lt: timestamp } } } });
-        await tx.brand.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.brandCategory.deleteMany({ where: { createdAt: { lt: timestamp } } });
-
-        // Explore timestamp bazlı
-        await tx.eventReward.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.event.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.bridgeReward.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.bridgeUserStats.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.bridgeLeaderboard.deleteMany({ where: { createdAt: { lt: timestamp } } });
-      } else {
-        // Seed kullanıcı ID'leri yoksa, sadece timestamp'e göre sil
-        console.log('⚠️  Seed kullanıcı ID\'leri bulunamadı, sadece timestamp\'e göre temizleme yapılıyor');
-        await tx.feed.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.contentPost.deleteMany({ where: { createdAt: { lt: timestamp } } });
-        await tx.user.deleteMany({ where: { createdAt: { lt: timestamp } } });
-      }
-
-      console.log('✅ Seed verileri temizlendi (taxonomy ve products korundu)');
-    },
-    { timeout: 300_000 },
-  );
+    pipeline.complete('taxonomy & products preserved');
+  } catch (error) {
+    pipeline.fail(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 if (require.main === module) {

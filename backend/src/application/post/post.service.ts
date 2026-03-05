@@ -29,6 +29,7 @@ import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AIPipelineLogger } from '../../infrastructure/ai/ai-pipeline-logger';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { EventService } from '../event/event.service';
@@ -1646,59 +1647,62 @@ export class PostService {
    * AI ile deneyimi ayır ve database'e kaydet
    */
   async splitExperience(
-    request: SplitExperienceRequest
+    request: SplitExperienceRequest,
   ): Promise<SplitExperienceResponse> {
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'PostService',
+      operationName: 'splitExperience',
+      totalStages: 3,
+      metadata: { userId: request.userId, productId: request.productId },
+    });
+
     try {
-      // Ürün bilgilerini al
-      const product = await this.prisma.product.findUnique({
-        where: { id: request.productId },
-        include: {
-          brand: true,
-        },
+      // [1/3] Ürün bilgilerini al
+      const product = await pipeline.runStage('Loading product', async () => {
+        const p = await this.prisma.product.findUnique({
+          where: { id: request.productId },
+          include: { brand: true },
+        });
+        if (!p) throw new Error('Product not found');
+        return p;
       });
 
-      if (!product) {
-        throw new Error('Product not found');
-      }
+      // [2/3] Gemini AI ile deneyimi ayır
+      const splitResult = await pipeline.runStage('Splitting experience with AI', () =>
+        this.geminiService.splitExperience({
+          productId: request.productId,
+          productName: product.name,
+          productBrand: product.brand?.name || undefined,
+          productDescription: product.description || undefined,
+          experienceText: request.content,
+        }),
+      );
 
-      // Gemini AI ile deneyimi ayır
-      const splitResult = await this.geminiService.splitExperience({
-        productId: request.productId,
-        productName: product.name,
-        productBrand: product.brand?.name || undefined,
-        productDescription: product.description || undefined,
-        experienceText: request.content,
-      });
+      // [3/3] AI split sonucunu database'e kaydet
+      const experienceSnippet = await pipeline.runStage('Saving to database', () =>
+        this.experienceSnippetRepo.create({
+          userId: request.userId,
+          productId: request.productId,
+          originalExperience: request.content,
+          priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+          productAndUsage: splitResult.productAndUsage?.content ?? null,
+          priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+          productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+          priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+          productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+          priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+          productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+          isEdited: false,
+          model: splitResult.metadata.model,
+          promptVersion: splitResult.metadata.promptVersion,
+          tokensUsed: splitResult.metadata.tokensUsed,
+          processingTimeMs: splitResult.metadata.processingTimeMs,
+        }),
+      );
 
-      // AI split sonucunu database'e kaydet
-      const experienceSnippet = await this.experienceSnippetRepo.create({
-        userId: request.userId,
-        productId: request.productId,
-        originalExperience: request.content,
-        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
-        productAndUsage: splitResult.productAndUsage?.content ?? null,
-        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
-        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
-        priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
-        productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
-        priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
-        productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
-        isEdited: false,
-        model: splitResult.metadata.model,
-        promptVersion: splitResult.metadata.promptVersion,
-        tokensUsed: splitResult.metadata.tokensUsed,
-        processingTimeMs: splitResult.metadata.processingTimeMs,
-      });
-
-      logger.info({
-        message: 'Experience split with AI and saved',
-        userId: request.userId,
-        productId: request.productId,
+      pipeline.complete({
         experienceSnippetId: experienceSnippet.id,
-        tokensUsed: splitResult.metadata.tokensUsed,
-        processingTimeMs: splitResult.metadata.processingTimeMs,
-        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
-        hasProductAndUsage: !!splitResult.productAndUsage?.content,
+        tokens: splitResult.metadata.tokensUsed,
       });
 
       return {
@@ -1708,7 +1712,8 @@ export class PostService {
         metadata: splitResult.metadata,
       };
     } catch (error) {
-      logger.error(`Failed to split experience:`, error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      pipeline.fail(errorMsg);
       throw error;
     }
   }

@@ -14,6 +14,7 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AIPipelineLogger } from '../../infrastructure/ai/ai-pipeline-logger';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { ActionLogService } from '../gamification/action-log.service';
@@ -223,19 +224,19 @@ export class InventoryService {
   async splitExperienceWithAI(
     userId: string,
     productId: string,
-    experienceText: string
+    experienceText: string,
   ): Promise<{
     experienceSnippetId: string;
-    priceAndShopping: { 
-      content: string; 
-      rating: number; 
-      placeholder?: string | null; 
+    priceAndShopping: {
+      content: string;
+      rating: number;
+      placeholder?: string | null;
       isEnhanced?: boolean;
     } | null;
-    productAndUsage: { 
-      content: string; 
-      rating: number; 
-      placeholder?: string | null; 
+    productAndUsage: {
+      content: string;
+      rating: number;
+      placeholder?: string | null;
       isEnhanced?: boolean;
     } | null;
     metadata: {
@@ -245,57 +246,60 @@ export class InventoryService {
       promptVersion: string;
     };
   }> {
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'InventoryService',
+      operationName: 'splitExperienceWithAI',
+      totalStages: 3,
+      metadata: { userId, productId },
+    });
+
     try {
-      // Ürün bilgilerini al
-      const product = await this.prisma.product.findUnique({
-        where: { id: productId },
-        include: {
-          brand: true,
-        },
+      // [1/3] Ürün bilgilerini al
+      const product = await pipeline.runStage('Loading product', async () => {
+        const p = await this.prisma.product.findUnique({
+          where: { id: productId },
+          include: { brand: true },
+        });
+        if (!p) throw new Error('Product not found');
+        return p;
       });
 
-      if (!product) {
-        throw new Error('Product not found');
-      }
+      // [2/3] Gemini AI ile deneyimi ayır
+      const splitResult = await pipeline.runStage('Splitting experience with AI', () =>
+        this.geminiService.splitExperience({
+          productId,
+          productName: product.name,
+          productBrand: product.brand?.name || undefined,
+          productDescription: product.description || undefined,
+          experienceText,
+        }),
+      );
 
-      // Gemini AI ile deneyimi ayır
-      const splitResult = await this.geminiService.splitExperience({
-        productId,
-        productName: product.name,
-        productBrand: product.brand?.name || undefined,
-        productDescription: product.description || undefined,
-        experienceText,
-      });
+      // [3/3] AI split sonucunu database'e kaydet
+      const experienceSnippet = await pipeline.runStage('Saving to database', () =>
+        this.experienceSnippetRepo.create({
+          userId,
+          productId,
+          originalExperience: experienceText,
+          priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+          productAndUsage: splitResult.productAndUsage?.content ?? null,
+          priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+          productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+          priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+          productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+          priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+          productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+          isEdited: false,
+          model: splitResult.metadata.model,
+          promptVersion: splitResult.metadata.promptVersion,
+          tokensUsed: splitResult.metadata.tokensUsed,
+          processingTimeMs: splitResult.metadata.processingTimeMs,
+        }),
+      );
 
-      // AI split sonucunu database'e kaydet
-      const experienceSnippet = await this.experienceSnippetRepo.create({
-        userId,
-        productId,
-        originalExperience: experienceText,
-        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
-        productAndUsage: splitResult.productAndUsage?.content ?? null,
-        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
-        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
-        priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
-        productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
-        priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
-        productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
-        isEdited: false,
-        model: splitResult.metadata.model,
-        promptVersion: splitResult.metadata.promptVersion,
-        tokensUsed: splitResult.metadata.tokensUsed,
-        processingTimeMs: splitResult.metadata.processingTimeMs,
-      });
-
-      logger.info({
-        message: 'Experience split with AI and saved',
-        userId,
-        productId,
+      pipeline.complete({
         experienceSnippetId: experienceSnippet.id,
-        tokensUsed: splitResult.metadata.tokensUsed,
-        processingTimeMs: splitResult.metadata.processingTimeMs,
-        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
-        hasProductAndUsage: !!splitResult.productAndUsage?.content,
+        tokens: splitResult.metadata.tokensUsed,
       });
 
       return {
@@ -305,12 +309,8 @@ export class InventoryService {
         metadata: splitResult.metadata,
       };
     } catch (error) {
-      logger.error({
-        message: 'Error splitting experience with AI',
-        userId,
-        productId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      pipeline.fail(errorMsg);
       throw error;
     }
   }
@@ -340,97 +340,94 @@ export class InventoryService {
    */
   async createInventoryItem(
     userId: string,
-    dto: CreateInventoryRequest
+    dto: CreateInventoryRequest,
   ): Promise<InventoryItemResponse> {
+    const hasOwned = dto.status === ExperienceStatus.OWN;
+    const pipeline = new AIPipelineLogger({
+      pipelineName: 'InventoryService',
+      operationName: 'createInventoryItem',
+      totalStages: 5,
+      metadata: { userId, productId: dto.productId, owned: hasOwned },
+    });
+
     try {
-      const product = await this.prisma.product.findUnique({
-        where: { id: dto.productId },
-        include: {
-          brand: true,
-        },
+      // [1/5] Load product
+      const product = await pipeline.runStage('Loading product', async () => {
+        const p = await this.prisma.product.findUnique({
+          where: { id: dto.productId },
+          include: { brand: true },
+        });
+        if (!p) throw new Error('Product not found');
+        return p;
       });
 
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      const hasOwned = dto.status === ExperienceStatus.OWN;
-
-      // Owned akışı: 1) Experience metni (kullanıcı gönderdiyse kullan, yoksa Gemini ile üret), 2) Split (Gemini) → AIExperienceSplit, 3) Inventory, 4) ContentPost
       let experienceText = dto.content?.trim() ?? '';
       let experienceSnippetId: string | null = dto.experienceSnippetId ?? null;
       let splitResult: Awaited<ReturnType<InventoryService['splitExperienceWithAI']>> | null = null;
 
-      if (hasOwned) {
-        // 1) Experience metni: yoksa veya çok kısaysa Gemini ile üret
-        if (!experienceText || experienceText.length < 20) {
-          try {
-            const generated = await this.generateExperienceText(product);
-            if (generated) experienceText = generated;
-          } catch (genErr) {
-            logger.warn({
-              message: 'Experience text generation failed, using provided content or fallback',
-              userId,
-              productId: dto.productId,
-              error: genErr instanceof Error ? genErr.message : String(genErr),
-            });
-          }
-        }
+      // [2/5] Generate experience text (opsiyonel)
+      if (hasOwned && (!experienceText || experienceText.length < 20)) {
+        const generated = await pipeline.runStageOptional(
+          'Generating experience text',
+          () => this.generateExperienceText(product),
+          '',
+        );
+        if (generated) experienceText = generated;
         if (!experienceText) {
           experienceText = `${product.name}${product.brand?.name ? ` (${product.brand.name})` : ''} ürünüyle ilgili deneyim paylaşımı.`;
         }
-
-        // 2) Split (Gemini) → AIExperienceSplit
-        if (!experienceSnippetId) {
-          try {
-            splitResult = await this.splitExperienceWithAI(userId, dto.productId, experienceText);
-            experienceSnippetId = splitResult.experienceSnippetId;
-            logger.info({
-              message: 'Experience auto-split on inventory create (owned)',
-              userId,
-              productId: dto.productId,
-              experienceSnippetId,
-            });
-          } catch (splitError) {
-            logger.warn({
-              message: 'Experience split failed on inventory create, continuing without snippet',
-              userId,
-              productId: dto.productId,
-              error: splitError instanceof Error ? splitError.message : String(splitError),
-            });
-          }
-        }
+      } else {
+        pipeline.skipStage('Generating experience text');
       }
 
-      const experienceSummary = experienceText.length > 200 ? experienceText.substring(0, 200) : experienceText;
-
-      const inventory = await this.prisma.$transaction(async (tx) => {
-        const createdInventory = await tx.inventory.create({
-          data: {
-            userId,
-            productId: dto.productId,
-            hasOwned,
-            experienceSummary,
-            experienceSnippetId,
-            experienceDurationId: dto.selectedDurationId || null,
-            experienceLocationId: dto.selectedLocationId || null,
-            experiencePurposeId: dto.selectedPurposeId || null,
+      // [3/5] Split experience with AI (opsiyonel)
+      if (hasOwned && !experienceSnippetId) {
+        splitResult = await pipeline.runStageOptional(
+          'Splitting experience with AI',
+          async () => {
+            const result = await this.splitExperienceWithAI(userId, dto.productId, experienceText);
+            experienceSnippetId = result.experienceSnippetId;
+            return result;
           },
-        });
+          null,
+        );
+      } else {
+        pipeline.skipStage('Splitting experience with AI');
+      }
 
-        if (dto.images?.length) {
-          await tx.inventoryMedia.createMany({
-            data: dto.images.map((imageUrl) => ({
-              inventoryId: createdInventory.id,
-              mediaUrl: imageUrl,
-            })),
+      // [4/5] Create inventory record
+      const experienceSummary =
+        experienceText.length > 200 ? experienceText.substring(0, 200) : experienceText;
+
+      const inventory = await pipeline.runStage('Creating inventory record', () =>
+        this.prisma.$transaction(async (tx) => {
+          const createdInventory = await tx.inventory.create({
+            data: {
+              userId,
+              productId: dto.productId,
+              hasOwned,
+              experienceSummary,
+              experienceSnippetId,
+              experienceDurationId: dto.selectedDurationId || null,
+              experienceLocationId: dto.selectedLocationId || null,
+              experiencePurposeId: dto.selectedPurposeId || null,
+            },
           });
-        }
 
-        return createdInventory;
-      });
+          if (dto.images?.length) {
+            await tx.inventoryMedia.createMany({
+              data: dto.images.map((imageUrl) => ({
+                inventoryId: createdInventory.id,
+                mediaUrl: imageUrl,
+              })),
+            });
+          }
 
-      // 4) Owned ise ContentPost (Experience post) oluştur
+          return createdInventory;
+        }),
+      );
+
+      // [5/5] Create experience post (opsiyonel)
       if (hasOwned && experienceText) {
         let experienceArray: { type: ExperienceType; content: string; rating: number }[] = [];
         if (splitResult) {
@@ -449,7 +446,11 @@ export class InventoryService {
             });
           }
         }
-        if (experienceArray.length === 0 && Array.isArray(dto.experience) && dto.experience.length > 0) {
+        if (
+          experienceArray.length === 0 &&
+          Array.isArray(dto.experience) &&
+          dto.experience.length > 0
+        ) {
           experienceArray = dto.experience.map((e) => ({
             type: e.type as ExperienceType,
             content: e.content,
@@ -457,37 +458,31 @@ export class InventoryService {
           }));
         }
         if (experienceArray.length > 0 && experienceSnippetId) {
-          try {
-            await this.postService.createExperiencePost(userId, {
-              contextType: ContextType.PRODUCT,
-              contextId: dto.productId,
-              selectedDurationId: dto.selectedDurationId || null,
-              selectedLocationId: dto.selectedLocationId || null,
-              selectedPurposeId: dto.selectedPurposeId || null,
-              content: experienceText,
-              experience: experienceArray,
-              status: ExperienceStatus.OWN,
-              images: dto.images,
-              experienceSnippetId,
-            });
-          } catch (postErr) {
-            logger.warn({
-              message: 'Experience post creation failed after inventory create',
-              userId,
-              productId: dto.productId,
-              inventoryId: inventory.id,
-              error: postErr instanceof Error ? postErr.message : String(postErr),
-            });
-          }
+          await pipeline.runStageOptional(
+            'Creating experience post',
+            () =>
+              this.postService.createExperiencePost(userId, {
+                contextType: ContextType.PRODUCT,
+                contextId: dto.productId,
+                selectedDurationId: dto.selectedDurationId || null,
+                selectedLocationId: dto.selectedLocationId || null,
+                selectedPurposeId: dto.selectedPurposeId || null,
+                content: experienceText,
+                experience: experienceArray,
+                status: ExperienceStatus.OWN,
+                images: dto.images,
+                experienceSnippetId,
+              }),
+            undefined,
+          );
+        } else {
+          pipeline.skipStage('Creating experience post');
         }
+      } else {
+        pipeline.skipStage('Creating experience post');
       }
 
-      logger.info({
-        message: 'Inventory item created',
-        userId,
-        productId: dto.productId,
-        inventoryId: inventory.id,
-      });
+      pipeline.complete({ inventoryId: inventory.id });
 
       // Action log (fire-and-forget)
       this.actionLogService
@@ -536,7 +531,11 @@ export class InventoryService {
         },
       };
     } catch (error: unknown) {
-      if (error instanceof Error && 'code' in error && (error as { code: string }).code === 'P2002') {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2002'
+      ) {
         logger.warn({
           message: 'Inventory already exists for this product and user',
           userId,
@@ -545,12 +544,8 @@ export class InventoryService {
         throw new Error('Inventory already exists for this product');
       }
 
-      logger.error({
-        message: 'Error creating inventory item',
-        userId,
-        productId: dto.productId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      pipeline.fail(errorMsg);
       throw error;
     }
   }

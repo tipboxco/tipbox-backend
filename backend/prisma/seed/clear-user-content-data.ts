@@ -33,6 +33,7 @@
  */
 
 import { prisma } from './types';
+import { SeedPipelineLogger } from './helpers/seed-pipeline-logger';
 
 /**
  * Kullanıcı ve içerik verilerini temizle (taxonomy/core verileri koru)
@@ -45,42 +46,47 @@ import { prisma } from './types';
  *   comparison_metrics, user_themes, products, product_groups
  */
 export async function clearUserContentData(): Promise<void> {
-  console.log('🗑️  Kullanıcı ve içerik verileri temizleniyor (TRUNCATE)...');
-  console.log('ℹ️  Taxonomy/Core verileri korunuyor (categories, brands, badges, themes, vb.)\n');
+  const pipeline = new SeedPipelineLogger('clearUserContentData', 1);
 
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      feeds, feed_highlights, trending_posts,
-      content_shares, content_favorites, content_likes,
-      content_comment_votes, content_comments, content_post_views,
-      content_ratings, content_post_tags, top_community_choices,
-      post_media, post_comparison_scores, post_comparisons,
-      post_tags, post_tips, post_questions,
-      content_posts, content_collections,
-      marketplace_banners,
-      nft_market_listings, nft_transactions, nft_claims, nft_attributes, nfts,
-      event_stats, event_rewards, events,
-      bridge_rewards, bridge_user_stats, bridge_leaderboards,
-      bridge_followers, bridge_posts,
-      brand_survey_answers, brand_survey_questions, brand_surveys,
-      inventory_media, inventories,
-      product_suggestions,
-      user_collections, user_titles, user_badges, user_achievements, user_avatars,
-      user_mutes, user_blocks, trust_relations, user_trust_scores,
-      user_roles, user_feed_preferences, user_settings, profiles,
-      expert_answers, expert_request_media, expert_requests,
-      dm_feedbacks, dm_support_sessions, support_request_reports,
-      dm_messages, dm_requests, dm_threads,
-      reward_claims,
-      tips_token_transfers, lootboxes, wallets,
-      manual_review_flags, moderation_actions, admin_logs,
-      password_reset_tokens, email_verification_codes, login_attempts,
-      users
-    CASCADE
-  `);
+  try {
+    await pipeline.runStage('TRUNCATE user/content tables', () =>
+      prisma.$executeRawUnsafe(`
+        TRUNCATE TABLE
+          feeds, feed_highlights, trending_posts,
+          content_shares, content_favorites, content_likes,
+          content_comment_votes, content_comments, content_post_views,
+          content_ratings, content_post_tags, top_community_choices,
+          post_media, post_comparison_scores, post_comparisons,
+          post_tags, post_tips, post_questions,
+          content_posts, content_collections,
+          marketplace_banners,
+          nft_market_listings, nft_transactions, nft_claims, nft_attributes, nfts,
+          event_stats, event_rewards, events,
+          bridge_rewards, bridge_user_stats, bridge_leaderboards,
+          bridge_followers, bridge_posts,
+          brand_survey_answers, brand_survey_questions, brand_surveys,
+          inventory_media, inventories,
+          product_suggestions,
+          user_collections, user_titles, user_badges, user_achievements, user_avatars,
+          user_mutes, user_blocks, trust_relations, user_trust_scores,
+          user_roles, user_feed_preferences, user_settings, profiles,
+          expert_answers, expert_request_media, expert_requests,
+          dm_feedbacks, dm_support_sessions, support_request_reports,
+          dm_messages, dm_requests, dm_threads,
+          reward_claims,
+          tips_token_transfers, lootboxes, wallets,
+          manual_review_flags, moderation_actions, admin_logs,
+          password_reset_tokens, email_verification_codes, login_attempts,
+          users
+        CASCADE
+      `),
+    'taxonomy preserved');
 
-  console.log('✅ Kullanıcı ve içerik verileri temizlendi');
-  console.log('✅ Taxonomy/Core verileri korundu (categories, brands, badges, themes, products, vb.)');
+    pipeline.complete();
+  } catch (error) {
+    pipeline.fail(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 if (require.main === module) {
