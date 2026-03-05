@@ -53,7 +53,7 @@ export async function clearUserContentMedia(): Promise<void> {
         console.log(`  ✅ ${folder}: ${deleted} dosya silindi`);
         totalDeleted += deleted;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn(`  ⚠️  ${folder} temizlenirken hata: ${errorMsg}`);
     }

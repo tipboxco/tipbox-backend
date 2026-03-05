@@ -33,149 +33,54 @@
  */
 
 import { prisma } from './types';
-import { ProgressBar } from './helpers/progress-bar';
 
 /**
  * Kullanıcı ve içerik verilerini temizle (taxonomy/core verileri koru)
+ *
+ * TRUNCATE CASCADE kullanılır:
+ *   - Anlık tablo temizliği, kilit süresi saniyeler
+ *   - FK bypass gerekmez
+ *
+ * KORUNAN (taxonomy): categories, brands, badges, achievement chains/goals,
+ *   comparison_metrics, user_themes, products, product_groups
  */
 export async function clearUserContentData(): Promise<void> {
-  console.log('🗑️  Kullanıcı ve içerik verileri temizleniyor...');
+  console.log('🗑️  Kullanıcı ve içerik verileri temizleniyor (TRUNCATE)...');
   console.log('ℹ️  Taxonomy/Core verileri korunuyor (categories, brands, badges, themes, vb.)\n');
-  
-  // Progress bar oluştur (toplam 12 ana grup)
-  const totalSteps = 12;
-  const progress = new ProgressBar(totalSteps, 50);
 
-  try {
-    // Foreign key constraint'leri nedeniyle ters sırada silme
-    // En son oluşturulan verilerden başla
-    
-    // Feed ve trending verileri
-    progress.increment('Feed ve trending verileri temizleniyor...');
-    await prisma.feed.deleteMany({});
-    await prisma.trendingPost.deleteMany({});
-    await prisma.feedHighlight.deleteMany({});
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      feeds, feed_highlights, trending_posts,
+      content_shares, content_favorites, content_likes,
+      content_comment_votes, content_comments, content_post_views,
+      content_ratings, content_post_tags, top_community_choices,
+      post_media, post_comparison_scores, post_comparisons,
+      post_tags, post_tips, post_questions,
+      content_posts, content_collections,
+      marketplace_banners,
+      nft_market_listings, nft_transactions, nft_claims, nft_attributes, nfts,
+      event_stats, event_rewards, events,
+      bridge_rewards, bridge_user_stats, bridge_leaderboards,
+      bridge_followers, bridge_posts,
+      brand_survey_answers, brand_survey_questions, brand_surveys,
+      inventory_media, inventories,
+      product_suggestions,
+      user_collections, user_titles, user_badges, user_achievements, user_avatars,
+      user_mutes, user_blocks, trust_relations, user_trust_scores,
+      user_roles, user_feed_preferences, user_settings, profiles,
+      expert_answers, expert_request_media, expert_requests,
+      dm_feedbacks, dm_support_sessions, support_request_reports,
+      dm_messages, dm_requests, dm_threads,
+      reward_claims,
+      tips_token_transfers, lootboxes, wallets,
+      manual_review_flags, moderation_actions, admin_logs,
+      password_reset_tokens, email_verification_codes, login_attempts,
+      users
+    CASCADE
+  `);
 
-    // Content verileri
-    progress.increment('Content verileri temizleniyor...');
-    await prisma.contentFavorite.deleteMany({});
-    await prisma.contentLike.deleteMany({});
-    await prisma.contentCommentVote.deleteMany({});
-    await prisma.contentComment.deleteMany({});
-    await prisma.contentPostView.deleteMany({});
-    await prisma.contentRating.deleteMany({});
-    await prisma.contentPostTag.deleteMany({});
-    await prisma.topCommunityChoice.deleteMany({});
-    await prisma.postMedia.deleteMany({});
-    await prisma.postComparisonScore.deleteMany({});
-    await prisma.postComparison.deleteMany({});
-    await prisma.postTag.deleteMany({});
-    await prisma.postTip.deleteMany({});
-    await prisma.postQuestion.deleteMany({});
-    await prisma.contentPost.deleteMany({});
-    await prisma.contentCollection.deleteMany({});
-
-    // Marketplace verileri
-    progress.increment('Marketplace verileri temizleniyor...');
-    await prisma.marketplaceBanner.deleteMany({});
-    await prisma.nFTMarketListing.deleteMany({});
-    await prisma.nFTTransaction.deleteMany({});
-    await prisma.nFTClaim.deleteMany({});
-    await prisma.nFTAttribute.deleteMany({});
-    await prisma.nFT.deleteMany({});
-
-    // Explore/Bridge verileri (BrandSurvey, BridgePost, Event, vb.)
-    progress.increment('Explore/Bridge verileri temizleniyor...');
-    await prisma.eventStats.deleteMany({});
-    await prisma.eventReward.deleteMany({});
-    await prisma.event.deleteMany({});
-    await prisma.bridgeReward.deleteMany({});
-    await prisma.bridgeUserStats.deleteMany({});
-    await prisma.bridgeLeaderboard.deleteMany({});
-    await prisma.bridgeFollower.deleteMany({});
-    await prisma.bridgePost.deleteMany({});
-    await prisma.brandSurveyAnswer.deleteMany({});
-    await prisma.brandSurveyQuestion.deleteMany({});
-    await prisma.brandSurvey.deleteMany({});
-    // NOT: Brand ve BrandCategory korunur (taxonomy)
-
-    // Inventory verileri
-    progress.increment('Inventory verileri temizleniyor...');
-    await prisma.inventoryMedia.deleteMany({});
-    // NOTE: productExperience model removed - no longer exists
-    await prisma.inventory.deleteMany({});
-    // NOT: Product, ProductGroup korunur (taxonomy)
-
-    // Product suggestions (userId var)
-    await prisma.productSuggestion.deleteMany({});
-    // NOT: Product korunur (taxonomy)
-
-    // User related verileri
-    progress.increment('Kullanıcı ilişkili verileri temizleniyor...');
-    await prisma.userCollection.deleteMany({});
-    await prisma.userTitle.deleteMany({});
-    await prisma.userBadge.deleteMany({});
-    await prisma.userAchievement.deleteMany({});
-    await prisma.userAvatar.deleteMany({});
-    await prisma.userMute.deleteMany({});
-    await prisma.userBlock.deleteMany({});
-    await prisma.trustRelation.deleteMany({});
-    await prisma.userTrustScore.deleteMany({});
-    await prisma.userRole.deleteMany({});
-    await prisma.userFeedPreferences.deleteMany({});
-    await prisma.userSettings.deleteMany({});
-    await prisma.profile.deleteMany({});
-    // NOT: UserTheme korunur (taxonomy)
-
-    // Expert verileri
-    progress.increment('Expert verileri temizleniyor...');
-    await prisma.expertAnswer.deleteMany({});
-    await prisma.expertRequestMedia.deleteMany({});
-    await prisma.expertRequest.deleteMany({});
-
-    // Messaging verileri
-    progress.increment('Messaging verileri temizleniyor...');
-    await prisma.dMFeedback.deleteMany({});
-    await prisma.dMSupportSession.deleteMany({});
-    await prisma.supportRequestReport.deleteMany({});
-    await prisma.dMMessage.deleteMany({});
-    await prisma.dMRequest.deleteMany({});
-    await prisma.dMThread.deleteMany({});
-
-    // Gamification verileri (user'a ait)
-    progress.increment('Gamification verileri temizleniyor...');
-    await prisma.rewardClaim.deleteMany({});
-    // NOT: AchievementGoal, AchievementChain, Badge, BadgeCategory korunur (taxonomy)
-
-    // Crypto verileri
-    progress.increment('Crypto verileri temizleniyor...');
-    await prisma.tipsTokenTransfer.deleteMany({});
-    await prisma.lootbox.deleteMany({});
-    await prisma.wallet.deleteMany({});
-
-    // Admin verileri
-    progress.increment('Admin verileri temizleniyor...');
-    await prisma.manualReviewFlag.deleteMany({});
-    await prisma.moderationAction.deleteMany({});
-    await prisma.adminLog.deleteMany({});
-
-    // Auth verileri
-    progress.increment('Auth verileri temizleniyor...');
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.emailVerificationCode.deleteMany({});
-    await prisma.loginAttempt.deleteMany({});
-
-    // User'ları sil (en son)
-    progress.increment('Kullanıcılar temizleniyor...');
-    await prisma.user.deleteMany({});
-
-    progress.complete('Kullanıcı ve içerik verileri temizlendi!');
-    console.log('\n✅ Kullanıcı ve içerik verileri temizlendi');
-    console.log('✅ Taxonomy/Core verileri korundu (categories, brands, badges, themes, products, vb.)');
-  } catch (error) {
-    console.error('❌ Kullanıcı ve içerik verileri temizlenirken hata oluştu:', error);
-    throw error;
-  }
+  console.log('✅ Kullanıcı ve içerik verileri temizlendi');
+  console.log('✅ Taxonomy/Core verileri korundu (categories, brands, badges, themes, products, vb.)');
 }
 
 if (require.main === module) {

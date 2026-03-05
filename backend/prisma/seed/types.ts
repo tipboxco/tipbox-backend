@@ -1,6 +1,20 @@
 import { PrismaClient } from '@prisma/client';
 
-export const prisma = new PrismaClient();
+// Seed script'leri için düşük pool limiti (connection_limit=3).
+// Backend + seed aynı anda çalışırken PG max_connections=50'yi aşmamak için:
+//   Backend default pool: ~10 connection
+//   Seed script pool: 3 connection (yeterli — sıralı işlemler)
+function buildSeedDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL || '';
+  if (url.includes('connection_limit')) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}connection_limit=3`;
+}
+
+export const prisma = new PrismaClient({
+  datasources: { db: { url: buildSeedDatabaseUrl() } },
+  log: [],
+});
 
 export const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07';
 export const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330';

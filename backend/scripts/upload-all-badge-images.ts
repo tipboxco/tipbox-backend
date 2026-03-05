@@ -8,9 +8,9 @@ import { S3Service } from '../src/infrastructure/s3/s3.service';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const s3Service = new S3Service();
-
 async function uploadAllBadgeImages() {
+  // Lazy init: S3Service sadece fonksiyon çalışırken başlatılır
+  const s3Service = new S3Service();
   console.log('\n🎨 Badge Görsellerini MinIO\'ya Yükleme Başladı\n');
 
   let totalUploaded = 0;
