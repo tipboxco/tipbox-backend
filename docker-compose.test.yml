@@ -5,7 +5,7 @@
 name: tipbox-test
 # Toplam bellek dağılımı:
 #   Backend sınırsız | Catalog sınırsız | PostgreSQL 384MB | Redis 256MB
-#   Admin 512MB | prisma-studio 256MB | pgadmin 128MB | MinIO 192MB | Nginx 64MB
+#   Admin 512MB | prisma-studio sınırsız | pgadmin 512MB | MinIO 192MB | Nginx 64MB
 services:
   postgres:
     image: postgres:15-alpine
@@ -255,12 +255,6 @@ services:
         fi &&
         BROWSER=none npx prisma studio --port 5555 --hostname 0.0.0.0
       "
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 64M
     networks:
       - tipbox_network
 
