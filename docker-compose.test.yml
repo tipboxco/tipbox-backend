@@ -283,6 +283,7 @@ services:
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api-test.tipbox.co}
       - VITE_BASE_PATH=/dashboard
+      - NODE_OPTIONS=--max-old-space-size=384
     depends_on:
       - backend
     volumes:
@@ -293,7 +294,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
         reservations:
           memory: 128M
     networks:
