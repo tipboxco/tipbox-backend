@@ -35,7 +35,6 @@ docker compose -f "$COMPOSE_FILE" run --rm --no-deps \
   -e SKIP_DB_MIGRATIONS=1 \
   backend \
   sh -c '
-    set -e
     MIGRATE_OUTPUT=$(pnpm exec prisma migrate deploy 2>&1)
     MIGRATE_EXIT=$?
     echo "$MIGRATE_OUTPUT"
