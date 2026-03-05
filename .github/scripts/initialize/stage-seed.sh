@@ -12,9 +12,9 @@ if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
 
   # docker compose exec: çalışan backend container içinde çalışır (entrypoint yok, yeni container yok)
   # node_modules, prisma client, env vars zaten mevcut
-  docker compose -f "$COMPOSE_FILE" exec -T backend npx ts-node scripts/clear-and-seed.ts --all || {
+  docker compose -f "$COMPOSE_FILE" exec -T -e NODE_OPTIONS="--max-old-space-size=512" backend npx ts-node --transpile-only scripts/clear-and-seed.ts --all || {
     echo "⚠️  Full seed failed, trying minimal seed..."
-    docker compose -f "$COMPOSE_FILE" exec -T backend npx ts-node scripts/clear-and-seed.ts || {
+    docker compose -f "$COMPOSE_FILE" exec -T -e NODE_OPTIONS="--max-old-space-size=512" backend npx ts-node --transpile-only scripts/clear-and-seed.ts || {
       echo "⚠️  Seed failed, continuing without seed data..."
     }
   }
