@@ -4,8 +4,8 @@
 # 4GB RAM sunucu için optimize edilmiş yapılandırma (swap önerilir)
 name: tipbox-test
 # Toplam bellek dağılımı:
-#   PostgreSQL 512MB | Backend 1.5GB | Catalog 2GB | Redis 384MB
-#   MinIO 256MB | Nginx 128MB | Admin 384MB | pgadmin 256MB | prisma-studio 192MB
+#   Backend sınırsız | Catalog sınırsız | PostgreSQL 384MB | Redis 256MB
+#   Admin 512MB | prisma-studio 256MB | pgadmin 128MB | MinIO 192MB | Nginx 64MB
 services:
   postgres:
     image: postgres:15-alpine
@@ -35,9 +35,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
         reservations:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user} -d ${POSTGRES_DB:-tipbox_test}"]
       interval: 10s
@@ -64,9 +64,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
         reservations:
-          memory: 64M
+          memory: 32M
 
   minio:
     image: minio/minio:latest
@@ -87,9 +87,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -122,9 +122,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 256M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -143,7 +143,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=test
-      - NODE_OPTIONS=--max-old-space-size=1200
+      - NODE_OPTIONS=--max-old-space-size=2048
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-1}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -187,12 +187,6 @@ services:
       - ./logs:/app/logs
     working_dir: /app
     command: pnpm run dev
-    deploy:
-      resources:
-        limits:
-          memory: 1536M
-        reservations:
-          memory: 384M
     networks:
       - tipbox_network
     healthcheck:
@@ -229,9 +223,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 64M
         reservations:
-          memory: 32M
+          memory: 16M
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
@@ -264,9 +258,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 256M
         reservations:
-          memory: 128M
+          memory: 64M
     networks:
       - tipbox_network
 
@@ -343,12 +337,6 @@ services:
       - ./catalog-service:/server
       - catalog_service_test_node_modules:/server/node_modules
     working_dir: /server
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
     networks:
       - tipbox_network
     healthcheck:
