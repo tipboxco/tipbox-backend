@@ -1,522 +1,111 @@
 /**
  * Seed verilerini temizleyip seed.ts'yi çalıştıran script
- * 
- * Bu script:
- * 1. Prisma schema validation
- * 2. Migration status kontrolü ve uygulama
- * 3. DB schema ile Prisma schema uyumluluğu kontrolü
- * 4. Prisma client generate
- * 5. Seed görsellerini MinIO'ya yükler
- * 6. Mevcut seed verilerini temizler (taxonomy korunur veya silinir)
- * 7. seed.ts'yi çalıştırır
- * 8. Feed distribution worker'ı tetikler (post'lar için feed kayıtları)
- * 
- * Kullanım:
- *   npx ts-node scripts/clear-and-seed.ts          # Taxonomy korunur (sadece user/content temizlenir)
- *   npx ts-node scripts/clear-and-seed.ts --all    # Tüm veriler temizlenir (taxonomy dahil)
  *
- * Post ve inventory sadece öne çıkan kullanıcılar için oluşturulur (varsayılan).
- * Tüm kullanıcılar için post/inventory isterseniz: SEED_FEATURED_ONLY=false npx ts-node scripts/clear-and-seed.ts
+ * RAM-optimized:
+ *   - Migration kodu yok (entrypoint + stage-start.sh zaten halleder)
+ *   - Dynamic imports (her adım sadece kendi modülünü yükler)
+ *   - Child process'ler düşük heap ile çalışır (--max-old-space-size=256)
+ *
+ * Kullanım:
+ *   npx ts-node --transpile-only scripts/clear-and-seed.ts          # taxonomy korunur
+ *   npx ts-node --transpile-only scripts/clear-and-seed.ts --all    # tüm veriler silinir
+ *
+ * VEYA (daha az RAM):
+ *   NODE_OPTIONS="--max-old-space-size=512" npx ts-node --transpile-only scripts/clear-and-seed.ts
  */
 
+// @ts-nocheck — scripts/ tsconfig kapsamı dışında; --transpile-only ile çalışır
 import { execSync } from 'child_process';
 import path from 'path';
-import fs from 'fs';
-import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
-import { clearUserContentData } from '../prisma/seed/clear-user-content-data';
-import { clearAllSeedData } from '../prisma/seed/clear-seed-data';
-import { prisma } from '../prisma/seed/types';
 
-/**
- * P3005 hatası için baseline işlemi yapar
- * Database schema boş değilse migration'ı applied olarak işaretler
- */
-async function handleP3005Baseline(): Promise<void> {
-  console.log('\n⚠️  Database schema boş değil, baseline yapılıyor...\n');
-  
-  try {
-    const migrationsPath = path.join(process.cwd(), 'prisma', 'migrations');
-    const migrationDirs = fs.readdirSync(migrationsPath, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory())
-      .map(dirent => dirent.name)
-      .filter(dir => !dir.includes('lock'));
-    
-    if (migrationDirs.length > 0) {
-      const lastMigration = migrationDirs[migrationDirs.length - 1];
-      console.log(`📝 Migration baseline yapılıyor: ${lastMigration}\n`);
-      
-      try {
-        execSync(`npx prisma migrate resolve --applied ${lastMigration}`, {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Migration baseline tamamlandı\n');
-        
-        // Tekrar deploy dene
-        execSync('npx prisma migrate deploy', {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Migration\'lar uygulandı\n');
-      } catch (resolveError) {
-        // Resolve başarısız olursa, db push kullan
-        console.log('⚠️  Migration resolve başarısız, schema push kullanılıyor...\n');
-        execSync('npx prisma db push --accept-data-loss', {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Schema database\'e uygulandı (db push)\n');
-      }
-    } else {
-      // Migration dosyası yoksa, sadece db push yap
-      console.log('⚠️  Migration dosyası bulunamadı, schema push kullanılıyor...\n');
-      execSync('npx prisma db push --accept-data-loss', {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Schema database\'e uygulandı (db push)\n');
-    }
-  } catch (baselineError) {
-    console.error('❌ Baseline işlemi başarısız!');
-    console.error('💡 Manuel olarak şu komutları çalıştırın:');
-    console.error('   1. npx prisma migrate resolve --applied <migration_name>');
-    console.error('   2. npx prisma migrate deploy');
-    console.error('   VEYA: npx prisma db push --accept-data-loss');
-    throw baselineError;
-  }
+// Child process'ler için heap limiti — dev server zaten ~700MB kullandığından küçük tutulur
+const CHILD_HEAP = '--max-old-space-size=256';
+
+function runScript(scriptPath: string, extraEnv: Record<string, string> = {}): void {
+  execSync(`npx ts-node --transpile-only "${scriptPath}"`, {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      NODE_OPTIONS: CHILD_HEAP,
+      ...extraEnv,
+    },
+  });
 }
 
-/**
- * P3015 hatası için düzeltme işlemi yapar
- * Migration dosyası bulunamadığında, önce migration geçmişini düzeltir, sonra deploy dener
- */
-async function handleP3015Error(): Promise<void> {
-  console.log('\n⚠️  Migration dosyası bulunamadı (P3015), düzeltme yapılıyor...\n');
-  
-  try {
-    // Önce migration geçmişini senkronize et: local migration'ları applied olarak işaretle
-    console.log('🔄 Migration geçmişi senkronize ediliyor...\n');
-    const migrationsPath = path.join(process.cwd(), 'prisma', 'migrations');
-    
-    if (fs.existsSync(migrationsPath)) {
-      const migrationDirs = fs.readdirSync(migrationsPath, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory())
-        .map(dirent => dirent.name)
-        .filter(dir => !dir.includes('lock'))
-        .sort();
-      
-      // Tüm local migration'ları applied olarak işaretle
-      for (const migrationDir of migrationDirs) {
-        try {
-          execSync(`npx prisma migrate resolve --applied ${migrationDir}`, {
-            stdio: 'pipe',
-            cwd: process.cwd(),
-          });
-          console.log(`✅ Migration işaretlendi: ${migrationDir}`);
-        } catch (error) {
-          // Migration zaten applied olabilir, devam et
-          console.log(`⚠️  Migration zaten uygulanmış veya işaretlenemedi: ${migrationDir}`);
-        }
-      }
-      
-      console.log('\n✅ Migration geçmişi senkronize edildi\n');
-      
-      // Şimdi migrate deploy dene
-      console.log('🔄 Migration deploy deneniyor...\n');
-      try {
-        execSync('npx prisma migrate deploy', {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Migration\'lar uygulandı\n');
-        return; // Başarılı oldu, çık
-      } catch (deployError) {
-        console.log('⚠️  Migration deploy başarısız, schema push deneniyor...\n');
-      }
-    } else {
-      console.log('⚠️  Migration dizini bulunamadı\n');
-    }
-    
-    // Eğer migrate deploy başarısız olduysa veya migration dizini yoksa, schema push kullan
-    // Ancak önce mevcut schema ile uyumluluğu kontrol et
-    console.log('⚠️  Schema push kullanılıyor (mevcut yapı korunacak)...\n');
-    try {
-      // Pipe ile çalıştır ki hata mesajını yakalayabilelim
-      const pushOutput = execSync('npx prisma db push --accept-data-loss 2>&1', {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-      });
-      
-      // Eğer "Your database is now in sync" mesajı varsa, başarılı
-      if (pushOutput.includes('Your database is now in sync') || pushOutput.includes('already in sync')) {
-        console.log('✅ Schema zaten senkronize\n');
-      } else {
-        console.log(pushOutput);
-        console.log('✅ Schema database\'e uygulandı (db push)\n');
-      }
-    } catch (pushError: any) {
-      // Hata mesajını kontrol et
-      const stdout = pushError.stdout?.toString() || '';
-      const stderr = pushError.stderr?.toString() || '';
-      const message = pushError.message?.toString() || '';
-      const errorOutput = (stdout + stderr + message).toLowerCase();
-      
-      // Eğer "already exists" hatası varsa, bu normal (schema zaten güncel)
-      if (errorOutput.includes('already exists') || 
-          (errorOutput.includes('relation') && errorOutput.includes('already')) ||
-          errorOutput.includes('duplicate key') ||
-          errorOutput.includes('constraint') && errorOutput.includes('already')) {
-        console.log('⚠️  Bazı yapılar zaten mevcut, bu normal. Schema zaten güncel görünüyor.\n');
-        console.log('✅ Devam ediliyor...\n');
-      } else {
-        // Diğer hatalar için detaylı log ve fırlat
-        console.error('❌ Schema push başarısız!');
-        if (stdout) console.error('📤 stdout:', stdout.substring(0, 500));
-        if (stderr) console.error('📤 stderr:', stderr.substring(0, 500));
-        throw pushError;
-      }
-    }
-  } catch (error) {
-    console.error('❌ P3015 düzeltme işlemi başarısız!');
-    console.error('💡 Manuel olarak şu komutları çalıştırın:');
-    console.error('   1. npx prisma migrate resolve --applied <migration_name> (her local migration için)');
-    console.error('   2. npx prisma migrate deploy');
-    console.error('   VEYA: npx prisma db push --accept-data-loss --skip-generate');
-    throw error;
+async function clearAndSeed(clearAll: boolean): Promise<void> {
+  // ── ADIM 1: MinIO temizle (dynamic import → sadece bu adımda belleğe alınır) ──
+  if (clearAll) {
+    console.log('\n🧹 MinIO: TÜM görseller temizleniyor...');
+    const { clearAllMedia } = await import('../prisma/seed/helpers/clear-minio-media');
+    await clearAllMedia();
+  } else {
+    console.log('\n🧹 MinIO: kullanıcı/içerik görselleri temizleniyor...');
+    const { clearUserContentMedia } = await import('../prisma/seed/helpers/clear-minio-media');
+    await clearUserContentMedia();
   }
+
+  // ── ADIM 2: DB temizle (dynamic import → sadece bu adımda belleğe alınır) ──
+  if (clearAll) {
+    console.log('\n🧹 DB: TÜM seed verileri temizleniyor (taxonomy dahil)...');
+    const { clearAllSeedData } = await import('../prisma/seed/clear-seed-data');
+    await clearAllSeedData(true);
+  } else {
+    console.log('\n🧹 DB: kullanıcı/içerik verileri temizleniyor (taxonomy korunuyor)...');
+    const { clearUserContentData } = await import('../prisma/seed/clear-user-content-data');
+    await clearUserContentData();
+  }
+
+  // ── ADIM 3: Seed görselleri MinIO'ya yükle (ayrı child process → kendi heap'i) ──
+  console.log('\n📤 Seed görselleri MinIO\'ya yükleniyor...');
+  try {
+    runScript(path.join(process.cwd(), 'scripts', 'fix-minio-structure.ts'));
+    console.log('✅ Seed görselleri yüklendi');
+  } catch {
+    console.warn('⚠️  Seed görselleri yüklenemedi, devam ediliyor...');
+    console.warn('   Manuel: npx ts-node --transpile-only scripts/fix-minio-structure.ts');
+  }
+
+  // ── ADIM 4: Badge görselleri yükle (ayrı child process) ──
+  console.log('\n🎨 Badge görselleri yükleniyor...');
+  try {
+    runScript(path.join(process.cwd(), 'scripts', 'upload-all-badge-images.ts'));
+    console.log('✅ Badge görselleri yüklendi');
+  } catch {
+    console.warn('⚠️  Badge görselleri yüklenemedi, devam ediliyor...');
+    console.warn('   Manuel: npx ts-node --transpile-only scripts/upload-all-badge-images.ts');
+  }
+
+  // ── ADIM 5: Seed.ts (ayrı child process) ──
+  console.log('\n🌱 Seed.ts çalıştırılıyor...');
+  runScript(path.join(process.cwd(), 'prisma', 'seed.ts'), {
+    SKIP_SEED_MEDIA_UPLOAD: 'true', // görseller adım 3'te yüklendi
+  });
+
+  // ── ADIM 6: Feed distribution (ayrı child process) ──
+  console.log('\n🔄 Feed distribution tetikleniyor...');
+  try {
+    runScript(path.join(process.cwd(), 'scripts', 'trigger-feed-distribution.ts'));
+    console.log('✅ Feed distribution job\'ları oluşturuldu');
+  } catch {
+    console.warn('⚠️  Feed distribution tetiklenemedi');
+    console.warn('   Manuel: npx ts-node --transpile-only scripts/trigger-feed-distribution.ts');
+  }
+
+  console.log('\n✅ Seed işlemi tamamlandı!\n');
 }
 
-async function clearAndSeed(clearAll: boolean = false): Promise<void> {
-  console.log('🔍 Prisma schema kontrol ediliyor...\n');
-  
-  try {
-    // Önce Prisma schema'yı validate et
-    try {
-      execSync('npx prisma validate', { 
-        stdio: 'pipe',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Schema geçerli\n');
-    } catch (error: any) {
-      console.error('❌ Schema validation başarısız!');
-      if (error.stdout) {
-        console.error(error.stdout.toString());
-      }
-      console.error('\n💡 Önce schema hatalarını düzeltin ve prisma generate çalıştırın');
-      process.exit(1);
-    }
-    
-    // Migration status kontrolü
-    console.log('📊 Migration durumu kontrol ediliyor...\n');
-    try {
-      const statusOutput = execSync('npx prisma migrate status', {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-      });
-      
-      console.log('📋 Migration durumu:');
-      console.log(statusOutput);
-      
-      // Eğer uygulanmamış migration'lar varsa uygula
-      if (statusOutput.includes('not yet been applied') || 
-          statusOutput.includes('drift detected') ||
-          statusOutput.includes('database schema is not in sync') ||
-          statusOutput.includes('Following migrations have not yet been applied')) {
-        console.log('\n⚠️  Uygulanmamış migration\'lar bulundu, uygulanıyor...\n');
-        execSync('npx prisma migrate deploy', {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        });
-        console.log('✅ Migration\'lar uygulandı\n');
-      } else {
-        console.log('✅ Tüm migration\'lar uygulanmış\n');
-      }
-    } catch (error: any) {
-      // migrate status hata verirse veya stdout'ta uygulanmamış migration bilgisi varsa
-      const errorOutput = error.stdout?.toString() || error.stderr?.toString() || error.message || '';
-      const fullOutput = error.stdout?.toString() || '';
-      
-      // stdout'ta uygulanmamış migration bilgisi varsa
-      if (fullOutput.includes('not yet been applied') || 
-          fullOutput.includes('Following migrations have not yet been applied')) {
-        console.log('\n⚠️  Uygulanmamış migration\'lar bulundu, uygulanıyor...\n');
-        try {
-          // Önce pipe ile çalıştırıp hatayı yakalayalım
-          execSync('npx prisma migrate deploy', {
-            stdio: 'pipe',
-            cwd: process.cwd(),
-            encoding: 'utf-8',
-          });
-          console.log('✅ Migration\'lar uygulandı\n');
-        } catch (deployError: any) {
-          // Hata mesajını tüm kaynaklardan topla
-          const stdout = deployError.stdout?.toString() || '';
-          const stderr = deployError.stderr?.toString() || '';
-          const message = deployError.message?.toString() || '';
-          const deployErrorOutput = (stdout + stderr + message).toLowerCase();
-          
-          console.log('🔍 Hata detayları kontrol ediliyor...\n');
-          
-          // P3005 hatası: Database schema boş değil, baseline gerekli
-          if (deployErrorOutput.includes('p3005') || 
-              deployErrorOutput.includes('database schema is not empty') ||
-              deployErrorOutput.includes('baseline') ||
-              stdout.includes('P3005') ||
-              stderr.includes('P3005') ||
-              message.includes('P3005')) {
-            await handleP3005Baseline();
-          } 
-          // P3015 hatası: Migration dosyası bulunamadı
-          else if (deployErrorOutput.includes('p3015') ||
-                   deployErrorOutput.includes('could not find the migration file') ||
-                   deployErrorOutput.includes('migration.sql') ||
-                   stdout.includes('P3015') ||
-                   stderr.includes('P3015') ||
-                   message.includes('P3015')) {
-            await handleP3015Error();
-          } else {
-            console.error('❌ Migration deploy başarısız!');
-            if (stdout) console.error('📤 stdout:', stdout.substring(0, 500));
-            if (stderr) console.error('📤 stderr:', stderr.substring(0, 500));
-            if (message) console.error('📤 message:', message.substring(0, 500));
-            console.error('💡 Manuel olarak migration uygulayın: npx prisma migrate deploy');
-            process.exit(1);
-          }
-        }
-      } else if (errorOutput.includes('database schema is not in sync') ||
-                 errorOutput.includes('drift detected')) {
-        console.log('\n⚠️  Database schema ile Prisma schema uyumsuz!');
-        console.log('💡 Schema\'yı database\'e uyguluyoruz...\n');
-        
-        try {
-          execSync('npx prisma db push --accept-data-loss', {
-            stdio: 'inherit',
-            cwd: process.cwd(),
-          });
-          console.log('✅ Schema database\'e uygulandı\n');
-        } catch (pushError) {
-          console.error('❌ Schema push başarısız!');
-          console.error('💡 Manuel olarak migration oluşturun: npx prisma migrate dev');
-          process.exit(1);
-        }
-      } else {
-        // Migration history yoksa veya başka bir hata varsa, migrate deploy dene
-        console.log('\n⚠️  Migration history kontrolü başarısız, migration\'ları uygulamayı deniyoruz...\n');
-        try {
-          // Önce pipe ile çalıştırıp hatayı yakalayalım
-          execSync('npx prisma migrate deploy', {
-            stdio: 'pipe',
-            cwd: process.cwd(),
-            encoding: 'utf-8',
-          });
-          console.log('✅ Migration\'lar uygulandı\n');
-        } catch (deployError: any) {
-          // Hata mesajını tüm kaynaklardan topla
-          const stdout = deployError.stdout?.toString() || '';
-          const stderr = deployError.stderr?.toString() || '';
-          const message = deployError.message?.toString() || '';
-          const deployErrorOutput = (stdout + stderr + message).toLowerCase();
-          
-          console.log('🔍 Hata detayları kontrol ediliyor...\n');
-          
-          // P3005 hatası: Database schema boş değil, baseline gerekli
-          if (deployErrorOutput.includes('p3005') || 
-              deployErrorOutput.includes('database schema is not empty') ||
-              deployErrorOutput.includes('baseline') ||
-              stdout.includes('P3005') ||
-              stderr.includes('P3005') ||
-              message.includes('P3005')) {
-            await handleP3005Baseline();
-          } 
-          // P3015 hatası: Migration dosyası bulunamadı
-          else if (deployErrorOutput.includes('p3015') ||
-                   deployErrorOutput.includes('could not find the migration file') ||
-                   deployErrorOutput.includes('migration.sql') ||
-                   stdout.includes('P3015') ||
-                   stderr.includes('P3015') ||
-                   message.includes('P3015')) {
-            await handleP3015Error();
-          } else {
-            console.error('❌ Migration deploy başarısız!');
-            if (stdout) console.error('📤 stdout:', stdout.substring(0, 500));
-            if (stderr) console.error('📤 stderr:', stderr.substring(0, 500));
-            if (message) console.error('📤 message:', message.substring(0, 500));
-            console.error('💡 Manuel olarak migration uygulayın: npx prisma migrate deploy');
-            process.exit(1);
-          }
-        }
-      }
-    }
-    
-    // Schema ile database'in gerçekten senkronize olup olmadığını kontrol et
-    // Migration'lar uygulanmış görünse bile, schema ile database arasında uyumsuzluk olabilir
-    // (Örneğin: migration'lar uygulanmış ama bazı kolonlar eksik olabilir)
-    console.log('🔄 Schema ve database senkronizasyonu kontrol ediliyor...\n');
-    try {
-      // prisma db push ile schema uyumsuzluğunu kontrol et ve gerekirse düzelt
-      // --skip-generate: generate aşağıda ayrıca yapılacak
-      const pushOutput = execSync('npx prisma db push --accept-data-loss --skip-generate 2>&1', {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-      });
-
-      // Eğer database zaten senkronize ise
-      if (pushOutput.includes('Your database is now in sync') || pushOutput.includes('already in sync')) {
-        console.log('✅ Schema ve database zaten senkronize\n');
-      } else {
-        console.log('⚠️  Schema ile database arasında uyumsuzluk bulundu ve düzeltildi\n');
-        console.log('📋 Yapılan değişiklikler:');
-        const lines = pushOutput.split('\n');
-        lines.forEach(line => {
-          if (line.includes('CREATE') || line.includes('ALTER') || line.includes('ADD') || line.includes('DROP')) {
-            console.log(`   ${line.trim()}`);
-          }
-        });
-        console.log('');
-      }
-    } catch (error: any) {
-      // db push hata verirse, yine de devam et (migration'lar uygulanmış olabilir)
-      const errorOutput = error.stdout?.toString() || error.stderr?.toString() || '';
-      if (errorOutput.includes('Your database is now in sync') || errorOutput.includes('already in sync')) {
-        console.log('✅ Schema ve database senkronize\n');
-      } else {
-        console.warn('⚠️  Schema senkronizasyon kontrolü başarısız, devam ediliyor...');
-        console.warn('   Hata:', errorOutput.substring(0, 300));
-        console.warn('   💡 Eğer seed sırasında hata alırsanız, manuel olarak çalıştırın: npx prisma db push --accept-data-loss\n');
-      }
-    }
-
-    // Prisma client generate (stdio: 'pipe' ile çalıştır - inherit file descriptor hanging sorununu önler)
-    console.log('🔧 Prisma client generate ediliyor...\n');
-    try {
-      const generateOutput = execSync('npx prisma generate 2>&1', {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-        timeout: 120000, // 2 dakika timeout
-      });
-      // Sadece önemli satırları göster
-      const genLines = generateOutput.split('\n');
-      for (const line of genLines) {
-        if (line.includes('Generated') || line.includes('✔')) {
-          console.log(`  ${line.trim()}`);
-        }
-      }
-      console.log('✅ Prisma client güncel\n');
-    } catch (error: any) {
-      const errorOutput = error.stdout?.toString() || error.stderr?.toString() || '';
-      // Generate başarılı olmuş ama exit code 0 olmamış olabilir
-      if (errorOutput.includes('Generated') || errorOutput.includes('✔')) {
-        console.log('✅ Prisma client generate edildi\n');
-      } else {
-        console.error('❌ Prisma client generate başarısız!');
-        console.error('   Hata:', errorOutput.substring(0, 300));
-        process.exit(1);
-      }
-    }
-    
-    // ADIM 1: MinIO görsellerini temizle (ÖNCE)
-    if (clearAll) {
-      console.log('\n🧹 MinIO TÜM görselleri temizleniyor (taxonomy dahil)...\n');
-      await clearAllMedia();
-    } else {
-      console.log('\n🧹 MinIO kullanıcı/içerik görselleri temizleniyor (taxonomy korunuyor)...\n');
-      await clearUserContentMedia();
-    }
-    
-    // ADIM 2: Seed verilerini temizle (DB) - doğrudan fonksiyon çağrısı (child process OOM sorununu önler)
-    if (clearAll) {
-      console.log('\n🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');
-      await clearAllSeedData(true);
-    } else {
-      console.log('\n🧹 Kullanıcı/içerik verileri temizleniyor (taxonomy korunuyor)...\n');
-      await clearUserContentData();
-    }
-    
-    // ADIM 3: Seed görsellerini MinIO'ya yükle (Temizlemeden SONRA)
-    console.log('\n📤 Seed görselleri MinIO\'ya yükleniyor (doğru UGC yapısı ile)...\n');
-    try {
-      const uploadMediaPath = path.join(process.cwd(), 'scripts', 'fix-minio-structure.ts');
-      execSync(`npx ts-node --transpile-only ${uploadMediaPath}`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Seed görselleri yüklendi (UGC yapısı: profile-pictures/{userId}/)\n');
-    } catch (error) {
-      console.warn('⚠️  Seed görselleri yüklenemedi, devam ediliyor...');
-      console.warn('   Hata:', error instanceof Error ? error.message : String(error));
-      console.warn('   💡 Manuel olarak çalıştırabilirsiniz: npx ts-node scripts/fix-minio-structure.ts\n');
-      // Media upload hatası seed işlemini durdurmaz
-    }
-    
-    // ADIM 3.1: Event Badge ve Marketplace Badge görselleri yükle
-    console.log('\n🎨 Event & Marketplace Badge görselleri hazırlanıyor...\n');
-    try {
-      const uploadBadgeImagesPath = path.join(process.cwd(), 'scripts', 'upload-all-badge-images.ts');
-      execSync(`npx ts-node --transpile-only ${uploadBadgeImagesPath}`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Badge görselleri MinIO\'ya yüklendi\n');
-    } catch (error) {
-      console.warn('⚠️  Badge görselleri yüklenemedi, seed devam edecek...');
-      console.warn('   Hata:', error instanceof Error ? error.message : String(error));
-      console.warn('   💡 Manuel olarak çalıştırabilirsiniz: npx ts-node scripts/upload-all-badge-images.ts\n');
-      // Badge upload hatası seed işlemini durdurmaz
-    }
-    
-    // ADIM 4: Seed.ts çalıştır
-    console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
-    
-    // seed.ts'yi çalıştır (SKIP_SEED_MEDIA_UPLOAD=true ile görselleri tekrar yüklemesin)
-    const seedPath = path.join(process.cwd(), 'prisma', 'seed.ts');
-    execSync(`npx ts-node --transpile-only ${seedPath}`, {
-      stdio: 'inherit',
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        SKIP_SEED_MEDIA_UPLOAD: 'true', // seed.ts içinde görselleri tekrar yüklemesin
-      },
-    });
-    
-    console.log('\n✅ Seed işlemi tamamlandı!');
-    
-    // Feed Distribution Worker'ı çalıştır
-    console.log('\n🔄 Feed distribution tetikleniyor...\n');
-    try {
-      const feedDistributionPath = path.join(process.cwd(), 'scripts', 'trigger-feed-distribution.ts');
-      execSync(`npx ts-node --transpile-only ${feedDistributionPath}`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Feed distribution job\'ları oluşturuldu!');
-      console.log('💡 Worker aktif olduğunda bu job\'lar otomatik işlenecek.');
-      console.log('   Backend service restart ederseniz worker hemen başlar.\n');
-    } catch (error) {
-      console.warn('⚠️  Feed distribution tetiklenemedi, manuel çalıştırabilirsiniz:');
-      console.warn('   npx ts-node scripts/trigger-feed-distribution.ts');
-      console.warn('   Hata:', error instanceof Error ? error.message : String(error), '\n');
-      // Feed distribution hatası seed işlemini durdurmaz
-    }
-  } catch (error) {
-    console.error('❌ Seed işlemi başarısız:', error);
-    process.exit(1);
-  }
-}
-
-// CLI argümanlarını kontrol et
 const args = process.argv.slice(2);
 const clearAll = args.includes('--all') || args.includes('-a');
 
-clearAndSeed(clearAll)
-  .catch((error) => {
-    console.error('❌ Seed işlemi beklenmeyen hata ile başarısız:', error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
-
+// Dynamic import ile prisma client — sadece disconnect için gerekli
+import('../prisma/seed/types').then(({ prisma }) => {
+  clearAndSeed(clearAll)
+    .catch((error) => {
+      console.error('❌ Seed işlemi başarısız:', error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+});
