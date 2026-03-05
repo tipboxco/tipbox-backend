@@ -49,163 +49,156 @@ export async function clearAllSeedData(forceClearAll: boolean = false): Promise<
 
 /**
  * Tüm verileri sil (eski davranış)
+ *
+ * Tüm delete operasyonları tek bir $transaction içinde çalışır.
+ * SET LOCAL session_replication_role = replica → FK constraint'leri devre dışı bırakır,
+ * transaction bitince otomatik olarak 'origin'e döner (aynı bağlantı garantisi).
  */
 async function clearAllData(): Promise<void> {
   // Progress bar oluştur (toplam 15 ana grup)
   const totalSteps = 15
   const progress = new ProgressBar(totalSteps, 50)
 
-  try {
-    // Foreign key constraint'lerini geçici olarak devre dışı bırak
-    await prisma.$executeRawUnsafe('SET session_replication_role = replica;');
-    
-    // Foreign key constraint'leri nedeniyle ters sırada silme
-    // En son oluşturulan verilerden başla
-    
-    // Feed ve trending verileri
-    progress.increment('Feed ve trending verileri temizleniyor...')
-    await prisma.feed.deleteMany({});
-    await prisma.trendingPost.deleteMany({});
-    await prisma.feedHighlight.deleteMany({});
+  await prisma.$transaction(
+    async (tx) => {
+      // SET LOCAL: bu transaction'a özgü, bitince otomatik resetlenir
+      // Tüm tx sorguları aynı bağlantıyı kullanır → FK bypass güvenli
+      await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica;');
 
-    // Content verileri
-    progress.increment('Content verileri temizleniyor...')
-    await prisma.contentShare.deleteMany({});
-    await prisma.contentFavorite.deleteMany({});
-    await prisma.contentLike.deleteMany({});
-    await prisma.contentCommentVote.deleteMany({});
-    await prisma.contentComment.deleteMany({});
-    await prisma.contentPostView.deleteMany({});
-    await prisma.contentRating.deleteMany({});
-    await prisma.contentPostTag.deleteMany({});
-    await prisma.topCommunityChoice.deleteMany({});
-    await prisma.postMedia.deleteMany({});
-    await prisma.postComparisonScore.deleteMany({});
-    // PostComparison Product'a referans veriyor - önce sil
-    await prisma.postComparison.deleteMany({});
-    await prisma.postTag.deleteMany({});
-    await prisma.postTip.deleteMany({});
-    await prisma.postQuestion.deleteMany({});
-    await prisma.contentPost.deleteMany({});
-    await prisma.contentCollection.deleteMany({});
+      // Feed ve trending verileri
+      progress.increment('Feed ve trending verileri temizleniyor...')
+      await tx.feed.deleteMany({});
+      await tx.trendingPost.deleteMany({});
+      await tx.feedHighlight.deleteMany({});
 
-    // Marketplace verileri
-    progress.increment('Marketplace verileri temizleniyor...')
-    await prisma.marketplaceBanner.deleteMany({});
-    await prisma.nFTMarketListing.deleteMany({});
-    await prisma.nFTTransaction.deleteMany({});
-    await prisma.nFTClaim.deleteMany({});
-    await prisma.nFTAttribute.deleteMany({});
-    await prisma.nFT.deleteMany({});
+      // Content verileri
+      progress.increment('Content verileri temizleniyor...')
+      await tx.contentShare.deleteMany({});
+      await tx.contentFavorite.deleteMany({});
+      await tx.contentLike.deleteMany({});
+      await tx.contentCommentVote.deleteMany({});
+      await tx.contentComment.deleteMany({});
+      await tx.contentPostView.deleteMany({});
+      await tx.contentRating.deleteMany({});
+      await tx.contentPostTag.deleteMany({});
+      await tx.topCommunityChoice.deleteMany({});
+      await tx.postMedia.deleteMany({});
+      await tx.postComparisonScore.deleteMany({});
+      await tx.postComparison.deleteMany({});
+      await tx.postTag.deleteMany({});
+      await tx.postTip.deleteMany({});
+      await tx.postQuestion.deleteMany({});
+      await tx.contentPost.deleteMany({});
+      await tx.contentCollection.deleteMany({});
 
-    // Explore verileri
-    await prisma.eventStats.deleteMany({});
-    await prisma.eventReward.deleteMany({});
-    // Scenario tables removed - no longer exist
-    // await prisma.choiceComment.deleteMany({});
-    // await prisma.scenarioChoice.deleteMany({});
-    // await prisma.eventScenario.deleteMany({});
-    await prisma.event.deleteMany({});
-    await prisma.bridgeReward.deleteMany({});
-    await prisma.bridgeUserStats.deleteMany({});
-    await prisma.bridgeLeaderboard.deleteMany({});
-    await prisma.bridgeFollower.deleteMany({});
-    await prisma.bridgePost.deleteMany({});
-    await prisma.brandSurveyAnswer.deleteMany({});
-    await prisma.brandSurvey.deleteMany({});
-    await prisma.brand.deleteMany({});
-    await prisma.brandCategory.deleteMany({});
+      // Marketplace verileri
+      progress.increment('Marketplace verileri temizleniyor...')
+      await tx.marketplaceBanner.deleteMany({});
+      await tx.nFTMarketListing.deleteMany({});
+      await tx.nFTTransaction.deleteMany({});
+      await tx.nFTClaim.deleteMany({});
+      await tx.nFTAttribute.deleteMany({});
+      await tx.nFT.deleteMany({});
 
-    // Inventory verileri
-    progress.increment('Inventory verileri temizleniyor...')
-    await prisma.inventoryMedia.deleteMany({});
-    // productExperience tablosu kaldırıldı
-    await prisma.inventory.deleteMany({});
+      // Explore verileri
+      await tx.eventStats.deleteMany({});
+      await tx.eventReward.deleteMany({});
+      await tx.event.deleteMany({});
+      await tx.bridgeReward.deleteMany({});
+      await tx.bridgeUserStats.deleteMany({});
+      await tx.bridgeLeaderboard.deleteMany({});
+      await tx.bridgeFollower.deleteMany({});
+      await tx.bridgePost.deleteMany({});
+      await tx.brandSurveyAnswer.deleteMany({});
+      await tx.brandSurvey.deleteMany({});
+      await tx.brand.deleteMany({});
+      await tx.brandCategory.deleteMany({});
 
-    // User related verileri
-    await prisma.userCollection.deleteMany({});
-    await prisma.userTitle.deleteMany({});
-    await prisma.userBadge.deleteMany({});
-    await prisma.userAchievement.deleteMany({});
-    await prisma.userAvatar.deleteMany({});
-    await prisma.userMute.deleteMany({});
-    await prisma.userBlock.deleteMany({});
-    await prisma.trustRelation.deleteMany({});
-    await prisma.userTrustScore.deleteMany({});
-    await prisma.userRole.deleteMany({});
-    await prisma.userFeedPreferences.deleteMany({});
-    await prisma.userSettings.deleteMany({});
-    await prisma.profile.deleteMany({});
+      // Inventory verileri
+      progress.increment('Inventory verileri temizleniyor...')
+      await tx.inventoryMedia.deleteMany({});
+      await tx.inventory.deleteMany({});
 
-    // Expert verileri
-    progress.increment('Expert verileri temizleniyor...')
-    await prisma.expertAnswer.deleteMany({});
-    await prisma.expertRequestMedia.deleteMany({});
-    await prisma.expertRequest.deleteMany({});
+      // User related verileri
+      await tx.userCollection.deleteMany({});
+      await tx.userTitle.deleteMany({});
+      await tx.userBadge.deleteMany({});
+      await tx.userAchievement.deleteMany({});
+      await tx.userAvatar.deleteMany({});
+      await tx.userMute.deleteMany({});
+      await tx.userBlock.deleteMany({});
+      await tx.trustRelation.deleteMany({});
+      await tx.userTrustScore.deleteMany({});
+      await tx.userRole.deleteMany({});
+      await tx.userFeedPreferences.deleteMany({});
+      await tx.userSettings.deleteMany({});
+      await tx.profile.deleteMany({});
 
-    // Messaging verileri
-    await prisma.dMFeedback.deleteMany({});
-    await prisma.dMSupportSession.deleteMany({});
-    await prisma.supportRequestReport.deleteMany({});
-    await prisma.dMMessage.deleteMany({});
-    await prisma.dMRequest.deleteMany({});
-    await prisma.dMThread.deleteMany({});
+      // Expert verileri
+      progress.increment('Expert verileri temizleniyor...')
+      await tx.expertAnswer.deleteMany({});
+      await tx.expertRequestMedia.deleteMany({});
+      await tx.expertRequest.deleteMany({});
 
-    // Gamification verileri
-    progress.increment('Gamification verileri temizleniyor...')
-    await prisma.rewardClaim.deleteMany({});
-    await prisma.achievementGoal.deleteMany({});
-    await prisma.achievementChain.deleteMany({});
-    // EventBadge join table'ı badge'lerden önce sil (foreign key)
-    await prisma.eventBadge.deleteMany({});
-    await prisma.badge.deleteMany({});
-    await prisma.badgeCategory.deleteMany({});
+      // Messaging verileri
+      await tx.dMFeedback.deleteMany({});
+      await tx.dMSupportSession.deleteMany({});
+      await tx.supportRequestReport.deleteMany({});
+      await tx.dMMessage.deleteMany({});
+      await tx.dMRequest.deleteMany({});
+      await tx.dMThread.deleteMany({});
 
-    // Crypto verileri
-    await prisma.tipsTokenTransfer.deleteMany({});
-    await prisma.lootbox.deleteMany({});
-    await prisma.wallet.deleteMany({});
+      // Gamification verileri
+      progress.increment('Gamification verileri temizleniyor...')
+      await tx.rewardClaim.deleteMany({});
+      await tx.achievementGoal.deleteMany({});
+      await tx.achievementChain.deleteMany({});
+      await tx.eventBadge.deleteMany({});
+      await tx.badge.deleteMany({});
+      await tx.badgeCategory.deleteMany({});
 
-    // Product verileri
-    progress.increment('Product verileri temizleniyor...')
-    await prisma.productSuggestion.deleteMany({});
-    await prisma.product.deleteMany({});
-    await prisma.productGroup.deleteMany({});
+      // Crypto verileri
+      await tx.tipsTokenTransfer.deleteMany({});
+      await tx.lootbox.deleteMany({});
+      await tx.wallet.deleteMany({});
 
-    // Taxonomy verileri
-    await prisma.subCategory.deleteMany({});
-    await prisma.mainCategory.deleteMany({});
-    await prisma.comparisonMetric.deleteMany({});
+      // Product verileri
+      progress.increment('Product verileri temizleniyor...')
+      await tx.productSuggestion.deleteMany({});
+      await tx.product.deleteMany({});
+      await tx.productGroup.deleteMany({});
 
-    // Admin verileri
-    progress.increment('Admin verileri temizleniyor...')
-    await prisma.manualReviewFlag.deleteMany({});
-    await prisma.moderationAction.deleteMany({});
-    await prisma.adminLog.deleteMany({});
-    
-    // Taxonomy-only verileri (en sonda sil çünkü diğer veriler bunlara referans verebilir)
-    await prisma.brandCategory.deleteMany({});
-    await prisma.userTheme.deleteMany({});
+      // Taxonomy verileri
+      await tx.subCategory.deleteMany({});
+      await tx.mainCategory.deleteMany({});
+      await tx.comparisonMetric.deleteMany({});
 
-    // Auth verileri
-    progress.increment('Auth verileri temizleniyor...')
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.emailVerificationCode.deleteMany({});
-    await prisma.loginAttempt.deleteMany({});
+      // Admin verileri
+      progress.increment('Admin verileri temizleniyor...')
+      await tx.manualReviewFlag.deleteMany({});
+      await tx.moderationAction.deleteMany({});
+      await tx.adminLog.deleteMany({});
 
-    // User'ları sil (en son)
-    progress.increment('Kullanıcılar temizleniyor...')
-    await prisma.user.deleteMany({});
+      await tx.userTheme.deleteMany({});
 
-    progress.complete('Tüm seed verileri temizlendi!')
-    console.log('\n✅ Tüm seed verileri temizlendi');
-  } catch (error) {
-    console.error('❌ Seed verileri temizlenirken hata oluştu:', error);
-    throw error;
-  } finally {
-    // Foreign key constraint'lerini tekrar aktif et
-    await prisma.$executeRawUnsafe('SET session_replication_role = origin;');
-  }
+      // Auth verileri
+      progress.increment('Auth verileri temizleniyor...')
+      await tx.passwordResetToken.deleteMany({});
+      await tx.emailVerificationCode.deleteMany({});
+      await tx.loginAttempt.deleteMany({});
+
+      // User'ları sil (en son)
+      progress.increment('Kullanıcılar temizleniyor...')
+      await tx.user.deleteMany({});
+
+      progress.complete('Tüm seed verileri temizlendi!')
+      console.log('\n✅ Tüm seed verileri temizlendi');
+    },
+    {
+      // Büyük veri setleri için yeterli süre (5 dakika)
+      timeout: 300_000,
+    },
+  );
 }
 
 /**
