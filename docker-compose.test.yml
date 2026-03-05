@@ -5,7 +5,7 @@
 name: tipbox-test
 # Toplam bellek dağılımı:
 #   Backend sınırsız | Catalog sınırsız | PostgreSQL 384MB | Redis 256MB
-#   Admin 512MB | prisma-studio sınırsız | pgadmin 512MB | MinIO 192MB | Nginx 64MB
+#   Admin 512MB | prisma-studio sınırsız | pgadmin 512MB | PostgreSQL sınırsız | MinIO 192MB | Nginx 64MB
 services:
   postgres:
     image: postgres:15-alpine
@@ -21,7 +21,7 @@ services:
       - postgres_test_data:/var/lib/postgresql/data
     networks:
       - tipbox_network
-    # PostgreSQL tuning — 4GB sunucu, ~512MB PG'ye ayrılmış
+    # PostgreSQL tuning
     command: >
       postgres
         -c shared_buffers=128MB
@@ -32,12 +32,6 @@ services:
         -c checkpoint_completion_target=0.9
         -c wal_buffers=4MB
         -c random_page_cost=1.1
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-        reservations:
-          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user} -d ${POSTGRES_DB:-tipbox_test}"]
       interval: 10s
