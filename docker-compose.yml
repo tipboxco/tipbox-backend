@@ -1,8 +1,11 @@
-# Tüm servisler proje kökündeki .env dosyasını kullanır.
-# cp .env.example .env ile oluşturun.
+# Development: Proje kökündeki .env kullanılır.
+# cp .env.example .env ile oluşturup değerlerinizi girin.
 #
-# 4GB RAM sunucu için optimize edilmiş development yapılandırması
+# 4GB RAM sunucu için optimize edilmiş yapılandırma (swap önerilir)
 name: tipbox-dev
+# Toplam bellek dağılımı:
+#   Backend sınırsız | Catalog sınırsız | PostgreSQL 384MB | Redis 256MB
+#   Admin 512MB | prisma-studio sınırsız | pgadmin 512MB | PostgreSQL sınırsız | MinIO 192MB | Nginx 64MB
 services:
   postgres:
     image: postgres:15-alpine
@@ -12,12 +15,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-tipbox_dev}
-    ports:
-      - '5432:5432'
+    expose:
+      - "5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - tipbox_network
+    # PostgreSQL tuning
     command: >
       postgres
         -c shared_buffers=128MB
@@ -28,14 +32,8 @@ services:
         -c checkpoint_completion_target=0.9
         -c wal_buffers=4MB
         -c random_page_cost=1.1
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tipbox_dev}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,14 +53,14 @@ services:
         condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - tipbox_network
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
         reservations:
           memory: 64M
-    networks:
-      - tipbox_network
 
   minio:
     image: minio/minio:latest
@@ -78,14 +76,14 @@ services:
       MINIO_CACHE: "off"
     volumes:
       - minio_data:/data
+    networks:
+      - tipbox_network
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 192M
         reservations:
-          memory: 128M
-    networks:
-      - tipbox_network
+          memory: 64M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -97,25 +95,36 @@ services:
     image: redis:7-alpine
     container_name: tipbox_redis
     restart: always
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
+    networks:
+      - tipbox_network
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 200mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --stop-writes-on-bgsave-error
+      - "no"
     deploy:
       resources:
         limits:
           memory: 256M
         reservations:
           memory: 64M
-    networks:
-      - tipbox_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 20s
 
   backend:
     build:
@@ -123,19 +132,17 @@ services:
       dockerfile: Dockerfile
     container_name: tipbox_backend
     restart: always
-    ports:
-      - "3000:3000"
     env_file:
       - .env
     environment:
       - PORT=${PORT:-3000}
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=768
+      - NODE_OPTIONS=--max-old-space-size=2048
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tipbox_dev}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5174,http://localhost:5175,https://api-test.tipbox.co}
-      - CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5174,http://localhost:5175}
+      - CORS_METHODS=${CORS_METHODS:-GET,POST,PUT,DELETE,OPTIONS,PATCH}
       - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
@@ -144,20 +151,20 @@ services:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
       - BASE_URL=${BASE_URL:-http://localhost:3000}
-      - SEED_MEDIA_BASE_URL=http://localhost:9000
-      - SEED_API_TOKEN=deneme
-      - GEMINI_MODEL=gemini-2.5-pro
-      - GEMINI_MAX_RETRIES=3
-      - GEMINI_TIMEOUT=30000
-      - EMAIL_FROM_NAME=Tipbox
-      - GOOGLE_APPLICATION_CREDENTIALS=./tipboxbackend-3e2c3d3c0b31.json
-      - THIRDWEB_WALLET_ID=tipbox-embedded-wallet
-      - THIRDWEB_DEFAULT_CHAIN_ID=11155111
-      - THIRDWEB_SPONSOR_GAS=true
-      - THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=300
-      - THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true
+      - SEED_MEDIA_BASE_URL=${SEED_MEDIA_BASE_URL:-http://localhost:9000}
+      - SEED_API_TOKEN=${SEED_API_TOKEN:-deneme}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-pro}
+      - GEMINI_MAX_RETRIES=${GEMINI_MAX_RETRIES:-3}
+      - GEMINI_TIMEOUT=${GEMINI_TIMEOUT:-30000}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Tipbox}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-./tipboxbackend-3e2c3d3c0b31.json}
+      - THIRDWEB_WALLET_ID=${THIRDWEB_WALLET_ID:-tipbox-embedded-wallet}
+      - THIRDWEB_DEFAULT_CHAIN_ID=${THIRDWEB_DEFAULT_CHAIN_ID:-11155111}
+      - THIRDWEB_SPONSOR_GAS=${THIRDWEB_SPONSOR_GAS:-true}
+      - THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=${THIRDWEB_WEBHOOK_EXPIRATION_SECONDS:-300}
+      - THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=${THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV:-true}
       - THIRDWEB_WATCHED_CONTRACTS=${THIRDWEB_WATCHED_CONTRACTS:-0xa6352D525BeBFd87F3De30DB7D42D08f6Ca015C6}
-      - TIPS_TOKEN_DECIMALS=18
+      - TIPS_TOKEN_DECIMALS=${TIPS_TOKEN_DECIMALS:-18}
     depends_on:
       postgres:
         condition: service_healthy
@@ -165,26 +172,23 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    ports:
+      - "3000:3000"
     volumes:
       - ./backend:/app
-      - backend_node_modules_v2:/app/node_modules
+      - backend_node_modules:/app/node_modules
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
+      - ./logs:/app/logs
     working_dir: /app
     command: pnpm run dev
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 256M
     networks:
       - tipbox_network
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 8
+      start_period: 300s
 
   nginx:
     image: nginx:alpine
@@ -192,25 +196,36 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-ssl-init.sh:/docker-entrypoint.d/40-ssl-init.sh
       - ./logs/nginx:/var/log/nginx
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        chmod +x /docker-entrypoint.d/40-ssl-init.sh 2>/dev/null
+        /docker-entrypoint.sh nginx -g "daemon off;"
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
+    networks:
+      - tipbox_network
     deploy:
       resources:
         limits:
           memory: 64M
         reservations:
           memory: 16M
-    networks:
-      - tipbox_network
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   prisma-studio:
     image: node:23-alpine
@@ -230,16 +245,40 @@ services:
     command: >
       sh -c "
         if [ ! -d node_modules/prisma ]; then
-          npm install prisma @prisma/client --no-fund --no-audit;
+          npm install prisma@6 @prisma/client@6 --no-fund --no-audit;
         fi &&
-        npx prisma studio --port 5555 --hostname 0.0.0.0 --browser none
+        BROWSER=none npx prisma studio --port 5555 --hostname 0.0.0.0
       "
+    networks:
+      - tipbox_network
+
+  admin-panel:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    container_name: tipbox_admin_panel
+    restart: always
+    ports:
+      - "5174:5174"
+    env_file:
+      - .env
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
+      - VITE_BASE_PATH=/dashboard
+      - NODE_OPTIONS=--max-old-space-size=384
+    depends_on:
+      - backend
+    volumes:
+      - ./admin-panel:/app
+      - admin_panel_node_modules:/app/node_modules
+    working_dir: /app
+    command: pnpm run dev
     deploy:
       resources:
         limits:
-          memory: 320M
+          memory: 512M
         reservations:
-          memory: 64M
+          memory: 128M
     networks:
       - tipbox_network
 
@@ -263,34 +302,29 @@ services:
     environment:
       - PORT=5175
       - NODE_ENV=development
-      - NODE_OPTIONS=--max-old-space-size=1024
+      - NODE_OPTIONS=--max-old-space-size=1600
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
       - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
-      - MEDUSA_ADMIN_PATH=${MEDUSA_ADMIN_PATH:-/catalog/app}
-      - MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-https://api-test.tipbox.co/catalog}
-      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000,https://api-test.tipbox.co}
-      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5175,https://api-test.tipbox.co}
-      - AUTH_CORS=${AUTH_CORS:-http://localhost:5175,http://localhost:8000,https://api-test.tipbox.co}
+      - MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-http://localhost/catalog}
+      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000}
+      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5175}
+      - AUTH_CORS=${AUTH_CORS:-http://localhost:5175,http://localhost:8000}
       - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
-      - S3_ENDPOINT_EXTERNAL=http://localhost:9000
+      - S3_ENDPOINT_EXTERNAL=${S3_ENDPOINT_EXTERNAL:-http://localhost:9000}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-tipbox-media}
       - S3_REGION=${S3_REGION:-eu-central-1}
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
+      - MEDUSA_ADMIN_PATH=${MEDUSA_ADMIN_PATH:-/catalog/app}
+      - MEDUSA_ADMIN_BACKEND_URL=${MEDUSA_ADMIN_BACKEND_URL:-http://localhost/catalog}
     volumes:
       - ./catalog-service:/server
       - catalog_service_node_modules:/server/node_modules
     working_dir: /server
-    deploy:
-      resources:
-        limits:
-          memory: 1500M
-        reservations:
-          memory: 512M
     networks:
       - tipbox_network
     healthcheck:
@@ -300,42 +334,14 @@ services:
       retries: 3
       start_period: 60s
 
-  admin-panel:
-    build:
-      context: ./admin-panel
-      dockerfile: Dockerfile
-    container_name: tipbox_admin_panel
-    restart: always
-    ports:
-      - "5174:5174"
-    env_file:
-      - .env
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
-    depends_on:
-      - backend
-    volumes:
-      - ./admin-panel:/app
-      - admin_panel_node_modules:/app/node_modules
-    working_dir: /app
-    command: pnpm run dev
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-        reservations:
-          memory: 128M
-    networks:
-      - tipbox_network
-
 volumes:
-  pgdata:
+  postgres_data:
   pgadmin_data:
   minio_data:
   redis_data:
-  backend_node_modules_v2:
-  catalog_service_node_modules:
+  backend_node_modules:
   admin_panel_node_modules:
+  catalog_service_node_modules:
   prisma_studio_node_modules:
 
 networks:
