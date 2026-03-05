@@ -168,5 +168,5 @@ export function runSingleSeed(
     return Promise.resolve({ exitCode: 1 });
   }
   const seedFilePath = path.join(seed.sourceDir, seed.relativePath);
-  return runProcess(cwd, 'npx', ['ts-node', seedFilePath], onLog);
+  return runProcess(cwd, 'npx', ['ts-node', '--transpile-only', seedFilePath], onLog);
 }

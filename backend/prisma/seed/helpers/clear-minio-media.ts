@@ -88,7 +88,7 @@ export async function clearAllMedia(): Promise<void> {
     } else {
       console.log('ℹ️  Bucket zaten boş\n');
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`❌ MinIO temizleme hatası: ${errorMsg}`);
     throw error;

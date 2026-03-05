@@ -95,11 +95,6 @@ async function clearAllData(): Promise<void> {
 }
 
 /**
- * Belirli bir timestamp'ten önceki verileri sil
- * NOT: Taxonomy verileri (categories, badges, themes) ve products silinmez çünkü bunlar test verilerinden bağımsızdır
- * ve test verileri silindiğinde de korunması gerekir.
- */
-/**
  * Belirli seed kullanıcılarının verilerini sil (timestamp bazlı).
  *
  * Tek bir $transaction içinde çalışır:
