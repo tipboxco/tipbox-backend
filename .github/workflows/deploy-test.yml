@@ -145,17 +145,7 @@ jobs:
           db_user: tipbox_user
           db_name: tipbox_test
 
-      # ── 3. Stop (backup sonrası eski container'ları durdur) ──
-      - name: Stop running services
-        if: steps.check-secrets.outputs.available == 'true'
-        uses: ./.github/actions/execute-remote-stage
-        with:
-          ssh_host: hetzner-deploy
-          stage: stop
-          project_dir: /opt/tipbox-backend
-          compose_file: docker-compose.test.yml
-
-      # ── 4. Build (sadece değişen servisler) ──
+      # ── 3. Build (eski container'lar hâlâ ayakta, downtime yok) ──
       - name: Build images
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -167,9 +157,19 @@ jobs:
           force_rebuild: ${{ github.event.inputs.force_rebuild == 'true' && 'true' || 'false' }}
           changed_services: ${{ needs.detect-changes.outputs.changed_services }}
 
+      # ── 4. Stop (build bitti, şimdi kısa süreliğine durdur) ──
+      - name: Stop running services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: stop
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
       # ── 5. Start all services ──
-      # docker compose up -d: depends_on: service_healthy ile postgres/redis/minio önce başlar,
-      # sonra backend container başlar. Entrypoint: node_modules, prisma generate, migrate, pnpm dev.
+      # Yeni image'lar hazır, stop sonrası anında başlar → downtime minimum.
+      # depends_on: service_healthy ile postgres/redis/minio önce başlar, sonra backend.
       - name: Start all services
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
