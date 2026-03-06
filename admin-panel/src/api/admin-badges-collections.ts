@@ -144,6 +144,26 @@ export async function fetchActionTypes(mainAction?: string) {
   return get<AdminActionTypeListItem[]>(`/admin/system/action-types`, query);
 }
 
+export interface AdminCollectionGoalListItem {
+  id: string;
+  title: string;
+  requirement: string;
+  pointsRequired: number;
+  difficulty: string;
+  keywords: string[];
+  allowedPostTypes: string[];
+  isPassive: boolean;
+  mainAction: string;
+  createdAt: string;
+  actionType: { id: string; code: string; label: string; mainAction: string };
+  rewardBadge: { id: string; name: string; imageUrl: string | null; rarity: string } | null;
+  usersCount: number;
+}
+
+export async function fetchCollectionGoals(collectionId: string) {
+  return get<AdminCollectionGoalListItem[]>(`${prefix}/collections/${collectionId}/goals`);
+}
+
 export async function createCollectionGoal(
   collectionId: string,
   body: {
@@ -153,9 +173,32 @@ export async function createCollectionGoal(
     title?: string;
     requirement?: string;
     difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+    keywords?: string[];
+    allowedPostTypes?: string[];
+    isPassive?: boolean;
   }
 ) {
   return post<{ id: string }>(`${prefix}/collections/${collectionId}/goals`, body);
+}
+
+export async function updateCollectionGoal(
+  collectionId: string,
+  goalId: string,
+  body: {
+    title?: string;
+    requirement?: string;
+    pointsRequired?: number;
+    difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+    keywords?: string[];
+    allowedPostTypes?: string[];
+    isPassive?: boolean;
+  }
+) {
+  return patch<{ id: string }>(`${prefix}/collections/${collectionId}/goals/${goalId}`, body);
+}
+
+export async function deleteCollectionGoal(collectionId: string, goalId: string) {
+  return del<{ message: string }>(`${prefix}/collections/${collectionId}/goals/${goalId}`);
 }
 
 /* ========== Badges ========== */

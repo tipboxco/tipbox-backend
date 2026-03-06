@@ -1262,6 +1262,34 @@ Her istek için ayrı bir İÇERİK bloğu oluştur. Toplam ${requests.length} a
       }));
     }
   }
+
+  /**
+   * Generate raw text content from a prompt.
+   * Lightweight method for simple AI tasks like keyword matching.
+   */
+  async generateRawContent(prompt: string): Promise<string> {
+    await this.checkRateLimit();
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`timeout: AI request timed out after ${this.config.timeout}ms`));
+      }, this.config.timeout);
+    });
+
+    const aiPromise = (async () => {
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 100,
+        },
+      });
+      const response = await result.response;
+      return response.text();
+    })();
+
+    return Promise.race([aiPromise, timeoutPromise]);
+  }
 }
 
 

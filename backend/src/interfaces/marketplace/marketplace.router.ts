@@ -42,8 +42,9 @@ const walletRepo = new WalletPrismaRepository();
  *         name: type
  *         schema:
  *           type: string
- *           enum: [BADGE, COSMETIC, LOOTBOX, ALL]
- *         description: NFT tipi filtresi. BADGE, COSMETIC, LOOTBOX veya ALL (tüm tipler). Gönderilmediğinde tüm tipler döner.
+ *           enum: [COSMETIC]
+ *           default: COSMETIC
+ *         description: NFT tipi filtresi. Marketplace'te sadece COSMETIC NFT'ler listelenir.
  *       - in: query
  *         name: rarity
  *         schema:
@@ -94,28 +95,12 @@ const walletRepo = new WalletPrismaRepository();
  *         description: Sunucu hatası
  */
 router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
-  // Type parametresini kontrol et - enum olarak kabul et (BADGE, COSMETIC, LOOTBOX)
-  // ALL veya undefined ise tüm tipleri döndür
-  let type: 'BADGE' | 'COSMETIC' | 'LOOTBOX' | undefined = undefined;
-  const typeParam = req.query.type as string | undefined;
-  
-  if (typeParam && typeParam !== 'ALL') {
-    const validTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'];
-    if (validTypes.includes(typeParam.toUpperCase())) {
-      type = typeParam.toUpperCase() as 'BADGE' | 'COSMETIC' | 'LOOTBOX';
-    } else {
-      return res.status(400).json({
-        success: false, message: `Invalid type parameter. Must be one of: BADGE, COSMETIC, LOOTBOX, or ALL`
-      });
-    }
-  }
-  // typeParam === 'ALL' veya undefined ise type undefined kalır (tüm tipler döner)
-
+  // Marketplace'te sadece COSMETIC NFT'ler listelenir
   const query: ListMarketplaceNFTsQuery = {
     search: req.query.search as string | undefined,
     minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
     maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
-    type,
+    type: 'COSMETIC', // Marketplace sadece kozmetik NFT'ler
     rarity: req.query.rarity as 'COMMON' | 'RARE' | 'EPIC' | undefined,
     limit: req.query.limit ? Number(req.query.limit) : undefined,
     cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
@@ -130,8 +115,8 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
  * @openapi
  * /marketplace/my-nfts:
  *   get:
- *     summary: Kullanıcının sahip olduğu NFT'lerin listesini getirir
- *     description: Authenticated kullanıcının sahip olduğu NFT'leri listeler
+ *     summary: Kullanıcının sahip olduğu kozmetik NFT'lerin listesini getirir
+ *     description: Authenticated kullanıcının sahip olduğu kozmetik NFT'leri listeler (marketplace sadece COSMETIC NFT'ler)
  *     tags: [Marketplace]
  *     security:
  *       - bearerAuth: []
@@ -375,7 +360,7 @@ router.get('/my-listings', authMiddleware, asyncHandler(async (req: Request, res
  * /marketplace/available-nfts:
  *   get:
  *     tags: [Marketplace]
- *     summary: Kullanıcının satışa koyabileceği NFT'leri getirir (listing'i olmayan)
+ *     summary: Kullanıcının satışa koyabileceği kozmetik NFT'leri getirir (listing'i olmayan)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -469,8 +454,8 @@ router.get('/available-nfts', authMiddleware, asyncHandler(async (req: Request, 
  * @openapi
  * /marketplace/listings:
  *   post:
- *     summary: NFT'yi satışa koyar
- *     description: Kullanıcının sahip olduğu NFT'yi belirlenen fiyattan marketplace'e ekler
+ *     summary: Kozmetik NFT'yi satışa koyar
+ *     description: Kullanıcının sahip olduğu kozmetik NFT'yi belirlenen fiyattan marketplace'e ekler. Sadece COSMETIC tipi NFT'ler listelenebilir.
  *     tags: [Marketplace]
  *     security:
  *       - bearerAuth: []
@@ -839,8 +824,8 @@ router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Reque
  * @openapi
  * /marketplace/buy:
  *   post:
- *     summary: NFT'yi satın alır
- *     description: Marketplace'te satışta olan bir NFT'yi satın alır. Buyer'ın bakiyesinden düşüp seller'a transfer eder.
+ *     summary: Kozmetik NFT'yi satın alır
+ *     description: Marketplace'te satışta olan bir kozmetik NFT'yi satın alır. Buyer'ın bakiyesinden düşüp seller'a transfer eder. Sadece COSMETIC tipi NFT'ler satın alınabilir.
  *     tags: [Marketplace]
  *     security:
  *       - bearerAuth: []

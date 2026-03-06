@@ -307,6 +307,7 @@ export default function CreatableFormDrawer({
           <Select
             placeholder={field.placeholder ?? `Select ${field.label.toLowerCase()}`}
             options={field.options}
+            mode={field.mode}
             allowClear
             onChange={(value) => {
               if (onFieldChange) {

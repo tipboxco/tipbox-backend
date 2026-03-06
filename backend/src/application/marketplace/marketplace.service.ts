@@ -157,7 +157,7 @@ export class MarketplaceService {
         minPrice: query.minPrice,
         maxPrice: query.maxPrice,
         search: query.search,
-        nftType: query.type,
+        nftType: NFTType.COSMETIC, // Marketplace sadece kozmetik NFT'ler için
         nftRarity: query.rarity,
         orderBy: query.orderBy,
         limit,
@@ -239,7 +239,10 @@ export class MarketplaceService {
   }> {
     try {
       const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
-      const nfts = await this.nftRepo.findByOwnerId(userId, limit, query.cursor);
+      const allNfts = await this.nftRepo.findByOwnerId(userId, limit + 50, query.cursor);
+      // Marketplace sadece kozmetik NFT'ler için
+      const cosmeticNfts = allNfts.filter(nft => nft.type === NFTType.COSMETIC);
+      const nfts = cosmeticNfts.slice(0, limit + 1);
       const hasMore = nfts.length > limit;
       const paginated = hasMore ? nfts.slice(0, limit) : nfts;
 
@@ -317,6 +320,11 @@ export class MarketplaceService {
 
       if (!nft.belongsToUser(userId)) {
         throw new Error('Bu NFT size ait değil');
+      }
+
+      // Marketplace'te sadece kozmetik NFT'ler listelenebilir
+      if (nft.type !== NFTType.COSMETIC) {
+        throw new ValidationError('Marketplace\'te sadece kozmetik NFT\'ler listelenebilir');
       }
 
       // Zaten aktif bir listing var mı kontrol et
@@ -533,6 +541,11 @@ export class MarketplaceService {
         throw new NotFoundError('NFT bulunamadı');
       }
 
+      // Marketplace'te sadece kozmetik NFT'ler satışa koyulabilir
+      if (nft.type !== NFTType.COSMETIC) {
+        throw new ValidationError('Marketplace\'te sadece kozmetik NFT\'ler satışa koyulabilir');
+      }
+
       // NFT'nin kullanıcıya ait olduğunu kontrol et
       if (!nft.belongsToUser(userId)) {
         throw new ValidationError('Bu NFT size ait değil');
@@ -611,6 +624,11 @@ export class MarketplaceService {
       }
       const nftId = nft.id;
       nftIdForLog = nftId;
+
+      // Marketplace'te sadece kozmetik NFT'ler
+      if (nft.type !== NFTType.COSMETIC) {
+        throw new ValidationError('Marketplace\'te sadece kozmetik NFT\'ler görüntülenebilir');
+      }
 
       // NFT'nin kullanıcıya ait olduğunu kontrol et
       const isOwner = nft.belongsToUser(userId);
@@ -762,6 +780,11 @@ export class MarketplaceService {
         throw new NotFoundError('NFT not found');
       }
 
+      // Marketplace'te sadece kozmetik NFT'ler satın alınabilir
+      if (nft.type !== NFTType.COSMETIC) {
+        throw new ValidationError('Marketplace\'te sadece kozmetik NFT\'ler satın alınabilir');
+      }
+
       // Can't buy your own NFT
       if (listing.listedByUserId === userId) {
         throw new ValidationError('You cannot buy your own NFT');
@@ -847,12 +870,13 @@ export class MarketplaceService {
     try {
       const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
       
-      // Kullanıcının oluşturduğu ACTIVE listing'leri al
+      // Kullanıcının oluşturduğu ACTIVE listing'leri al (sadece COSMETIC NFT'ler)
       const prisma = getPrisma();
       const listings = await prisma.nFTMarketListing.findMany({
         where: {
           listedByUserId: userId,
           status: 'ACTIVE', // Sadece ACTIVE listing'ler
+          nft: { type: NFTType.COSMETIC }, // Marketplace sadece kozmetik NFT'ler
         },
         orderBy: { listedAt: 'desc' },
         take: limit + 1,
@@ -921,8 +945,10 @@ export class MarketplaceService {
     try {
       const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
       
-      // Kullanıcının tüm NFT'lerini al
-      const nfts = await this.nftRepo.findByOwnerId(userId, limit + 1, query.cursor);
+      // Kullanıcının kozmetik NFT'lerini al (marketplace sadece kozmetik)
+      const allNfts = await this.nftRepo.findByOwnerId(userId, limit + 50, query.cursor);
+      const cosmeticNfts = allNfts.filter(nft => nft.type === NFTType.COSMETIC);
+      const nfts = cosmeticNfts.slice(0, limit + 1);
       const hasMore = nfts.length > limit;
       const paginated = hasMore ? nfts.slice(0, limit) : nfts;
 

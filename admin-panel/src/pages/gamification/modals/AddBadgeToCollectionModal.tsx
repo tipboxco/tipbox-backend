@@ -246,6 +246,47 @@ function AddBadgeToCollectionModal({
         { label: 'Hard', value: 'HARD' },
       ],
     },
+    {
+      name: 'keywords',
+      label: 'Keywords (English, AND logic)',
+      type: 'select',
+      mode: 'tags',
+      placeholder: 'Type keyword and press Enter (e.g. battery, performance)',
+      rules: [
+        {
+          validator: async (_rule: unknown, value: unknown) => {
+            if (Array.isArray(value) && value.length > 10) {
+              throw new Error('Maximum 10 keywords allowed');
+            }
+          },
+        },
+      ],
+    },
+    {
+      name: 'allowedPostTypes',
+      label: 'Allowed Post Types (empty = all)',
+      type: 'select',
+      mode: 'multiple',
+      options: [
+        { label: 'Free', value: 'FREE' },
+        { label: 'Tips & Tricks', value: 'TIPS' },
+        { label: 'Compare', value: 'COMPARE' },
+        { label: 'Question', value: 'QUESTION' },
+        { label: 'Experience', value: 'EXPERIENCE' },
+        { label: 'Update', value: 'UPDATE' },
+      ],
+      placeholder: 'Select post types (leave empty for all)',
+    },
+    {
+      name: 'isPassive',
+      label: 'Passive Badge',
+      type: 'select',
+      options: [
+        { label: 'No - Grant badge on completion', value: 'false' },
+        { label: 'Yes - Track progress only, no badge', value: 'true' },
+      ],
+      placeholder: 'Select passive mode',
+    },
   ];
 
   // Helper to safely trim string values
@@ -303,6 +344,15 @@ function AddBadgeToCollectionModal({
         requirement = `Like ${values.pointsRequired} ${values.likeTarget === 'ALL' ? 'items' : `${values.likeTarget}(s)`}`;
       }
 
+      // Prepare keyword and post type data
+      const keywords = Array.isArray(values.keywords)
+        ? (values.keywords as string[]).filter((k) => k.trim().length > 0)
+        : [];
+      const allowedPostTypes = Array.isArray(values.allowedPostTypes)
+        ? (values.allowedPostTypes as string[])
+        : [];
+      const isPassive = values.isPassive === 'true' || values.isPassive === true;
+
       // Create collection goal
       await createCollectionGoal(collectionId, {
         actionTypeId: values.actionTypeId as string,
@@ -311,6 +361,9 @@ function AddBadgeToCollectionModal({
         title: (values.name as string).trim(),
         requirement,
         difficulty: (values.difficulty as 'EASY' | 'MEDIUM' | 'HARD') || 'MEDIUM',
+        ...(keywords.length > 0 && { keywords }),
+        ...(allowedPostTypes.length > 0 && { allowedPostTypes }),
+        ...(isPassive && { isPassive }),
       });
 
       antdMessage.success('Badge added to collection successfully');
@@ -339,6 +392,9 @@ function AddBadgeToCollectionModal({
         rarity: 'COMMON',
         difficulty: 'MEDIUM',
         pointsRequired: 1,
+        keywords: [],
+        allowedPostTypes: [],
+        isPassive: 'false',
       }}
       width={600}
       formRef={formRef}

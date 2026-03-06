@@ -40,15 +40,18 @@ import type {
   AdminCreateCollectionInput,
   AdminUpdateCollectionInput,
   AdminCreateCollectionGoalInput,
+  AdminUpdateCollectionGoalInput,
   AdminCreateBadgeInput,
   AdminUpdateBadgeInput,
 } from '../dtos/admin-badges.dto';
 
 import type { PaginationMeta } from '../dtos/admin-common.dto';
+import { AchievementProgressService } from '../../../application/gamification/achievement-progress.service';
 
 const router = Router();
 const prisma = getPrisma();
 const s3Service = new S3Service();
+const achievementProgressService = new AchievementProgressService();
 
 const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
@@ -247,6 +250,60 @@ router.delete(
   })
 );
 
+/* ========== Collection Goals ========== */
+
+router.get(
+  '/collections/:id/goals',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: collectionId } = req.params;
+
+    const collection = await prisma.badgeCollection.findUnique({ where: { id: collectionId } });
+    if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
+
+    const goals = await prisma.achievementGoal.findMany({
+      where: { collectionId },
+      select: {
+        id: true,
+        title: true,
+        requirement: true,
+        pointsRequired: true,
+        difficulty: true,
+        keywords: true,
+        allowedPostTypes: true,
+        isPassive: true,
+        mainAction: true,
+        createdAt: true,
+        actionType: {
+          select: { id: true, code: true, label: true, mainAction: true },
+        },
+        rewardBadge: {
+          select: { id: true, name: true, imageUrl: true, rarity: true },
+        },
+        _count: { select: { userAchievements: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const data = goals.map((g) => ({
+      id: g.id,
+      title: g.title,
+      requirement: g.requirement,
+      pointsRequired: g.pointsRequired,
+      difficulty: g.difficulty,
+      keywords: g.keywords,
+      allowedPostTypes: g.allowedPostTypes,
+      isPassive: g.isPassive,
+      mainAction: g.mainAction,
+      createdAt: g.createdAt.toISOString(),
+      actionType: g.actionType,
+      rewardBadge: g.rewardBadge,
+      usersCount: g._count.userAchievements,
+    }));
+
+    return res.json({ success: true, data });
+  })
+);
+
 router.post(
   '/collections/:id/goals',
   validateBody(AdminCreateCollectionGoalSchema),
@@ -274,6 +331,9 @@ router.post(
         rewardBadgeId: body.rewardBadgeId,
         pointsRequired: body.pointsRequired,
         difficulty: body.difficulty,
+        keywords: body.keywords ?? [],
+        allowedPostTypes: body.allowedPostTypes ?? [],
+        isPassive: body.isPassive ?? false,
       },
     });
     await prisma.adminLog.create({
@@ -285,6 +345,8 @@ router.post(
         entityId: 0,
       },
     });
+    // Invalidate keyword goals cache
+    achievementProgressService.invalidateKeywordGoalsCache().catch(() => {});
     return res.status(201).json({ success: true, data: { id: goal.id } });
   })
 );
@@ -297,7 +359,7 @@ router.patch(
     if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const { collectionId, goalId } = req.params;
-    const body = req.body as Partial<AdminCreateCollectionGoalInput>;
+    const body = req.body as AdminUpdateCollectionGoalInput;
 
     const goal = await prisma.achievementGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundError('Achievement goal not found');
@@ -310,6 +372,9 @@ router.patch(
     if (body.requirement !== undefined) updateData.requirement = body.requirement;
     if (body.pointsRequired !== undefined) updateData.pointsRequired = body.pointsRequired;
     if (body.difficulty !== undefined) updateData.difficulty = body.difficulty;
+    if (body.keywords !== undefined) updateData.keywords = body.keywords;
+    if (body.allowedPostTypes !== undefined) updateData.allowedPostTypes = body.allowedPostTypes;
+    if (body.isPassive !== undefined) updateData.isPassive = body.isPassive;
 
     if (body.actionTypeId !== undefined) {
       const actionType = await prisma.actionType.findUnique({ where: { id: body.actionTypeId } });
@@ -342,6 +407,8 @@ router.patch(
       },
     });
 
+    // Invalidate keyword goals cache
+    achievementProgressService.invalidateKeywordGoalsCache().catch(() => {});
     return res.json({ success: true, data: { id: updated.id } });
   })
 );
@@ -372,6 +439,8 @@ router.delete(
       },
     });
 
+    // Invalidate keyword goals cache
+    achievementProgressService.invalidateKeywordGoalsCache().catch(() => {});
     return res.json({ success: true, message: 'Achievement goal deleted' });
   })
 );
