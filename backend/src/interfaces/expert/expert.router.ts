@@ -19,7 +19,7 @@ const upload = createUpload('IMAGES_VIDEO', 'MEDIUM');
 
 /**
  * @openapi
- * /expert/balance:
+ * /api/expert/balance:
  *   get:
  *     summary: Kullanıcının mevcut TIPS balance'ını getir
  *     description: Expert Request oluşturma ekranında gösterilecek kullanıcının mevcut TIPS balance'ını döndürür. 30 saniye cache'lenir.
@@ -77,7 +77,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request:
+ * /api/expert/request:
  *   post:
  *     summary: Uzman desteği almak için gönderi oluştur
  *     description: Kullanıcılar uzman desteği almak için istek oluşturabilir. İlk başta TIPS miktarı belirtilebilir veya sonradan güncellenebilir.
@@ -269,7 +269,7 @@ router.post(
 
 /**
  * @openapi
- * /expert/request/{requestId}/tips:
+ * /api/expert/request/{requestId}/tips:
  *   patch:
  *     summary: İsteğin TIPS miktarını güncelle
  *     description: Oluşturulan uzman desteği isteğinin TIPS miktarını zaman içerisinde güncelleyebilirsiniz. Sadece PENDING durumundaki istekler için geçerlidir.
@@ -383,7 +383,7 @@ router.patch(
 
 /**
  * @openapi
- * /expert/answered:
+ * /api/expert/answered:
  *   get:
  *     summary: Cevaplanmış uzman desteği içeriklerini getir
  *     description: Uzman desteğinin yanıtlanması durumunda cevaplanmış içeriğin detaylarını gösterir. Her bir soru ve cevap eşleşmesi için detaylı bilgi döner.
@@ -447,7 +447,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request/{requestId}:
+ * /api/expert/request/{requestId}:
  *   get:
  *     summary: Belirli bir isteğin detaylarını getir
  *     description: Belirli bir expert request'in detaylarını ve varsa cevaplarını getirir. Sadece cevaplanmış istekler için detay döner.
@@ -553,7 +553,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/my-requests:
+ * /api/expert/my-requests:
  *   get:
  *     summary: Kullanıcının kendi expert request'lerini getir
  *     description: Kullanıcının oluşturduğu tüm expert request'lerini answered ve pending olarak gruplanmış şekilde getirir.
@@ -597,7 +597,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/my-requests/answered:
+ * /api/expert/my-requests/answered:
  *   get:
  *     summary: Kullanıcının cevaplanmış request'lerini getir
  *     description: Kullanıcının oluşturduğu ve cevaplanmış olan expert request'lerini getirir.
@@ -634,7 +634,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/my-requests/pending:
+ * /api/expert/my-requests/pending:
  *   get:
  *     summary: Kullanıcının bekleyen request'lerini getir
  *     description: Kullanıcının oluşturduğu ve henüz cevaplanmamış (PENDING) olan expert request'lerini getirir.
@@ -671,7 +671,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request/{requestId}/answer:
+ * /api/expert/request/{requestId}/answer:
  *   post:
  *     summary: Expert bir request'e cevap ver
  *     description: Uzman bir kullanıcının expert request'ine cevap verebilir. Request ANSWERED durumuna geçer.
@@ -805,7 +805,7 @@ router.post(
 
 /**
  * @openapi
- * /expert/my-answers:
+ * /api/expert/my-answers:
  *   get:
  *     summary: Expert'in verdiği cevapları getir
  *     description: Expert olarak verdiğiniz tüm cevapları ve ilgili request bilgilerini getirir.
@@ -891,7 +891,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request/{requestId}/accept-answer:
+ * /api/expert/request/{requestId}/accept-answer:
  *   post:
  *     summary: Expert cevabını kabul et
  *     description: Kullanıcı, uzmanın verdiği cevabı kabul ederek talebi sonlandırır. Request CLOSED durumuna geçer.
@@ -975,7 +975,7 @@ router.post(
 
 /**
  * @openapi
- * /expert/categories:
+ * /api/expert/categories:
  *   get:
  *     summary: Expert kategorileri listesini getir
  *     description: Expert request oluştururken kullanılacak statik kategori listesini döndürür.
@@ -1023,7 +1023,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request/{requestId}/status:
+ * /api/expert/request/{requestId}/status:
  *   get:
  *     summary: Expert request status'ünü getir
  *     description: Expert request'in mevcut durumunu, tahmini bekleme süresini ve expert bulunduysa expert bilgilerini döndürür. Frontend polling için kullanılır.
@@ -1071,7 +1071,7 @@ router.get(
 
 /**
  * @openapi
- * /expert/request/{requestId}/accept:
+ * /api/expert/request/{requestId}/accept:
  *   post:
  *     summary: Expert bir soruyu yanıtlamayı onaylar
  *     description: Expert, kendisine düşen bir soruyu yanıtlamayı onaylar. Request EXPERT_FOUND durumuna geçer ve request sahibine bildirim gönderilir.
@@ -1132,7 +1132,7 @@ router.post(
 
 /**
  * @openapi
- * /expert/request/{requestId}:
+ * /api/expert/request/{requestId}:
  *   put:
  *     summary: Expert request güncelle
  *     description: Sadece request sahibi, PENDING durumundaki request'leri güncelleyebilir. Description ve media güncellenebilir.
@@ -1222,7 +1222,7 @@ router.put(
 
 /**
  * @openapi
- * /expert/request/{requestId}:
+ * /api/expert/request/{requestId}:
  *   delete:
  *     summary: Expert request sil
  *     description: Sadece request sahibi, PENDING durumundaki request'leri silebilir. Eğer TIPS gönderilmişse, geri iade edilir.

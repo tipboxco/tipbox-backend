@@ -7,7 +7,7 @@ const searchService = new SearchService();
 
 /**
  * @openapi
- * /search:
+ * /api/search:
  *   get:
  *     summary: Kullanıcı, ürün ve marka araması veya default veriler
  *     description: |

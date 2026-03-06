@@ -54,7 +54,7 @@ const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 /**
  * @openapi
- * /admin/events/upload-image:
+ * /api/admin/events/upload-image:
  *   post:
  *     summary: Upload event image to MinIO (events/ folder)
  *     tags: [Admin - Events]
@@ -125,7 +125,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/events/badges/stats:
+ * /api/admin/events/badges/stats:
  *   get:
  *     tags: [Admin - Events]
  *     summary: Get event badges statistics
@@ -165,7 +165,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/events/rewards/stats:
+ * /api/admin/events/rewards/stats:
  *   get:
  *     tags: [Admin - Events]
  *     summary: Get event rewards statistics

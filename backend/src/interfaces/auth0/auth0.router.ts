@@ -38,16 +38,16 @@ function getBaseUrl(req: Request): string {
  */
 function getCallbackUrl(req: Request): string {
   const baseUrl = getBaseUrl(req);
-  return `${baseUrl}/auth0/callback`;
+  return `${baseUrl}/api/auth0/callback`;
 }
 
 /**
  * Token endpoint URL'ini oluşturur (redirect_url parametresiyle)
  */
 function buildTokenEndpoint(redirectUrl?: string): string {
-  return redirectUrl 
-    ? `/auth0/token?redirect_url=${encodeURIComponent(redirectUrl)}`
-    : '/auth0/token';
+  return redirectUrl
+    ? `/api/auth0/token?redirect_url=${encodeURIComponent(redirectUrl)}`
+    : '/api/auth0/token';
 }
 
 /**
@@ -770,8 +770,8 @@ router.get('/callback', asyncHandler(async (req: Request, res: Response) => {
     message:
       'Auth0 oturumu bulunamadı (cookie/state kaybı). Uygulamadan yeniden giriş akışını başlatın. Bu devam ederse callback URL / cookie ayarlarını kontrol edin.',
     restart: {
-      login: `/auth0?redirect_url=${encodeURIComponent(redirectUrl || '')}`,
-      google: `/auth0/mobile/google?redirect_url=${encodeURIComponent(redirectUrl || '')}`
+      login: `/api/auth0?redirect_url=${encodeURIComponent(redirectUrl || '')}`,
+      google: `/api/auth0/mobile/google?redirect_url=${encodeURIComponent(redirectUrl || '')}`
     }
   });
 }));
@@ -975,10 +975,10 @@ router.get('/mobile/urls', asyncHandler(async (req: Request, res: Response) => {
   return res.json({
     success: true,
     urls: {
-      google: `${baseUrl}/auth0/mobile/google?redirect_url=${encodeURIComponent(redirectUrl)}`,
-      login: `${baseUrl}/auth0/?redirect_url=${encodeURIComponent(redirectUrl)}`,
-      logout: `${baseUrl}/auth0/logout`,
-      status: `${baseUrl}/auth0/status`
+      google: `${baseUrl}/api/auth0/mobile/google?redirect_url=${encodeURIComponent(redirectUrl)}`,
+      login: `${baseUrl}/api/auth0/?redirect_url=${encodeURIComponent(redirectUrl)}`,
+      logout: `${baseUrl}/api/auth0/logout`,
+      status: `${baseUrl}/api/auth0/status`
     },
     baseUrl,
     host: req.get('host'),

@@ -10,7 +10,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /surveys/{surveyId}/questions:
+ * /api/surveys/{surveyId}/questions:
  *   get:
  *     summary: Anket sorularını getirir
  *     description: Belirtilen anketin tüm sorularını ve seçeneklerini döner.
@@ -80,7 +80,7 @@ router.get(
 
 /**
  * @openapi
- * /surveys/{surveyId}/questions/{questionId}/answer:
+ * /api/surveys/{surveyId}/questions/{questionId}/answer:
  *   post:
  *     summary: Anket cevabını gönderir
  *     description: Belirtilen soruya verilen cevabı kaydeder veya günceller.
@@ -157,7 +157,7 @@ router.post(
 
 /**
  * @openapi
- * /surveys/{surveyId}/complete:
+ * /api/surveys/{surveyId}/complete:
  *   post:
  *     summary: Anketi tamamla ve puan kazan
  *     description: Tüm soruları cevaplanan anketi tamamlar, kullanıcıya puan verir ve badge kontrolü yapar.

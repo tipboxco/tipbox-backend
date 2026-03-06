@@ -999,7 +999,7 @@ router.post(
 
 /**
  * @swagger
- * /admin/payments/rewards/stats:
+ * /api/admin/payments/rewards/stats:
  *   get:
  *     tags: [Admin - Payments]
  *     summary: Get rewards statistics

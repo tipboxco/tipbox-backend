@@ -11,7 +11,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /transactions/send-tip:
+ * /api/transactions/send-tip:
  *   post:
  *     summary: TIPS gönder (alıcı kullanıcıya)
  *     description: |
@@ -104,7 +104,7 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /transactions/{transactionId}/cancel:
+ * /api/transactions/{transactionId}/cancel:
  *   post:
  *     summary: Tip send işlemini iptal et
  *     description: |
@@ -150,7 +150,7 @@ router.post('/:transactionId/cancel', asyncHandler(async (req: Request, res: Res
 
 /**
  * @openapi
- * /transactions/nft-transfer:
+ * /api/transactions/nft-transfer:
  *   post:
  *     summary: NFT transfer et (kullanıcıdan kullanıcıya)
  *     tags: [Transactions]
@@ -239,7 +239,7 @@ router.post('/nft-transfer', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * @openapi
- * /transactions/history:
+ * /api/transactions/history:
  *   get:
  *     summary: Transaction geçmişi (list)
  *     tags: [Transactions]
@@ -353,7 +353,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /transactions/history/grouped:
+ * /api/transactions/history/grouped:
  *   get:
  *     summary: "Transaction geçmişi (grouped by date: today, yesterday, etc.)"
  *     tags: [Transactions]
@@ -387,7 +387,7 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
 
 /**
  * @openapi
- * /transactions/{id}:
+ * /api/transactions/{id}:
  *   get:
  *     summary: Transaction durumunu getir
  *     tags: [Transactions]

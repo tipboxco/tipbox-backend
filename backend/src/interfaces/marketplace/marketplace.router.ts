@@ -17,7 +17,7 @@ const walletRepo = new WalletPrismaRepository();
 
 /**
  * @openapi
- * /marketplace/listings:
+ * /api/marketplace/listings:
  *   get:
  *     summary: Satışta bulunan NFT'lerin listesini getirir
  *     description: Marketplace'te satışta olan NFT'leri arama ve filtreleme seçenekleri ile getirir
@@ -113,7 +113,7 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /marketplace/my-nfts:
+ * /api/marketplace/my-nfts:
  *   get:
  *     summary: Kullanıcının sahip olduğu kozmetik NFT'lerin listesini getirir
  *     description: Authenticated kullanıcının sahip olduğu kozmetik NFT'leri listeler (marketplace sadece COSMETIC NFT'ler)
@@ -249,7 +249,7 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
 
 /**
  * @swagger
- * /marketplace/my-listings:
+ * /api/marketplace/my-listings:
  *   get:
  *     tags: [Marketplace]
  *     summary: Kullanıcının ACTIVE listing'lerini getirir
@@ -357,7 +357,7 @@ router.get('/my-listings', authMiddleware, asyncHandler(async (req: Request, res
 
 /**
  * @swagger
- * /marketplace/available-nfts:
+ * /api/marketplace/available-nfts:
  *   get:
  *     tags: [Marketplace]
  *     summary: Kullanıcının satışa koyabileceği kozmetik NFT'leri getirir (listing'i olmayan)
@@ -452,7 +452,7 @@ router.get('/available-nfts', authMiddleware, asyncHandler(async (req: Request, 
 
 /**
  * @openapi
- * /marketplace/listings:
+ * /api/marketplace/listings:
  *   post:
  *     summary: Kozmetik NFT'yi satışa koyar
  *     description: Kullanıcının sahip olduğu kozmetik NFT'yi belirlenen fiyattan marketplace'e ekler. Sadece COSMETIC tipi NFT'ler listelenebilir.
@@ -533,7 +533,7 @@ router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: 
 
 /**
  * @openapi
- * /marketplace/listings/{listingId}/price:
+ * /api/marketplace/listings/{listingId}/price:
  *   put:
  *     summary: Listing fiyatını günceller
  *     description: Kullanıcının sahip olduğu bir listing'in fiyatını günceller
@@ -619,7 +619,7 @@ router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req
 
 /**
  * @openapi
- * /marketplace/listings/{listingId}:
+ * /api/marketplace/listings/{listingId}:
  *   delete:
  *     summary: Listing'i iptal eder (delist)
  *     description: Kullanıcının sahip olduğu bir listing'i marketplace'ten kaldırır
@@ -658,7 +658,7 @@ router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: R
 
 /**
  * @openapi
- * /marketplace/sell/{nftId}:
+ * /api/marketplace/sell/{nftId}:
  *   get:
  *     summary: NFT satış bilgilerini getirir
  *     description: Kullanıcının sahip olduğu NFT için satış bilgilerini (fiyat, gas fee, earnings vb.) getirir
@@ -725,7 +725,7 @@ router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res
 
 /**
  * @openapi
- * /marketplace/sell/{nftId}/detail:
+ * /api/marketplace/sell/{nftId}/detail:
  *   get:
  *     summary: NFT satış detayını getirir
  *     description: Kullanıcının sahip olduğu NFT için detaylı satış bilgilerini (owner, earn date, total owner vb.) getirir
@@ -822,7 +822,7 @@ router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Reque
 
 /**
  * @openapi
- * /marketplace/buy:
+ * /api/marketplace/buy:
  *   post:
  *     summary: Kozmetik NFT'yi satın alır
  *     description: Marketplace'te satışta olan bir kozmetik NFT'yi satın alır. Buyer'ın bakiyesinden düşüp seller'a transfer eder. Sadece COSMETIC tipi NFT'ler satın alınabilir.

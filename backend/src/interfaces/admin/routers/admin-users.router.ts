@@ -134,7 +134,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/stats:
+ * /api/admin/users/stats:
  *   get:
  *     summary: Users bölümü özet istatistikleri
  *     tags: [Admin - Users]
@@ -171,7 +171,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/upload-avatar:
+ * /api/admin/users/upload-avatar:
  *   post:
  *     summary: Avatar resmi yükle (S3)
  *     tags: [Admin - Users]
@@ -221,7 +221,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/users/{id}/avatar:
+ * /api/admin/users/{id}/avatar:
  *   get:
  *     summary: Kullanıcının aktif avatar bilgisi
  *     tags: [Admin - Users]
@@ -283,7 +283,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/avatar:
+ * /api/admin/users/{id}/avatar:
  *   patch:
  *     summary: Kullanıcı avatar güncelle (imageUrl veya aktif kayıt)
  *     tags: [Admin - Users]
@@ -397,7 +397,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/users/{id}/avatar:
+ * /api/admin/users/{id}/avatar:
  *   post:
  *     summary: Kullanıcıya yeni avatar ekle
  *     tags: [Admin - Users]
@@ -467,7 +467,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/users/{id}/events:
+ * /api/admin/users/{id}/events:
  *   get:
  *     summary: Kullanıcının katıldığı event'ler (EventStats)
  *     tags: [Admin - Users]
@@ -537,7 +537,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/badges:
+ * /api/admin/users/{id}/badges:
  *   get:
  *     summary: Kullanıcının badge'leri (UserBadge + Badge)
  *     tags: [Admin - Users]
@@ -609,7 +609,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/badges:
+ * /api/admin/users/{id}/badges:
  *   post:
  *     summary: Kullanıcıya badge ver
  *     tags: [Admin - Users]
@@ -715,7 +715,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/users/{id}/badges/{userBadgeId}:
+ * /api/admin/users/{id}/badges/{userBadgeId}:
  *   delete:
  *     summary: Kullanıcıdan badge al
  *     tags: [Admin - Users]
@@ -770,7 +770,7 @@ router.delete(
 
 /**
  * @openapi
- * /admin/users/{id}/wallet:
+ * /api/admin/users/{id}/wallet:
  *   get:
  *     summary: Kullanıcının cüzdan özeti
  *     tags: [Admin - Users]
@@ -816,7 +816,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/tips-summary:
+ * /api/admin/users/{id}/tips-summary:
  *   get:
  *     summary: Kullanıcının tips özeti (toplam gönderilen/alınan)
  *     tags: [Admin - Users]
@@ -859,7 +859,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/tips-transactions:
+ * /api/admin/users/{id}/tips-transactions:
  *   get:
  *     summary: Kullanıcının tips işlem listesi (sayfalı)
  *     tags: [Admin - Users]
@@ -936,7 +936,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/profile:
+ * /api/admin/users/{id}/profile:
  *   get:
  *     summary: Kullanıcı profil bilgisi (admin görünümü)
  *     tags: [Admin - Users]
@@ -986,7 +986,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/roles:
+ * /api/admin/users/{id}/roles:
  *   get:
  *     summary: Kullanıcı rolleri
  *     tags: [Admin - Users]
@@ -1029,7 +1029,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/moderation-history:
+ * /api/admin/users/{id}/moderation-history:
  *   get:
  *     summary: Kullanıcı moderation geçmişi (ban/warn/mute)
  *     tags: [Admin - Users]
@@ -1097,7 +1097,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/trust-scores:
+ * /api/admin/users/{id}/trust-scores:
  *   get:
  *     summary: Kullanıcının trust score geçmişi
  *     tags: [Admin - Users]
@@ -1161,7 +1161,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/login-attempts:
+ * /api/admin/users/{id}/login-attempts:
  *   get:
  *     summary: Kullanıcının giriş denemeleri (güvenlik)
  *     tags: [Admin - Users]
@@ -1233,7 +1233,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}/posts:
+ * /api/admin/users/{id}/posts:
  *   get:
  *     summary: Kullanıcının postları (sayfalı)
  *     tags: [Admin - Users]
@@ -1330,7 +1330,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}:
+ * /api/admin/users/{id}:
  *   get:
  *     summary: Tek kullanıcı detayı (admin görünümü)
  *     tags: [Admin - Users]
@@ -1428,7 +1428,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/users/{id}:
+ * /api/admin/users/{id}:
  *   patch:
  *     summary: Kullanıcı bilgilerini güncelle (email, status, emailVerified)
  *     tags: [Admin - Users]
@@ -1529,7 +1529,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/users/{id}/roles:
+ * /api/admin/users/{id}/roles:
  *   put:
  *     summary: Kullanıcı rollerini güncelle (tamamen değiştirir)
  *     tags: [Admin - Users]
@@ -1610,7 +1610,7 @@ router.put(
 
 /**
  * @openapi
- * /admin/users/{id}/ban:
+ * /api/admin/users/{id}/ban:
  *   patch:
  *     summary: Kullanıcıyı yasakla
  *     tags: [Admin - Users]
@@ -1698,7 +1698,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/users/{id}/unban:
+ * /api/admin/users/{id}/unban:
  *   patch:
  *     summary: Kullanıcı yasağını kaldır
  *     tags: [Admin - Users]
@@ -1767,7 +1767,7 @@ router.patch(
 
 /**
  * @swagger
- * /admin/users/banned/stats:
+ * /api/admin/users/banned/stats:
  *   get:
  *     tags: [Admin - Users]
  *     summary: Get banned users statistics
@@ -1812,7 +1812,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/users/reports/stats:
+ * /api/admin/users/reports/stats:
  *   get:
  *     tags: [Admin - Reports & KYC]
  *     summary: Get user reports statistics
@@ -1852,7 +1852,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-reports:
+ * /api/admin/user-reports:
  *   get:
  *     summary: Kullanıcı şikayetleri listesi
  *     tags: [Admin - Reports & KYC]
@@ -1929,7 +1929,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-reports/{id}:
+ * /api/admin/user-reports/{id}:
  *   get:
  *     summary: Tek şikayet detayı
  *     tags: [Admin - Reports & KYC]
@@ -1992,7 +1992,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-reports/{id}/resolve:
+ * /api/admin/user-reports/{id}/resolve:
  *   patch:
  *     summary: Şikayeti çözüldü olarak işaretle
  *     tags: [Admin - Reports & KYC]
@@ -2077,7 +2077,7 @@ router.patch(
 
 /**
  * @swagger
- * /admin/users/kyc/stats:
+ * /api/admin/users/kyc/stats:
  *   get:
  *     tags: [Admin - Reports & KYC]
  *     summary: Get KYC statistics
@@ -2121,7 +2121,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-kyc:
+ * /api/admin/user-kyc:
  *   get:
  *     summary: KYC kayıtları listesi
  *     tags: [Admin - Reports & KYC]
@@ -2187,7 +2187,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-kyc/{userId}:
+ * /api/admin/user-kyc/{userId}:
  *   get:
  *     summary: Kullanıcının KYC kaydı (en güncel)
  *     tags: [Admin - Reports & KYC]
@@ -2238,7 +2238,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/user-kyc/{recordId}/review:
+ * /api/admin/user-kyc/{recordId}/review:
  *   patch:
  *     summary: KYC inceleme sonucu (approve/decline/on_hold)
  *     tags: [Admin - Reports & KYC]
@@ -2325,7 +2325,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/user-trust-scores:
+ * /api/admin/user-trust-scores:
  *   get:
  *     summary: Trust score listesi (kullanıcı bazlı veya genel)
  *     tags: [Admin - Reports & KYC]
@@ -2386,7 +2386,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/logs:
+ * /api/admin/logs:
  *   get:
  *     summary: Admin işlem logları listesi (sayfalama)
  *     tags: [Admin - Logs]

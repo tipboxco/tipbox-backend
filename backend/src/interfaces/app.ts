@@ -61,6 +61,7 @@ import config from '../infrastructure/config';
 import logger from '../infrastructure/logger/logger';
 
 const app = express();
+const apiRouter = express.Router();
 
 // Reverse proxy (nginx) arkasında doğru host/protocol ve cookie davranışı için
 // (x-forwarded-* header'larını dikkate alır)
@@ -151,7 +152,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     routes: {
       // Callback route'u custom handler ile handle edilecek (request header'ından dinamik redirectUri)
       callback: false,
-      postLogoutRedirect: '/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
+      postLogoutRedirect: '/api/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
     },
     // Cookie ayarları - farklı domain'ler arasında çalışması için
     session: {
@@ -167,7 +168,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     // Login state oluşturulurken dinamik redirect_uri ayarla
     getLoginState: (req: express.Request, options: Record<string, unknown> & { authorizationParams?: Record<string, unknown> }) => {
       const dynamicBaseUrl = getDynamicBaseUrl(req);
-      const dynamicCallbackUrl = `${dynamicBaseUrl}/auth0/callback`;
+      const dynamicCallbackUrl = `${dynamicBaseUrl}/api/auth0/callback`;
       
       logger.info({
         message: 'Auth0 login state oluşturuluyor',
@@ -198,8 +199,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
 
   // Custom callback handler: Cloudflared/nginx arkasında Host localhost olarak geldiği için
   // redirectUri'yi request header'larından (x-forwarded-host, x-forwarded-proto) oluştur
-  app.get('/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
-    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+  app.get('/api/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/api/auth0/callback';
     logger.info({
       message: 'Auth0 callback - dinamik redirectUri kullanılıyor',
       redirectUri,
@@ -209,8 +210,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     });
     res.oidc?.callback({ redirectUri });
   }));
-  app.post('/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
-    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+  app.post('/api/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/api/auth0/callback';
     res.oidc?.callback({ redirectUri });
   }));
 
@@ -284,7 +285,7 @@ app.get('/live', (req, res) => {
 });
 
 // API root endpoint
-app.get('/api', (req, res) => {
+apiRouter.get('/', (req, res) => {
   res.json({
     message: 'Tipbox Backend API çalışıyor!',
     swagger: `${req.protocol}://${req.get('host')}/api-docs`,
@@ -356,11 +357,11 @@ function filterSpecByContext(
   let filtered: Record<string, unknown>;
   if (context === 'admin') {
     filtered = Object.fromEntries(
-      Object.entries(paths).filter(([pathKey]) => pathKey.startsWith('/admin'))
+      Object.entries(paths).filter(([pathKey]) => pathKey.startsWith('/api/admin'))
     );
   } else if (context === 'app') {
     filtered = Object.fromEntries(
-      Object.entries(paths).filter(([pathKey]) => !pathKey.startsWith('/admin'))
+      Object.entries(paths).filter(([pathKey]) => !pathKey.startsWith('/api/admin'))
     );
   } else {
     return spec;
@@ -429,40 +430,42 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
-// API Routes
-app.use('/auth', authRouter);
-app.use('/auth0', csrfProtection(), auth0Router);
-app.use('/users', authMiddleware, userRouter);
-app.use('/wallets', authMiddleware, walletRouter);
-app.use('/transactions', authMiddleware, transactionRouter);
-app.use('/feed', authMiddleware, feedRouter);
-app.use('/inbox', inboxRouter);
-app.use('/marketplace', marketplaceRouter);
-app.use('/explore', exploreRouter);
-app.use('/expert', expertRouter);
-app.use('/inventory', inventoryRouter);
-app.use('/catalog', catalogRouter);
-app.use('/products', catalogRouter); // Backward compatibility için
-app.use('/brands', brandRouter);
-app.use('/search', searchRouter);
-app.use('/posts', postRouter);
-app.use('/events/collections', collectionsRouter);
-app.use('/events', eventRouter);
-app.use('/collections', collectionsRouter);
-app.use('/news', newsRouter);
-app.use('/interactions', interactionRouter);
-app.use('/notifications', authMiddleware, notificationRouter);
-app.use('/surveys', surveyRouter);
-app.use('/api/cache', cacheRouter);
-app.use('/api/seeds', seedRouter);
-app.use('/api/sync-receiver', syncReceiverRouter);
-app.use('/canny', cannyRouter);
-app.use('/subscription', authMiddleware, subscriptionRouter);
-app.use('/api', gamificationRouter);
-app.use('/admin', adminRouter);
-
+// API Routes — tümü /api/ prefix'i altında
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/auth0', csrfProtection(), auth0Router);
+apiRouter.use('/users', authMiddleware, userRouter);
+apiRouter.use('/wallets', authMiddleware, walletRouter);
+apiRouter.use('/transactions', authMiddleware, transactionRouter);
+apiRouter.use('/feed', authMiddleware, feedRouter);
+apiRouter.use('/inbox', inboxRouter);
+apiRouter.use('/marketplace', marketplaceRouter);
+apiRouter.use('/explore', exploreRouter);
+apiRouter.use('/expert', expertRouter);
+apiRouter.use('/inventory', inventoryRouter);
+apiRouter.use('/catalog', catalogRouter);
+apiRouter.use('/products', catalogRouter); // Backward compatibility için
+apiRouter.use('/brands', brandRouter);
+apiRouter.use('/search', searchRouter);
+apiRouter.use('/posts', postRouter);
+apiRouter.use('/events/collections', collectionsRouter);
+apiRouter.use('/events', eventRouter);
+apiRouter.use('/collections', collectionsRouter);
+apiRouter.use('/news', newsRouter);
+apiRouter.use('/interactions', interactionRouter);
+apiRouter.use('/notifications', authMiddleware, notificationRouter);
+apiRouter.use('/surveys', surveyRouter);
+apiRouter.use('/cache', cacheRouter);
+apiRouter.use('/seeds', seedRouter);
+apiRouter.use('/sync-receiver', syncReceiverRouter);
+apiRouter.use('/canny', cannyRouter);
+apiRouter.use('/subscription', authMiddleware, subscriptionRouter);
+apiRouter.use('/', gamificationRouter);
+apiRouter.use('/admin', adminRouter);
 // Webhook routes (no auth - signature verified internally). Alchemy yukarıda body parser'dan önce mount edildi.
-app.use('/api/webhooks/thirdweb', thirdwebWebhookRouter);
+apiRouter.use('/webhooks/thirdweb', thirdwebWebhookRouter);
+
+// Mount API router at /api
+app.use('/api', apiRouter);
 
 // Dashboard routes (must be last)
 app.use('/', dashboardRouter);

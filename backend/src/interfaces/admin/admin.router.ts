@@ -53,7 +53,7 @@ const avatarRepo = new UserAvatarPrismaRepository();
 
 /**
  * @openapi
- * /admin/login:
+ * /api/admin/login:
  *   post:
  *     summary: Admin login
  *     tags: [Admin - Auth]
@@ -143,7 +143,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/stats:
+ * /api/admin/stats:
  *   get:
  *     summary: Genel istatistikler (kullanıcı, post, ban, admin log sayıları)
  *     tags: [Admin - Dashboard]
@@ -170,7 +170,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/logs:
+ * /api/admin/logs:
  *   get:
  *     summary: Admin işlem logları listesi (sayfalama)
  *     tags: [Admin - Logs]

@@ -9,7 +9,7 @@ const feedService = new FeedService();
 
 /**
  * @openapi
- * /feed:
+ * /api/feed:
  *   get:
  *     summary: Kullanıcının feed'ini getir
  *     description: Kullanıcının feed akışını pagination ile getirir. Performans için cache kullanır.
@@ -132,7 +132,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /feed/filtered:
+ * /api/feed/filtered:
  *   get:
  *     summary: Filtrelenmiş feed getir
  *     description: Kullanıcının feed'ini filtrelerle getirir. Kendi postları otomatik olarak filtrelenir.
@@ -350,7 +350,7 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /feed/seen:
+ * /api/feed/seen:
  *   post:
  *     summary: Feed item'ları seen olarak işaretle
  *     description: Viewport tracking ile görülen feed'leri seen işaretle ve seen penalty uygula
@@ -409,7 +409,7 @@ router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /feed/{feedId}/hide:
+ * /api/feed/{feedId}/hide:
  *   post:
  *     summary: Feed'i gizle
  *     description: Feed'i gizle (score * 0.3)
@@ -443,7 +443,7 @@ router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * @openapi
- * /feed/{feedId}/not-interested:
+ * /api/feed/{feedId}/not-interested:
  *   post:
  *     summary: İlgilenmiyorum
  *     description: Feed'i düşük öncelikli yap (score * 0.3)
@@ -477,7 +477,7 @@ router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Re
 
 /**
  * @openapi
- * /feed/{feedId}/save:
+ * /api/feed/{feedId}/save:
  *   post:
  *     summary: Feed'i kaydet/bookmark
  *     description: Feed'i kaydet ve score'u artır (score + 10)
@@ -511,7 +511,7 @@ router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * @openapi
- * /feed/{feedId}/report:
+ * /api/feed/{feedId}/report:
  *   post:
  *     summary: Feed'i şikayet et
  *     description: Feed'i sil ve post'u moderation'a gönder
@@ -545,7 +545,7 @@ router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) 
 
 /**
  * @openapi
- * /feed/source-counts:
+ * /api/feed/source-counts:
  *   get:
  *     summary: Feed source sayılarını getir
  *     description: Her feed source için toplam sayıyı döndürür (kendi postları hariç)

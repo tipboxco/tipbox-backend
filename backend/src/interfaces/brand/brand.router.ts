@@ -13,7 +13,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /brands/categories:
+ * /api/brands/categories:
  *   get:
  *     summary: Tüm brand kategorilerini listele
  *     description: Kullanıcının app içerisindeki tüm brand categorilerini görüntülediği endpoint.
@@ -50,7 +50,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/categories/{categoryId}/brands:
+ * /api/brands/categories/{categoryId}/brands:
  *   get:
  *     summary: Kategoriye göre markaları listele
  *     description: Kullanıcının seçtiği categorye bağlı markalar, markaya ait ürün sayısına göre (çoktan aza) sıralanarak pagination ile döner.
@@ -127,7 +127,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/search:
+ * /api/brands/search:
  *   get:
  *     summary: Global brand search - Tüm brand kategorileri arasında arama
  *     description: Tüm brand kategorileri arasında arama yapar ve sonuçları brand category bazında gruplar. Sadece eşleşen brand'i olan category'ler döner.
@@ -232,7 +232,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/catalog:
+ * /api/brands/{brandId}/catalog:
  *   get:
  *     summary: Brand catalog detayları
  *     description: Kullanıcının seçtiği markanın katalog sayfasının detaylarını listelendiği endpoint.
@@ -289,7 +289,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/follow:
+ * /api/brands/{brandId}/follow:
  *   post:
  *     summary: Markayı takip et
  *     description: Kullanıcı markayı takip eder (BridgeFollower tablosuna kayıt eklenir). App tarafında optimistic güncelleme sonrası bu EP ile senkronize edilir.
@@ -339,7 +339,7 @@ router.post(
 
 /**
  * @openapi
- * /brands/{brandId}/follow:
+ * /api/brands/{brandId}/follow:
  *   delete:
  *     summary: Markayı bırak (takibi kaldır)
  *     description: Kullanıcı markayı bırakır (BridgeFollower tablosundan kayıt silinir). Leave işlemi için kullanılır.
@@ -389,7 +389,7 @@ router.delete(
 
 /**
  * @openapi
- * /brands/{brandId}/feed:
+ * /api/brands/{brandId}/feed:
  *   get:
  *     summary: Brand feed'ini getir
  *     description: Seçili marka için bridge post'lardan oluşan feed listesini döner.
@@ -477,7 +477,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/groups:
+ * /api/brands/{brandId}/groups:
  *   get:
  *     summary: Markanın ürünlerini kategori (level 2) bazında getir
  *     description: Brand id veya externalId ile markayı bulur. Ürünler nested Category yapısına göre gruplanır; sadece rank/derinlik 2 (level 2) kategoriler grup adı olarak döner. Kategorisi yok veya level 2 olmayan ürünler "Diğer" grubunda.
@@ -577,7 +577,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/groups/{productGroupId}/products:
+ * /api/brands/groups/{productGroupId}/products:
  *   get:
  *     summary: Belirli bir product group için products listesi
  *     description: Belirli bir product group içindeki products'ların pagination ile listelendiği endpoint.
@@ -669,7 +669,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/groups/{groupId}/products:
+ * /api/brands/{brandId}/groups/{groupId}/products:
  *   get:
  *     summary: Brand'e ait belirli bir product group'un ürünlerini listele
  *     description: Brand'e ait belirli bir product group içindeki products'ların pagination ile listelendiği endpoint. "Tümünü gör" butonu için kullanılır.
@@ -766,7 +766,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/surveys:
+ * /api/brands/{brandId}/surveys:
  *   get:
  *     summary: Brand Survey & Gamification - Anketler
  *     description: Seçili marka için survey/gamification kartlarını pagination ile döner. Brand bilgileri store'dan alınır, sadece surveyList döner.
@@ -858,7 +858,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/events:
+ * /api/brands/{brandId}/events:
  *   get:
  *     summary: Brand Survey & Gamification - Eventler
  *     description: Seçili marka için event kartlarını pagination ile döner.
@@ -952,7 +952,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/events/{eventId}:
+ * /api/brands/events/{eventId}:
  *   get:
  *     summary: Brand Survey & Gamification - Event detayı
  *     description: Seçili marka için belirli bir event'in detaylarını döner.
@@ -987,7 +987,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/trends:
+ * /api/brands/{brandId}/trends:
  *   get:
  *     summary: Brand Survey & Gamification - Trendler
  *     description: Brand'e ait trend içerikleri (feed formatında) pagination ile döner.
@@ -1066,7 +1066,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/history:
+ * /api/brands/{brandId}/history:
  *   get:
  *     summary: Marka geçmişi ana sayfa bilgilerini getir
  *     description: Kullanıcının seçtiği markaya ait geçmiş (puanlar, rozetler, istatistikler) bilgisini pagination ile döner.
@@ -1166,7 +1166,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/history/points:
+ * /api/brands/{brandId}/history/points:
  *   get:
  *     summary: Marka geçmişine ait puan geçmişini getir
  *     description: Kullanıcının bu marka için kazandığı puanların pagination ile listelenmesi.
@@ -1251,7 +1251,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/history/surveys:
+ * /api/brands/{brandId}/history/surveys:
  *   get:
  *     summary: Marka geçmişine ait anketleri getir
  *     description: Geçmişteki survey kartlarını döner.
@@ -1342,7 +1342,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/history/feed:
+ * /api/brands/{brandId}/history/feed:
  *   get:
  *     summary: Marka geçmişine ait paylaşımları getir
  *     description: Marka geçmişi için feed formatında paylaşımları pagination ile döner.
@@ -1421,7 +1421,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}:
+ * /api/brands/{brandId}/products/{productId}:
  *   get:
  *     summary: Brand context'inde product detay bilgilerini getir
  *     description: Belirli bir brand'e ait product'ın detaylı bilgilerini getirir. Catalog context'indeki product detayından farklı olabilir (brand-specific stats, brand context bilgileri vb.).
@@ -1510,7 +1510,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/stats:
+ * /api/brands/{brandId}/stats:
  *   get:
  *     summary: Brand istatistiklerini getir
  *     description: Kullanıcının brand için istatistiklerini getirir (surveys, shares, events, totalPoints).
@@ -1564,7 +1564,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/feed:
+ * /api/brands/{brandId}/products/{productId}/feed:
  *   get:
  *     summary: Marka ürününe ait tüm gönderileri listele
  *     description: Marka ürününe ait tüm gönderilerin cursor-based pagination ile listelendiği endpoint.
@@ -1652,7 +1652,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/reviews:
+ * /api/brands/{brandId}/products/{productId}/reviews:
  *   get:
  *     summary: Marka ürününe ait review gönderilerini listele
  *     description: Marka ürününe ait review (experience) gönderilerinin cursor-based pagination ile listelendiği endpoint.
@@ -1740,7 +1740,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/benchmarks:
+ * /api/brands/{brandId}/products/{productId}/benchmarks:
  *   get:
  *     summary: Marka ürününe ait benchmark gönderilerini listele
  *     description: Marka ürününe ait benchmark (comparison) gönderilerinin cursor-based pagination ile listelendiği endpoint.
@@ -1828,7 +1828,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/tips:
+ * /api/brands/{brandId}/products/{productId}/tips:
  *   get:
  *     summary: Marka ürününe ait tips gönderilerini listele
  *     description: Marka ürününe ait tips gönderilerinin cursor-based pagination ile listelendiği endpoint.
@@ -1916,7 +1916,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/questions:
+ * /api/brands/{brandId}/products/{productId}/questions:
  *   get:
  *     summary: Marka ürününe ait question gönderilerini listele
  *     description: Marka ürününe ait question gönderilerinin cursor-based pagination ile listelendiği endpoint.
@@ -2004,7 +2004,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/news:
+ * /api/brands/{brandId}/products/{productId}/news:
  *   get:
  *     summary: Marka ürünlerine dair haberleri listele
  *     description: Marka ürünlerine dair haberlerin listelendiği endpoint.
@@ -2076,7 +2076,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/news/{newsId}:
+ * /api/brands/{brandId}/products/{productId}/news/{newsId}:
  *   get:
  *     summary: Marka ürününe ait haber detayını getir
  *     description: Marka ürününe ait belirli bir haberin detaylı bilgilerini getirir. Banner, title, content, interactions (beğeni, yorum, paylaşım, save) bilgilerini içerir.

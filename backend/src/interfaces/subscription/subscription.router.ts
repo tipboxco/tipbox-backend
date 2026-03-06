@@ -11,7 +11,7 @@ const subscriptionPlanService = new SubscriptionPlanService();
 
 /**
  * @openapi
- * /subscription/plans:
+ * /api/subscription/plans:
  *   get:
  *     summary: Mevcut abonelik paketlerini listele
  *     description: Aktif paketleri (id, name, price, period, benefits) döner.

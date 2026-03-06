@@ -673,7 +673,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/badges/upload-image:
+ * /api/admin/badges/upload-image:
  *   post:
  *     summary: Badge image yükle (MinIO'ya badges/ klasörüne)
  *     tags: [Admin - Badges]

@@ -77,7 +77,7 @@ const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 /**
  * @openapi
- * /admin/products/upload-image:
+ * /api/admin/products/upload-image:
  *   post:
  *     summary: Upload product image to MinIO (products/ folder)
  *     tags: [Admin - Products]
@@ -589,7 +589,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/products/categories/stats:
+ * /api/admin/products/categories/stats:
  *   get:
  *     tags: [Admin - Products]
  *     summary: Get product categories statistics
@@ -1774,7 +1774,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/products/comparisons/stats:
+ * /api/admin/products/comparisons/stats:
  *   get:
  *     tags: [Admin - Products]
  *     summary: Get product comparisons statistics

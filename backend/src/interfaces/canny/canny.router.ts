@@ -31,7 +31,7 @@ function getBaseUrl(req: Request): string {
  */
 function getCallbackUrl(req: Request): string {
   const baseUrl = getBaseUrl(req);
-  return `${baseUrl}/auth0/callback`;
+  return `${baseUrl}/api/auth0/callback`;
 }
 
 /**

@@ -10,7 +10,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /catalog/categories:
+ * /api/catalog/categories:
  *   get:
  *     summary: Tüm kategorileri listele
  *     description: Kullanıcının app içerisindeki tüm kategorileri görüntülediği endpoint.
@@ -45,7 +45,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/categories/{categoryId}/sub-categories:
+ * /api/catalog/categories/{categoryId}/sub-categories:
  *   get:
  *     summary: Kategoriye göre sub-kategorileri listele
  *     description: Kullanıcının seçtiği kategoriye göre app içerisindeki Sub Categoriesleri görüntülediği endpoint. Cursor-based pagination ile 20'li sayfalama yapar.
@@ -131,7 +131,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/sub-categories/{subCategoryId}/product-groups:
+ * /api/catalog/sub-categories/{subCategoryId}/product-groups:
  *   get:
  *     summary: Sub-kategoriye göre product group'ları listele
  *     description: Kullanıcının seçtiği sub kategoriye göre app içerisindeki Product Group listesini görüntülediği endpoint. Cursor-based pagination ile 20'li sayfalama yapar.
@@ -217,7 +217,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/product-groups/{productGroupId}/products:
+ * /api/catalog/product-groups/{productGroupId}/products:
  *   get:
  *     summary: Product group'a göre ürünleri listele
  *     description: Kullanıcının seçtiği Product Group'a göre app içerisindeki Product listesini görüntülediği endpoint. Cursor-based pagination ile 20'li sayfalama yapar.
@@ -308,7 +308,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/sub-categories/{subCategoryId}/posts:
+ * /api/catalog/sub-categories/{subCategoryId}/posts:
  *   get:
  *     summary: Sub category'ye ait post'ları getir
  *     description: Belirli bir sub category'ye ait post'ları getirir. Hiyerarşik feed mantığı ile alt product group ve product'ların gönderilerini de içerir. Feed formatında döner.
@@ -413,7 +413,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/product-groups/{productGroupId}/posts:
+ * /api/catalog/product-groups/{productGroupId}/posts:
  *   get:
  *     summary: Product group'a ait post'ları getir
  *     description: Belirli bir product group'a ait post'ları getirir. Hiyerarşik feed mantığı ile alt product'ların gönderilerini de içerir. Feed formatında döner.
@@ -518,7 +518,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/products/{productId}/posts:
+ * /api/catalog/products/{productId}/posts:
  *   get:
  *     summary: Product'a ait post'ları getir
  *     description: Belirli bir product'a ait post'ları getirir. Product için deneyim (EXPERIENCE), ipucu (TIPS), karşılaştırma (COMPARE), soru (QUESTION), güncelleme (UPDATE) gönderileri paylaşılabilir. Feed formatında döner.
@@ -598,7 +598,7 @@ router.get(
  */
 /**
  * @openapi
- * /catalog/products/search:
+ * /api/catalog/products/search:
  *   get:
  *     summary: Global product search - Tüm product group'lar arasında arama
  *     description: Tüm product group'lar arasında arama yapar ve sonuçları product group bazında gruplar. Sadece eşleşen ürünü olan product group'lar döner.
@@ -713,7 +713,7 @@ router.get(
 
 /**
  * @openapi
- * /catalog/context/{contextId}/posts:
+ * /api/catalog/context/{contextId}/posts:
  *   get:
  *     summary: Context'e ait post'ları getir (Smart Endpoint)
  *     description: |

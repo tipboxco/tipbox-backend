@@ -17,7 +17,7 @@ RUN --mount=type=cache,id=pnpm-store-admin,target=/root/.local/share/pnpm/store 
 COPY . .
 
 # 4) Build-time API URL
-ARG VITE_API_BASE_URL=http://localhost:3000
+ARG VITE_API_BASE_URL=http://localhost:3000/api
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN pnpm run build

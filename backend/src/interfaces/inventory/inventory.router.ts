@@ -12,7 +12,7 @@ const postService = new PostService();
 
 /**
  * @openapi
- * /inventory:
+ * /api/inventory:
  *   post:
  *     summary: Inventory'ye yeni ürün ekle
  *     description: Kullanıcının sahip olduğu veya test ettiği bir ürünü inventory listesine ekler, deneyimlerini ve görsellerini kaydeder.
@@ -197,7 +197,7 @@ router.post(
 
 /**
  * @openapi
- * /inventory:
+ * /api/inventory:
  *   get:
  *     summary: Kullanıcının sahip olduğu ürünlerin listesini getir
  *     description: Kullanıcının sahip olduğu tüm ürünleri brand, reviews, image ve tags bilgileriyle birlikte getirir.
@@ -280,7 +280,7 @@ router.get(
 
 /**
  * @openapi
- * /inventory/{inventoryId}:
+ * /api/inventory/{inventoryId}:
  *   patch:
  *     summary: Kullanıcının sahip olduğu ürünlerin listesinde düzenleme yap
  *     description: Kullanıcının sahip olduğu bir ürünün bilgilerini günceller. hasOwned ve experienceSummary alanları güncellenebilir.
@@ -364,7 +364,7 @@ router.patch(
 
 /**
  * @openapi
- * /inventory/{inventoryId}:
+ * /api/inventory/{inventoryId}:
  *   delete:
  *     summary: Kullanıcının sahip olduğu ürünlerin içerisinden ürün kaldır
  *     description: Kullanıcının sahip olduğu bir ürünü inventory'den kaldırır.
@@ -438,7 +438,7 @@ router.delete(
 
 /**
  * @openapi
- * /inventory/split-experience:
+ * /api/inventory/split-experience:
  *   post:
  *     summary: Deneyim metnini AI ile kategorilere ayır
  *     description: Kullanıcının yazdığı deneyim metnini Gemini AI kullanarak "Price and Shopping Experience" ve "Product and Usage Experience" kategorilerine ayırır.
@@ -498,7 +498,7 @@ router.delete(
  */
 /**
  * @openapi
- * /inventory/experiences/search:
+ * /api/inventory/experiences/search:
  *   get:
  *     summary: Product experience'larda arama yap
  *     description: Experience başlığı ve metninde arama yapar
@@ -622,7 +622,7 @@ router.post(
 
 /**
  * @openapi
- * /inventory/cache/clear:
+ * /api/inventory/cache/clear:
  *   post:
  *     summary: Inventory cache'ini temizle
  *     description: Belirli bir kullanıcının veya tüm kullanıcıların inventory cache'ini temizler

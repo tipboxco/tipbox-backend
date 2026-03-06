@@ -29,7 +29,7 @@ const profileRepo = new ProfilePrismaRepository();
 
 /**
  * @openapi
- * /auth/login:
+ * /api/auth/login:
  *   post:
  *     summary: Kullanıcı girişi
  *     description: Email ve şifre ile kullanıcı girişi yapar ve JWT token döner
@@ -192,7 +192,7 @@ router.post('/login', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
 
 /**
  * @openapi
- * /auth/register:
+ * /api/auth/register:
  *   post:
  *     summary: Manuel kullanıcı kaydı
  *     description: Email, şifre ve isim ile kullanıcı kaydı başlatır. Email doğrulama kodu gönderilir.
@@ -333,7 +333,7 @@ router.post('/resend-verification', verificationRateLimiter, validateBody(Resend
 
 /**
  * @openapi
- * /auth/verify-email:
+ * /api/auth/verify-email:
  *   post:
  *     summary: Email doğrulama
  *     description: Email adresine gönderilen 6 haneli kod ile email doğrulama yapar
@@ -430,7 +430,7 @@ router.post('/verify-email', verificationRateLimiter, validateBody(VerifyEmailSc
 
 /**
  * @openapi
- * /auth/me:
+ * /api/auth/me:
  *   get:
  *     summary: Giriş yapan kullanıcının bilgilerini getir
  *     description: JWT token ile doğrulanmış kullanıcının profil bilgilerini döner
@@ -536,7 +536,7 @@ router.get('/me', authMiddleware, asyncHandler(async (req: Request, res: Respons
 
 /**
  * @openapi
- * /auth/forgot-password:
+ * /api/auth/forgot-password:
  *   post:
  *     summary: Şifre sıfırlama kodu gönderir
  *     description: Email adresine şifre sıfırlama kodu gönderir
@@ -611,7 +611,7 @@ router.post('/forgot-password', verificationRateLimiter, validateBody(ForgotPass
 
 /**
  * @openapi
- * /auth/verify-reset-code:
+ * /api/auth/verify-reset-code:
  *   post:
  *     summary: Şifre sıfırlama kodunu doğrular
  *     description: Email ve kod ile şifre sıfırlama kodunu doğrular
@@ -704,7 +704,7 @@ router.post('/verify-reset-code', verificationRateLimiter, validateBody(VerifyRe
 
 /**
  * @openapi
- * /auth/reset-password:
+ * /api/auth/reset-password:
  *   post:
  *     summary: Şifreyi sıfırlar
  *     description: Email ve yeni şifre ile kullanıcı şifresini günceller
@@ -798,7 +798,7 @@ router.post('/reset-password', verificationRateLimiter, validateBody(ResetPasswo
 
 /**
  * @openapi
- * /auth/logout:
+ * /api/auth/logout:
  *   post:
  *     summary: Kullanıcı çıkışı
  *     description: Mevcut JWT token'ı blacklist'e ekler ve geçersiz kılar

@@ -12,7 +12,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /news/{newsId}:
+ * /api/news/{newsId}:
  *   get:
  *     summary: News detayını getir
  *     description: Belirli bir news'in detaylı bilgilerini getirir. News'ler post olarak saklanır.
@@ -106,7 +106,7 @@ router.get(
 
 /**
  * @openapi
- * /news/{newsId}/like:
+ * /api/news/{newsId}/like:
  *   post:
  *     summary: News'i beğen
  *     tags: [News]
@@ -160,7 +160,7 @@ router.post(
 
 /**
  * @openapi
- * /news/{newsId}/like:
+ * /api/news/{newsId}/like:
  *   delete:
  *     summary: News beğenisini geri al
  *     tags: [News]
@@ -207,7 +207,7 @@ router.delete(
 
 /**
  * @openapi
- * /news/{newsId}/comment:
+ * /api/news/{newsId}/comment:
  *   post:
  *     summary: News'e yorum ekle
  *     tags: [News]
@@ -275,7 +275,7 @@ router.post(
 
 /**
  * @openapi
- * /news/{newsId}/comments:
+ * /api/news/{newsId}/comments:
  *   get:
  *     summary: News yorumlarını listele (bottom sheet için)
  *     tags: [News]
@@ -340,7 +340,7 @@ router.get(
 
 /**
  * @openapi
- * /news/{newsId}/comment/{commentId}/like:
+ * /api/news/{newsId}/comment/{commentId}/like:
  *   post:
  *     summary: News yorumunu beğen
  *     tags: [News]
@@ -395,7 +395,7 @@ router.post(
 
 /**
  * @openapi
- * /news/{newsId}/comment/{commentId}/like:
+ * /api/news/{newsId}/comment/{commentId}/like:
  *   delete:
  *     summary: News yorum beğenisini geri al
  *     tags: [News]
@@ -447,7 +447,7 @@ router.delete(
 
 /**
  * @openapi
- * /news/{newsId}/share:
+ * /api/news/{newsId}/share:
  *   post:
  *     summary: News'i paylaş
  *     tags: [News]
@@ -519,7 +519,7 @@ router.post(
 
 /**
  * @openapi
- * /news/{newsId}/favorite:
+ * /api/news/{newsId}/favorite:
  *   post:
  *     summary: News'i favorilere ekle (bookmark)
  *     tags: [News]
@@ -569,7 +569,7 @@ router.post(
 
 /**
  * @openapi
- * /news/{newsId}/favorite:
+ * /api/news/{newsId}/favorite:
  *   delete:
  *     summary: News'i favorilerden çıkar
  *     tags: [News]

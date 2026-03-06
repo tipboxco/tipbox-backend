@@ -287,7 +287,7 @@ router.post(
 
 /**
  * @openapi
- * /sync-receiver:
+ * /api/sync-receiver:
  *   get:
  *     summary: Sync receiver endpoint durumunu kontrol et
  *     description: Endpoint'in hazır olup olmadığını ve beklenen payload formatını döner.
@@ -346,7 +346,7 @@ router.get(
 
 /**
  * @openapi
- * /sync-receiver/stats/{moduleType}:
+ * /api/sync-receiver/stats/{moduleType}:
  *   get:
  *     summary: Modül tipine göre kayıt sayısını getir
  *     description: Veritabanındaki brand, category veya product sayısını döner.

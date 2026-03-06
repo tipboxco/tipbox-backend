@@ -108,7 +108,7 @@ const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefine
 
 /**
  * @openapi
- * /users/me/profile:
+ * /api/users/me/profile:
  *   get:
  *     summary: Hesabın profil bilgileri (self profile)
  *     description: Giriş yapan kullanıcının detaylı profil bilgisini döner.
@@ -175,7 +175,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/me/profile:
+ * /api/users/me/profile:
  *   put:
  *     summary: Profil bilgilerini güncelle
  *     description: Profil bilgilerini günceller. Avatar ve banner için ayrı upload endpoint'leri kullanılmalıdır (POST /users/me/avatar ve POST /users/me/banner).
@@ -194,7 +194,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
  */
 /**
  * @openapi
- * /users/me/avatar:
+ * /api/users/me/avatar:
  *   post:
  *     summary: Avatar yükle
  *     description: Multipart/form-data ile avatar dosyası yükler ve avatar URL'ini döner.
@@ -408,7 +408,7 @@ router.post(
 
 /**
  * @openapi
- * /users/me/banner:
+ * /api/users/me/banner:
  *   post:
  *     summary: Banner yükle
  *     description: Multipart/form-data ile banner dosyası yükler ve banner URL'ini döner.
@@ -664,7 +664,7 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
 
 /**
  * @openapi
- * /users/{id}/profile:
+ * /api/users/{id}/profile:
  *   get:
  *     summary: Kullanıcı profili (diğer kullanıcı)
  *     description: Ziyaret edilen kullanıcının profilini ve "isTrusted" durumunu döner.
@@ -729,7 +729,7 @@ router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/suggested:
+ * /api/users/suggested:
  *   get:
  *     summary: Önerilen kullanıcıları getir (Suggested Users)
  *     description: |
@@ -884,7 +884,7 @@ router.get('/suggested', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/trusts:
+ * /api/users/{id}/trusts:
  *   get:
  *     summary: Kullanıcının trust listesini getirir
  *     tags: [Users]
@@ -912,7 +912,7 @@ router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/trusters:
+ * /api/users/{id}/trusters:
  *   get:
  *     summary: Kullanıcının truster listesini getirir
  *     tags: [Users]
@@ -951,7 +951,7 @@ router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => 
 
 /**
  * @openapi
- * /users/trusts/{targetUserId}:
+ * /api/users/trusts/{targetUserId}:
  *   delete:
  *     summary: Trust listesinden kullanıcı kaldır (authenticated user için)
  *     description: Authenticated user'ın trust listesinden belirtilen kullanıcıyı kaldırır. User ID auth token'dan alınır.
@@ -986,7 +986,7 @@ router.delete('/trusts/:targetUserId', asyncHandler(async (req: Request, res: Re
 
 /**
  * @openapi
- * /users/trust:
+ * /api/users/trust:
  *   post:
  *     summary: Trust ekle
  *     tags: [Users]
@@ -1031,7 +1031,7 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/collections/bridges:
+ * /api/users/{id}/collections/bridges:
  *   get:
  *     summary: Bridge badge koleksiyonu
  *     tags: [Collections]
@@ -1137,7 +1137,7 @@ router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Re
 
 /**
  * @openapi
- * /users/collections/achievements/claim:
+ * /api/users/collections/achievements/claim:
  *   post:
  *     summary: Achievement badge claim et (query string ile)
  *     description: badgeId query parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
@@ -1168,7 +1168,7 @@ router.post('/collections/achievements/claim', asyncHandler(handleAchievementCla
 
 /**
  * @openapi
- * /users/collections/achievements/{badgeId}/claim:
+ * /api/users/collections/achievements/{badgeId}/claim:
  *   post:
  *     summary: Achievement badge claim et (path ile)
  *     description: badgeId path parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
@@ -1199,7 +1199,7 @@ router.post('/collections/achievements/:badgeId/claim', asyncHandler(handleAchie
 
 /**
  * @openapi
- * /collections/bridges/{badgeId}/claim:
+ * /api/collections/bridges/{badgeId}/claim:
  *   post:
  *     summary: Bridge badge claim et
  *     tags: [Collections]
@@ -1269,7 +1269,7 @@ async function handleAchievementClaim(req: Request, res: Response): Promise<void
 
 /**
  * @openapi
- * /users/collections/bridges/claim:
+ * /api/users/collections/bridges/claim:
  *   post:
  *     summary: Bridge badge claim et (query string ile)
  *     description: badgeId query parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
@@ -1300,7 +1300,7 @@ router.post('/collections/bridges/claim', asyncHandler(handleBridgeClaim));
 
 /**
  * @openapi
- * /users/collections/bridges/{badgeId}/claim:
+ * /api/users/collections/bridges/{badgeId}/claim:
  *   post:
  *     summary: Bridge badge claim et (path ile)
  *     description: badgeId path parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
@@ -1390,7 +1390,7 @@ async function handleBridgeClaim(req: Request, res: Response): Promise<void> {
 
 /**
  * @openapi
- * /users:
+ * /api/users:
  *   post:
  *     summary: Yeni kullanıcı oluştur
  *     description: Email ve display name ile yeni kullanıcı oluşturur (admin işlemi)
@@ -1600,7 +1600,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/avatars:
+ * /api/users/avatars:
  *   get:
  *     summary: Mevcut avatar listesini getirir
  *     description: Setup profile sırasında kullanıcıya gösterilecek 12 adet default avatar listesini döndürür.
@@ -1687,7 +1687,7 @@ router.get('/avatars', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/setup-profile:
+ * /api/users/setup-profile:
  *   post:
  *     summary: Kullanıcı profilini tamamlar (Set Up Profile)
  *     description: Email doğrulaması sonrası kullanıcı profilini tamamlar. FullName, UserName, Avatar, Banner ve ilgi alanlarını kaydeder.
@@ -2023,7 +2023,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
 
 /**
  * @openapi
- * /users/username/check:
+ * /api/users/username/check:
  *   get:
  *     summary: Username müsaitlik ve geçerlilik kontrolü
  *     description: Kullanıcı input'a girdikçe real-time olarak username'in geçerli ve müsait olup olmadığını kontrol eder
@@ -2112,7 +2112,7 @@ router.get('/username/check', asyncHandler(async (req: Request, res: Response) =
 
 /**
  * @openapi
- * /users/username/suggestions:
+ * /api/users/username/suggestions:
  *   get:
  *     summary: Username önerileri (Instagram benzeri)
  *     description: Verilen username müsait değilse, benzer ve müsait username önerileri döner
@@ -2200,7 +2200,7 @@ router.get('/username/suggestions', asyncHandler(async (req: Request, res: Respo
 
 /**
  * @openapi
- * /users/categories:
+ * /api/users/categories:
  *   get:
  *     summary: Kullanıcı kayıt için kategori ve sub-kategori listesi
  *     description: Her kategori için dinamik olarak en fazla 10 sub-kategoriyi döner. Alfabetik sıraya göre ilk 10 sub-kategori getirilir.
@@ -2280,7 +2280,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}:
+ * /api/users/{id}:
  *   get:
  *     summary: Kullanıcıyı ID ile getir
  *     description: Belirtilen ID'ye sahip kullanıcının detaylı bilgilerini döner
@@ -2396,7 +2396,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/profile-card:
+ * /api/users/{id}/profile-card:
  *   get:
  *     summary: Kullanıcının profil kartını getir
  *     description: Profil kartı için isim, avatar, banner, açıklama, unvanlar, istatistikler ve rozetleri döner
@@ -2483,7 +2483,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /users/{id}/trusts/{targetUserId}:
+ * /api/users/{id}/trusts/{targetUserId}:
  *   delete:
  *     summary: Trust listesinden kaldır
  *     tags: [Users]
@@ -2509,7 +2509,7 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
 
 /**
  * @openapi
- * /users/{id}/block/{targetUserId}:
+ * /api/users/{id}/block/{targetUserId}:
  *   post:
  *     summary: Bir kullanıcıyı engelle (block)
  *     tags: [Users]
@@ -2545,7 +2545,7 @@ router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: R
 
 /**
  * @openapi
- * /users/{id}/block/{targetUserId}:
+ * /api/users/{id}/block/{targetUserId}:
  *   delete:
  *     summary: Bir kullanıcının engelini kaldır (unblock)
  *     tags: [Users]
@@ -2582,7 +2582,7 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
 
 /**
  * @openapi
- * /users/{id}/report/{targetUserId}:
+ * /api/users/{id}/report/{targetUserId}:
  *   post:
  *     summary: Bir kullanıcıyı raporla (report)
  *     description: Bir kullanıcıyı belirtilen kategori ve açıklama ile raporlar
@@ -2657,7 +2657,7 @@ router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: 
 
 /**
  * @openapi
- * /users/{id}/mute/{targetUserId}:
+ * /api/users/{id}/mute/{targetUserId}:
  *   post:
  *     summary: Bir kullanıcıyı sustur (mute)
  *     tags: [Users]
@@ -2693,7 +2693,7 @@ router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Re
 
 /**
  * @openapi
- * /users/{id}/mute/{targetUserId}:
+ * /api/users/{id}/mute/{targetUserId}:
  *   delete:
  *     summary: Bir kullanıcının susturulmasını kaldır (unmute)
  *     tags: [Users]
@@ -2730,7 +2730,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
 
 /**
  * @openapi
- * /users/{id}/collections/achievements:
+ * /api/users/{id}/collections/achievements:
  *   get:
  *     summary: Kullanıcının Achievement Badge koleksiyonunu listele
  *     description: Kullanıcının kazandığı achievement badge'leri döner. Arama parametresi ile filtreleme yapılabilir.
@@ -2846,7 +2846,7 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
 
 /**
  * @openapi
- * /users/{id}/feed:
+ * /api/users/{id}/feed:
  *   get:
  *     summary: Kullanıcının paylaştığı feed gönderilerini listele
  *     tags: [Users]
@@ -2898,7 +2898,7 @@ router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/reviews:
+ * /api/users/{id}/reviews:
  *   get:
  *     summary: Kullanıcının paylaştığı review'ları listele
  *     tags: [Users]
@@ -2956,7 +2956,7 @@ router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/benchmarks:
+ * /api/users/{id}/benchmarks:
  *   get:
  *     summary: Kullanıcının paylaştığı benchmark'ları listele
  *     tags: [Users]
@@ -3014,7 +3014,7 @@ router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) =
 
 /**
  * @openapi
- * /users/{id}/tips:
+ * /api/users/{id}/tips:
  *   get:
  *     summary: Kullanıcının paylaştığı tips&tricks'leri listele
  *     tags: [Users]
@@ -3072,7 +3072,7 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/questions:
+ * /api/users/{id}/questions:
  *   get:
  *     summary: Kullanıcının soru cevaplarını (reply) listele
  *     tags: [Users]
@@ -3130,7 +3130,7 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * @openapi
- * /users/{id}/bookmarks:
+ * /api/users/{id}/bookmarks:
  *   get:
  *     summary: Kullanıcının bookmark ettiği gönderileri listele
  *     description: |
@@ -3334,7 +3334,7 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * @openapi
- * /users/settings/change-password:
+ * /api/users/settings/change-password:
  *   post:
  *     summary: Şifre değiştir
  *     description: Kullanıcının şifresini değiştirir
@@ -3387,7 +3387,7 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
 
 /**
  * @openapi
- * /users/settings/notifications:
+ * /api/users/settings/notifications:
  *   get:
  *     summary: Bildirim ayarlarını getir
  *     description: Kullanıcının tüm bildirim ayarlarını getirir (kanal, kategori ve global ayarlar)
@@ -3470,7 +3470,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
 
 /**
  * @openapi
- * /users/settings/notifications:
+ * /api/users/settings/notifications:
  *   put:
  *     summary: Bildirim ayarlarını güncelle
  *     description: Kullanıcının bildirim ayarlarını günceller. Hem eski format (array) hem de yeni format (object) desteklenir.
@@ -3581,7 +3581,7 @@ router.put('/settings/notifications', asyncHandler(async (req: Request, res: Res
 
 /**
  * @openapi
- * /users/settings/privacy:
+ * /api/users/settings/privacy:
  *   get:
  *     summary: Gizlilik ayarlarını getir
  *     description: Kullanıcının gizlilik ayarlarını getirir
@@ -3619,7 +3619,7 @@ router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /users/settings/privacy:
+ * /api/users/settings/privacy:
  *   put:
  *     summary: Gizlilik ayarlarını güncelle
  *     description: Kullanıcının gizlilik ayarlarını günceller
@@ -3668,7 +3668,7 @@ router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /users/settings/support-session-price:
+ * /api/users/settings/support-session-price:
  *   get:
  *     summary: Destek oturumu fiyatını getir
  *     description: Kullanıcının destek oturumu fiyatını getirir
@@ -3702,7 +3702,7 @@ router.get('/settings/support-session-price', asyncHandler(async (req: Request, 
 
 /**
  * @openapi
- * /users/settings/support-session-price:
+ * /api/users/settings/support-session-price:
  *   put:
  *     summary: Destek oturumu fiyatını güncelle
  *     description: Kullanıcının destek oturumu fiyatını günceller (minimum 50 TIPS, 10 günde bir değiştirilebilir)
@@ -3751,7 +3751,7 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
 
 /**
  * @openapi
- * /users/settings/devices:
+ * /api/users/settings/devices:
  *   get:
  *     summary: Bağlı cihazları getir
  *     description: Kullanıcının bağlı cihazlarını getirir
@@ -3794,7 +3794,7 @@ router.get('/settings/devices', asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /users/settings/devices/{deviceId}:
+ * /api/users/settings/devices/{deviceId}:
  *   delete:
  *     summary: Cihazı kaldır
  *     description: Bağlı cihazı listeden kaldırır
@@ -3832,7 +3832,7 @@ router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, r
 
 /**
  * @openapi
- * /users/settings/devices:
+ * /api/users/settings/devices:
  *   delete:
  *     summary: Tüm cihazları kaldır
  *     description: Kullanıcının tüm bağlı cihazlarını listeden kaldırır
@@ -3868,7 +3868,7 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
 
 /**
  * @openapi
- * /users/settings/payment-dashboard:
+ * /api/users/settings/payment-dashboard:
  *   get:
  *     summary: Ödeme özeti (kartlar, abonelik, son faturalar)
  *     description: Ayarlar sayfası için kayıtlı kartlar, aktif abonelik ve son 3-5 faturayı döner.
@@ -3904,7 +3904,7 @@ router.get('/settings/payment-dashboard', asyncHandler(async (req: Request, res:
 
 /**
  * @openapi
- * /users/settings/payment-methods:
+ * /api/users/settings/payment-methods:
  *   post:
  *     summary: Yeni kart ekle
  *     description: Ödeme sağlayıcısından alınan token ile kart eklenir. Kart bilgisi backend'e gönderilmez.
@@ -3953,7 +3953,7 @@ router.post('/settings/payment-methods', asyncHandler(async (req: Request<{}, {}
 
 /**
  * @openapi
- * /users/settings/payment-methods/{id}:
+ * /api/users/settings/payment-methods/{id}:
  *   patch:
  *     summary: Kart ismini güncelle
  *     description: Sadece card_alias güncellenir.
@@ -3996,7 +3996,7 @@ router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request, 
 
 /**
  * @openapi
- * /users/settings/payment-methods/{id}:
+ * /api/users/settings/payment-methods/{id}:
  *   delete:
  *     summary: Kayıtlı kartı sil
  *     description: Kart aktif abonelikte kullanılıyorsa silme reddedilir (409, error_code CARD_IN_USE_BY_SUBSCRIPTION).
@@ -4038,7 +4038,7 @@ router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request,
 
 /**
  * @openapi
- * /users/settings/invoices:
+ * /api/users/settings/invoices:
  *   get:
  *     summary: Fatura geçmişi listele
  *     description: sort_by (date_asc, date_desc), limit, offset ile sayfalı liste.
@@ -4079,7 +4079,7 @@ router.get('/settings/invoices', asyncHandler(async (req: Request, res: Response
 
 /**
  * @openapi
- * /users/me:
+ * /api/users/me:
  *   delete:
  *     summary: Kullanıcı hesabını sil
  *     description: Kullanıcının kendi hesabını siler. İlişkili veriler temizlenir ve GDPR uyumluluğu sağlanır.
@@ -4116,7 +4116,7 @@ router.delete('/me', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/collections/bridges/{badgeId}:
+ * /api/users/{id}/collections/bridges/{badgeId}:
  *   get:
  *     summary: Get badge detail with tasks (EP-03)
  *     description: Get detailed badge information including task progress
@@ -4157,7 +4157,7 @@ router.get(
 
 /**
  * @openapi
- * /users/me/highlight-badges:
+ * /api/users/me/highlight-badges:
  *   get:
  *     summary: Get highlight badge selection data (EP-05)
  *     description: Get current highlight badges and available badges for selection
@@ -4189,7 +4189,7 @@ router.get(
 
 /**
  * @openapi
- * /users/me/highlight-badges:
+ * /api/users/me/highlight-badges:
  *   put:
  *     summary: Update highlight badges (EP-06)
  *     description: Set up to 4 highlight badges for profile

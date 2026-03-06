@@ -815,7 +815,7 @@ router.post(
 
 /**
  * @swagger
- * /admin/messaging/notifications/stats:
+ * /api/admin/messaging/notifications/stats:
  *   get:
  *     tags: [Admin - Messaging]
  *     summary: Get notifications statistics
@@ -862,7 +862,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/messaging/direct-messages/stats:
+ * /api/admin/messaging/direct-messages/stats:
  *   get:
  *     tags: [Admin - Messaging]
  *     summary: Get direct messages statistics

@@ -361,7 +361,7 @@ router.delete(
 
 /**
  * @swagger
- * /admin/gamification/user-progress/stats:
+ * /api/admin/gamification/user-progress/stats:
  *   get:
  *     tags: [Admin - Gamification]
  *     summary: Get user progress statistics
@@ -570,7 +570,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/gamification/brand-badges/stats:
+ * /api/admin/gamification/brand-badges/stats:
  *   get:
  *     tags: [Admin - Gamification]
  *     summary: Get brand badges statistics
@@ -619,7 +619,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/gamification/event-badges/stats:
+ * /api/admin/gamification/event-badges/stats:
  *   get:
  *     tags: [Admin - Gamification]
  *     summary: Get event badges statistics
@@ -668,7 +668,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/gamification/cosmetic-badges/stats:
+ * /api/admin/gamification/cosmetic-badges/stats:
  *   get:
  *     tags: [Admin - Gamification]
  *     summary: Get cosmetic badges statistics

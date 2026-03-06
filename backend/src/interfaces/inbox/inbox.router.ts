@@ -26,7 +26,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /inbox:
+ * /api/inbox:
  *   get:
  *     summary: Messages - Kullanıcının mesaj kutusunu getirir
  *     description: Oturum açmış kullanıcının DM mesaj kutusundaki thread listesini döner.
@@ -151,7 +151,7 @@ router.use(authMiddleware);
  */
 /**
  * @openapi
- * /inbox/feed:
+ * /api/inbox/feed:
  *   get:
  *     summary: Message Feed - Kullanıcının mesaj feed'ini getirir
  *     description: Kullanıcının mesajlarını, TIPS'leri ve 1-on-1 Support Request'lerini birleşik olarak getirir.
@@ -301,7 +301,7 @@ router.get(
 
 /**
  * @openapi
- * /inbox:
+ * /api/inbox:
  *   post:
  *     summary: Direkt mesaj gönder (mesaj + fotoğraf desteği ile)
  *     description: |
@@ -486,7 +486,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/threads:
+ * /api/inbox/threads:
  *   post:
  *     summary: Thread oluştur veya mevcut thread'i getir
  *     description: |
@@ -570,7 +570,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/threads/{threadId}:
+ * /api/inbox/threads/{threadId}:
  *   get:
  *     summary: Thread detay bilgisini getir
  *     description: |
@@ -666,7 +666,7 @@ router.get(
 
 /**
  * @openapi
- * /inbox/support-requests:
+ * /api/inbox/support-requests:
  *   get:
  *     summary: 1-On-1 Support Request - Kullanıcının birebir destek sohbetlerini getirir
  *     description: Oturum açmış kullanıcının geçmiş ve devam eden birebir destek sohbetlerinin listesini döner.
@@ -811,7 +811,7 @@ router.get(
 
 /**
  * @openapi
- * /inbox/support-requests:
+ * /api/inbox/support-requests:
  *   post:
  *     summary: 1-on-1 destek talebi oluştur
  *     description: Bir kullanıcıya 1-on-1 destek talebi oluşturur. Talep oluşturulduğunda `new_message` socket event'i tetiklenir.
@@ -990,7 +990,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/accept:
+ * /api/inbox/support-requests/{requestId}/accept:
  *   post:
  *     summary: Support request'i accept et
  *     description: |
@@ -1080,7 +1080,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/reject:
+ * /api/inbox/support-requests/{requestId}/reject:
  *   post:
  *     summary: Support request'i reject et
  *     description: Expert, support request'i reject eder.
@@ -1140,7 +1140,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/cancel:
+ * /api/inbox/support-requests/{requestId}/cancel:
  *   post:
  *     summary: Support request'i iptal et (sender)
  *     description: Destek talebini gönderen kullanıcı, talep kabul edilmeden önce iptal edebilir.
@@ -1200,7 +1200,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/close:
+ * /api/inbox/support-requests/{requestId}/close:
  *   post:
  *     summary: Support request'i kapat ve rating ver
  *     description: |
@@ -1303,7 +1303,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/finalize:
+ * /api/inbox/support-requests/{requestId}/finalize:
  *   post:
  *     summary: Support request'i finalize et (karşı tarafın close'unu onayla)
  *     description: |
@@ -1409,7 +1409,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/support-requests/{requestId}/report:
+ * /api/inbox/support-requests/{requestId}/report:
  *   post:
  *     summary: Support request'i raporla
  *     description: |
@@ -1520,7 +1520,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/tips:
+ * /api/inbox/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
  *     description: |
@@ -1662,7 +1662,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/share-post:
+ * /api/inbox/share-post:
  *   post:
  *     summary: Post paylaş (DM'e post gönder)
  *     description: |
@@ -1880,7 +1880,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/{messageId}/read:
+ * /api/inbox/{messageId}/read:
  *   post:
  *     summary: "[DEPRECATED] Mesajı okundu olarak işaretle"
  *     description: |
@@ -1957,7 +1957,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/{threadId}:
+ * /api/inbox/{threadId}:
  *   get:
  *     summary: Thread mesajlarını getir (DM veya Support Chat)
  *     description: |
@@ -2205,7 +2205,7 @@ router.get(
 
 /**
  * @openapi
- * /messaging/inbox/{messageId}:
+ * /api/messaging/inbox/{messageId}:
  *   put:
  *     summary: Mesaj güncelle
  *     description: Sadece mesajın göndereni, mesajı gönderdikten sonra 5 dakika içinde güncelleyebilir.
@@ -2280,7 +2280,7 @@ router.put(
 
 /**
  * @openapi
- * /messaging/inbox/{messageId}:
+ * /api/messaging/inbox/{messageId}:
  *   delete:
  *     summary: Mesaj sil
  *     description: Sadece mesajın göndereni kendi mesajını silebilir.
@@ -2310,7 +2310,7 @@ router.put(
 
 /**
  * @openapi
- * /messaging/threads/{threadId}:
+ * /api/messaging/threads/{threadId}:
  *   delete:
  *     summary: Thread sil
  *     description: Thread'deki kullanıcılardan biri thread'i silebilir. Thread soft delete yapılır (isActive = false).
@@ -2364,7 +2364,7 @@ router.delete(
 
 /**
  * @openapi
- * /inbox/{messageId}:
+ * /api/inbox/{messageId}:
  *   patch:
  *     summary: Mesajı düzenle
  *     description: Mesajı düzenler (15 dakika limit ile)
@@ -2444,7 +2444,7 @@ router.patch(
 
 /**
  * @openapi
- * /inbox/messages/{messageId}:
+ * /api/inbox/messages/{messageId}:
  *   delete:
  *     summary: Mesajı sil
  *     description: Mesajı soft delete yapar. Sadece mesajın göndereni kendi mesajını silebilir.
@@ -2512,7 +2512,7 @@ router.delete(
 
 /**
  * @openapi
- * /inbox/{messageId}:
+ * /api/inbox/{messageId}:
  *   delete:
  *     summary: Mesajı sil (alternatif endpoint)
  *     description: Mesajı soft delete yapar. Frontend /inbox/messages/{messageId} kullanmalı.
@@ -2568,7 +2568,7 @@ router.delete(
 
 /**
  * @openapi
- * /inbox/{messageId}/reactions:
+ * /api/inbox/{messageId}/reactions:
  *   post:
  *     summary: Mesaja reaksiyon ekle
  *     description: Mesaja emoji reaksiyon ekler
@@ -2641,7 +2641,7 @@ router.post(
 
 /**
  * @openapi
- * /inbox/{messageId}/reactions:
+ * /api/inbox/{messageId}/reactions:
  *   get:
  *     summary: Mesajın reaksiyonlarını getir
  *     description: Mesajın tüm reaksiyonlarını gruplu olarak getirir
@@ -2691,7 +2691,7 @@ router.get(
 
 /**
  * @openapi
- * /inbox/{messageId}/reactions/{reactionId}:
+ * /api/inbox/{messageId}/reactions/{reactionId}:
  *   delete:
  *     summary: Reaksiyonu kaldır
  *     description: Mesajdan reaksiyon kaldırır
@@ -2764,7 +2764,7 @@ router.delete(
 
 /**
  * @openapi
- * /inbox/threads/{threadId}/search:
+ * /api/inbox/threads/{threadId}/search:
  *   get:
  *     summary: Thread içinde mesaj ara
  *     description: Thread içinde full-text search yapar
@@ -2860,7 +2860,7 @@ router.get(
 
 /**
  * @openapi
- * /inbox/threads/{threadId}/media:
+ * /api/inbox/threads/{threadId}/media:
  *   post:
  *     summary: Thread'e medya yükle
  *     description: Thread'e görsel, video, ses veya dosya yükler

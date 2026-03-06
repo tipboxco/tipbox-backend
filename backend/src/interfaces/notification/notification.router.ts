@@ -1265,7 +1265,7 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
 
 /**
  * @openapi
- * /notifications:
+ * /api/notifications:
  *   get:
  *     tags:
  *       - Notifications
@@ -1602,7 +1602,7 @@ router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /notifications/unread-count:
+ * /api/notifications/unread-count:
  *   get:
  *     tags:
  *       - Notifications
@@ -1678,7 +1678,7 @@ router.get('/unread-count', authMiddleware, asyncHandler(async (req: Request, re
 
 /**
  * @openapi
- * /notifications/{id}/read:
+ * /api/notifications/{id}/read:
  *   put:
  *     tags:
  *       - Notifications
@@ -1740,7 +1740,7 @@ router.put('/:id/read', authMiddleware, asyncHandler(async (req: Request, res: R
 
 /**
  * @openapi
- * /notifications/mark-all-read:
+ * /api/notifications/mark-all-read:
  *   put:
  *     tags:
  *       - Notifications
@@ -1810,7 +1810,7 @@ router.put('/mark-all-read', authMiddleware, asyncHandler(async (req: Request, r
 
 /**
  * @openapi
- * /notifications/{id}:
+ * /api/notifications/{id}:
  *   delete:
  *     tags:
  *       - Notifications
@@ -1852,7 +1852,7 @@ router.delete('/:id', authMiddleware, asyncHandler(async (req: Request, res: Res
 
 /**
  * @openapi
- * /notifications/settings:
+ * /api/notifications/settings:
  *   get:
  *     tags:
  *       - Notifications
@@ -1944,7 +1944,7 @@ router.get('/settings', authMiddleware, asyncHandler(async (req: Request, res: R
 
 /**
  * @openapi
- * /notifications/settings:
+ * /api/notifications/settings:
  *   put:
  *     tags:
  *       - Notifications
@@ -2001,7 +2001,7 @@ router.put('/settings', authMiddleware, validateBody(UpdateNotificationSettingsS
 
 /**
  * @openapi
- * /notifications/push-token:
+ * /api/notifications/push-token:
  *   post:
  *     tags:
  *       - Notifications
@@ -2076,7 +2076,7 @@ router.post('/push-token', authMiddleware, validateBody(RegisterPushTokenSchema)
 
 /**
  * @openapi
-    * /notifications/push-token:
+    * /api/notifications/push-token:
  *   delete:
  *     tags:
  *       - Notifications

@@ -142,7 +142,7 @@ async function processPostImages(
 
 /**
  * @openapi
- * /posts/free:
+ * /api/posts/free:
  *   post:
  *     summary: Serbest gönderi oluştur
  *     description: Sub Category, Product Group veya Product için serbest gönderi oluşturur.
@@ -228,7 +228,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/tips-and-tricks:
+ * /api/posts/tips-and-tricks:
  *   post:
  *     summary: İpucu gönderisi oluştur
  *     description: Sub Category, Product Group veya Product için ipucu gönderisi oluşturur.
@@ -302,7 +302,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/question:
+ * /api/posts/question:
  *   post:
  *     summary: Soru gönderisi oluştur
  *     description: Sub Category, Product Group veya Product için soru gönderisi oluşturur.
@@ -377,7 +377,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/boost-options:
+ * /api/posts/boost-options:
  *   get:
  *     summary: Boost option listesini getir
  *     description: Soru gönderisi için kullanılabilir boost option'ları getirir.
@@ -411,7 +411,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/boost-price:
+ * /api/posts/boost-price:
  *   get:
  *     summary: Boost fiyatını getir (TIPS)
  *     description: Soru gönderisi boost için anlık fiyat. İleride onchain/yoğunluğa göre belirlenecek; şimdilik base değer.
@@ -452,7 +452,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/benchmark:
+ * /api/posts/benchmark:
  *   post:
  *     summary: Karşılaştırma gönderisi oluştur
  *     description: Product için karşılaştırma gönderisi oluşturur. En az 2 ürün seçilmelidir.
@@ -696,7 +696,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/experience:
+ * /api/posts/experience:
  *   post:
  *     summary: Deneyim paylaşımı gönderisi oluştur
  *     description: |
@@ -922,7 +922,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/experience/split:
+ * /api/posts/experience/split:
  *   post:
  *     summary: Deneyimi AI ile ayır
  *     description: Kullanıcının girdiği deneyimi Price and Shopping Experience ve Product and Usage Experience olarak ayırır.
@@ -988,7 +988,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/experience/options:
+ * /api/posts/experience/options:
  *   get:
  *     summary: Deneyim seçeneklerini getir
  *     description: Duration, Location ve Purpose seçeneklerini getirir.
@@ -1048,7 +1048,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/{postId}/boost:
+ * /api/posts/{postId}/boost:
  *   patch:
  *     summary: Post boost aç/kapa
  *     description: Soru gönderisi için boost açar veya kapatır. Açarken TIPS düşülür; kapatırken iade yok.
@@ -1119,7 +1119,7 @@ router.patch(
 
 /**
  * @openapi
- * /posts/{id}:
+ * /api/posts/{id}:
  *   get:
  *     summary: Gönderi detayını getir
  *     description: Post ID'sine göre gönderi detayını getirir.
@@ -1170,7 +1170,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/{id}/likes:
+ * /api/posts/{id}/likes:
  *   get:
  *     summary: Post beğenenlerini listele
  *     description: Belirli bir post'a beğeni atan kullanıcıları listeler. Instagram gibi bottom sheet'te gösterilmek için tasarlanmıştır.
@@ -1446,7 +1446,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/{id}:
+ * /api/posts/{id}:
  *   delete:
  *     summary: Gönderi sil
  *     description: Sadece gönderinin sahibi kendi gönderisini silebilir.
@@ -1502,7 +1502,7 @@ router.delete(
 
 /**
  * @openapi
- * /posts/update:
+ * /api/posts/update:
  *   post:
  *     summary: Güncelleme gönderisi oluştur
  *     description: |
@@ -1600,7 +1600,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/update/reviews/{productId}:
+ * /api/posts/update/reviews/{productId}:
  *   get:
  *     summary: Ürün için review bilgilerini getir
  *     description: Kullanıcının belirtilen ürün için yapmış olduğu review bilgilerini getirir.
@@ -1665,7 +1665,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/split-experience:
+ * /api/posts/split-experience:
  *   post:
  *     summary: Deneyim metnini AI ile kategorilere ayır
  *     description: Kullanıcının yazdığı deneyim metnini Gemini AI kullanarak "Price and Shopping Experience" ve "Product and Usage Experience" kategorilerine ayırır.
@@ -1728,7 +1728,7 @@ router.post(
 
 /**
  * @openapi
- * /posts/search:
+ * /api/posts/search:
  *   get:
  *     summary: Post'larda arama yap
  *     description: Post başlığı ve içeriğinde arama yapar
@@ -1806,7 +1806,7 @@ router.get(
 
 /**
  * @openapi
- * /posts/{eventId}/post:
+ * /api/posts/{eventId}/post:
  *   post:
  *     summary: Event için post oluştur
  *     description: Belirli bir event için post oluşturur. InventoryId ile productId otomatik olarak çözümlenir.

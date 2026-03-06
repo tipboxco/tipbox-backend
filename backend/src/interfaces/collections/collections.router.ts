@@ -21,7 +21,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /events/collections:
+ * /api/events/collections:
  *   get:
  *     summary: Collection listesini getir
  *     description: |
@@ -168,7 +168,7 @@ router.get(
 
 /**
  * @openapi
- * /events/collections/categories:
+ * /api/events/collections/categories:
  *   get:
  *     summary: Collection chip filtre kategorilerini getir
  *     description: |
@@ -214,7 +214,7 @@ router.get(
 
 /**
  * @openapi
- * /events/collections/{collectionId}:
+ * /api/events/collections/{collectionId}:
  *   get:
  *     summary: Collection detayı ve badge listesi
  *     description: |
@@ -342,7 +342,7 @@ router.get(
 
 /**
  * @openapi
- * /events/collections/badges/{badgeId}/reminder:
+ * /api/events/collections/badges/{badgeId}/reminder:
  *   post:
  *     summary: Badge için hatırlatma ayarla
  *     description: Belirtilen zamanda (veya varsayılan 1 gün sonra) badge görevi tamamlama hatırlatması gönderilir. Aynı badge için mevcut hatırlatma varsa güncellenir.

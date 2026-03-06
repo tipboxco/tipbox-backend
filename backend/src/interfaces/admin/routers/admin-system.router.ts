@@ -448,7 +448,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/system/moderation-actions/stats:
+ * /api/admin/system/moderation-actions/stats:
  *   get:
  *     tags: [Admin - System]
  *     summary: Get moderation actions statistics
@@ -496,7 +496,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/system/admin-logs/stats:
+ * /api/admin/system/admin-logs/stats:
  *   get:
  *     tags: [Admin - System]
  *     summary: Get admin logs statistics

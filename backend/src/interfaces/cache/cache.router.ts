@@ -19,7 +19,7 @@ const cacheService = CacheService.getInstance();
 
 /**
  * @openapi
- * /cache/metrics:
+ * /api/cache/metrics:
  *   get:
  *     summary: Cache metrics'lerini döndürür (Admin only)
  *     tags: [Cache]
@@ -49,7 +49,7 @@ router.get(
 
 /**
  * @openapi
- * /cache/metrics/reset:
+ * /api/cache/metrics/reset:
  *   post:
  *     summary: Cache metrics'lerini sıfırlar (Admin only)
  *     tags: [Cache]
@@ -80,7 +80,7 @@ router.post(
 
 /**
  * @openapi
- * /cache/invalidate/user/{userId}:
+ * /api/cache/invalidate/user/{userId}:
  *   delete:
  *     summary: Belirli bir user'ın cache'ini temizler (Admin only)
  *     tags: [Cache]
@@ -120,7 +120,7 @@ router.delete(
 
 /**
  * @openapi
- * /cache/invalidate/post/{postId}:
+ * /api/cache/invalidate/post/{postId}:
  *   delete:
  *     summary: Belirli bir post'un cache'ini temizler (Admin only)
  *     tags: [Cache]
@@ -160,7 +160,7 @@ router.delete(
 
 /**
  * @openapi
- * /cache/invalidate/feed/{userId}:
+ * /api/cache/invalidate/feed/{userId}:
  *   delete:
  *     summary: Belirli bir user'ın feed cache'ini temizler (Admin only)
  *     tags: [Cache]
@@ -200,7 +200,7 @@ router.delete(
 
 /**
  * @openapi
- * /cache/invalidate/trending:
+ * /api/cache/invalidate/trending:
  *   delete:
  *     summary: Trending cache'ini temizler (Admin only)
  *     tags: [Cache]
@@ -231,7 +231,7 @@ router.delete(
 
 /**
  * @openapi
- * /cache/status:
+ * /api/cache/status:
  *   get:
  *     summary: Cache connection durumunu döndürür
  *     tags: [Cache]

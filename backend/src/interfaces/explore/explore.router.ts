@@ -8,7 +8,7 @@ const exploreService = new ExploreService();
 
 /**
  * @openapi
- * /explore/hottest:
+ * /api/explore/hottest:
  *   get:
  *     summary: Trend olan içerikleri getir (Hottest)
  *     description: Sistemdeki en çok trend olan içerikleri getirir. Feed formatında döner.
@@ -107,7 +107,7 @@ router.get(
 
 /**
  * @openapi
- * /explore/marketplace-banners:
+ * /api/explore/marketplace-banners:
  *   get:
  *     summary: Marketplace banner'larını getir
  *     description: Aktif marketplace banner'larını getirir
@@ -144,7 +144,7 @@ router.get(
 
 /**
  * @openapi
- * /explore/events:
+ * /api/explore/events:
  *   get:
  *     summary: Yeni event'ları getir (What's News)
  *     description: Yeni oluşturulmuş event'ları getirir
@@ -240,7 +240,7 @@ router.get(
 
 /**
  * @openapi
- * /explore/brands/new:
+ * /api/explore/brands/new:
  *   get:
  *     summary: Yeni katılmış markaları getir
  *     description: App içerisinde yeni katılmış olan markaları getirir
@@ -314,7 +314,7 @@ router.get(
 
 /**
  * @openapi
- * /explore/products/new:
+ * /api/explore/products/new:
  *   get:
  *     summary: Yeni eklenmiş ürünleri getir
  *     description: App içerisinde yeni eklenmiş olan ürünleri getirir
@@ -380,7 +380,7 @@ router.get(
 
 /**
  * @openapi
- * /explore/search:
+ * /api/explore/search:
  *   get:
  *     summary: Explore ekranında unified arama
  *     description: Post, product ve brand sonuçlarını birleştirerek arama yapar. Hottest ve News tab'ları için kullanılabilir.

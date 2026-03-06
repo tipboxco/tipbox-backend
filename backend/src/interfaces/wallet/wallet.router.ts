@@ -32,7 +32,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /wallets:
+ * /api/wallets:
  *   get:
  *     summary: Kullanıcının tüm wallet'larını getir
  *     description: Kullanıcıya ait tüm bağlı/bağlı olmayan wallet'ların listesini döndürür
@@ -114,7 +114,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/active:
+ * /api/wallets/active:
  *   get:
  *     summary: Aktif wallet'ı getir
  *     description: Kullanıcının aktif olarak kullandığı wallet bilgilerini döndürür
@@ -186,7 +186,7 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/connect:
+ * /api/wallets/connect:
  *   post:
  *     summary: Yeni bir wallet bağla
  *     description: Kullanıcı için yeni bir kripto wallet'ı bağlar (MetaMask, WalletConnect, vb.)
@@ -284,7 +284,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/{id}/disconnect:
+ * /api/wallets/{id}/disconnect:
  *   patch:
  *     summary: Wallet bağlantısını kes
  *     description: Belirtilen wallet'ın bağlantısını keser (silmez, sadece deaktive eder)
@@ -357,7 +357,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
 
 /**
  * @openapi
- * /wallets/{id}/activate:
+ * /api/wallets/{id}/activate:
  *   patch:
  *     summary: Wallet'ı aktif hale getir
  *     description: Belirtilen wallet'ı aktif wallet olarak ayarlar (diğer wallet'lar deaktive edilir)
@@ -430,7 +430,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
 
 /**
  * @openapi
- * /wallets/{id}:
+ * /api/wallets/{id}:
  *   delete:
  *     summary: Wallet'ı tamamen sil
  *     description: Belirtilen wallet'ı sistemden kalıcı olarak siler
@@ -464,7 +464,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/nfts:
+ * /api/wallets/nfts:
  *   get:
  *     summary: Kullanıcının Smart Account NFT'lerini getir
  *     description: |
@@ -565,7 +565,7 @@ router.get('/nfts', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/transactions:
+ * /api/wallets/transactions:
  *   get:
  *     summary: Kullanıcının TIPS transaction geçmişini getir
  *     description: Kullanıcının TIPS gönderme/alma işlemlerinin geçmişini pagination ile getirir
@@ -767,7 +767,7 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
 
 /**
  * @openapi
- * /wallets/balance:
+ * /api/wallets/balance:
  *   get:
  *     summary: Kullanıcının TIPS balance'ını getir (DB - wallet tablosu, smartAccountAddress)
  *     description: |
@@ -886,7 +886,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/create:
+ * /api/wallets/create:
  *   post:
  *     summary: Kullanıcı için yeni wallet oluştur (Thirdweb Wallet Connect zorunlu)
  *     description: |
@@ -963,7 +963,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/info:
+ * /api/wallets/info:
  *   get:
  *     summary: Kullanıcının aktif wallet bilgilerini getir
  *     description: Kullanıcının aktif wallet'ının detaylı bilgilerini ve bakiyesini döndürür
@@ -1068,7 +1068,7 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /wallets/pending-tips/claim:
+ * /api/wallets/pending-tips/claim:
  *   post:
  *     summary: Pending tips claim et (contract)
  *     description: |
@@ -1227,7 +1227,7 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
 
 /**
  * @openapi
- * /wallets/rewards/summary:
+ * /api/wallets/rewards/summary:
  *   get:
  *     summary: Kullanıcının claim edilebilir reward özetini getir
  *     description: Kullanıcının tüm claim edilebilir reward'larının özetini ve kaynaklarına göre gruplandırılmış bilgilerini döndürür
@@ -1290,7 +1290,7 @@ router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) 
 
 /**
  * @openapi
- * /wallets/rewards/claimable:
+ * /api/wallets/rewards/claimable:
  *   get:
  *     summary: Kullanıcının claim edilebilir tüm reward'larını getir
  *     description: Kullanıcının claim edilebilir durumda olan tüm reward'ların detaylı listesini döndürür
@@ -1355,7 +1355,7 @@ router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response
 
 /**
  * @openapi
- * /wallets/rewards/source/{sourceType}:
+ * /api/wallets/rewards/source/{sourceType}:
  *   get:
  *     summary: Belirli bir kaynaktan gelen reward'ları getir
  *     description: Kullanıcının belirtilen kaynak tipinden gelen claim edilebilir reward'larını getirir
@@ -1405,7 +1405,7 @@ router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res:
 
 /**
  * @openapi
- * /wallets/rewards/claim/{rewardId}:
+ * /api/wallets/rewards/claim/{rewardId}:
  *   post:
  *     summary: Belirli bir reward'ı claim et
  *     description: Kullanıcının belirtilen reward'ını claim eder ve wallet'a ekler
@@ -1476,7 +1476,7 @@ router.post('/rewards/claim/:rewardId', asyncHandler(async (req: Request, res: R
 
 /**
  * @openapi
- * /wallets/rewards/claim-all:
+ * /api/wallets/rewards/claim-all:
  *   post:
  *     summary: Tüm claim edilebilir reward'ları tek seferde claim et
  *     description: Kullanıcının tüm claim edilebilir reward'larını tek bir transaction ile claim eder
@@ -1541,7 +1541,7 @@ router.post('/rewards/claim-all', asyncHandler(async (req: Request, res: Respons
 
 /**
  * @openapi
- * /wallets/rewards/history:
+ * /api/wallets/rewards/history:
  *   get:
  *     summary: Kullanıcının claim history'sini getir
  *     description: Kullanıcının daha önce claim ettiği tüm reward'ların geçmişini döndürür

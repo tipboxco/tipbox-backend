@@ -49,7 +49,7 @@ const contractEventService = new ContractEventService();
 
 /**
  * @openapi
- * /webhooks/thirdweb/auth/verify:
+ * /api/webhooks/thirdweb/auth/verify:
  *   post:
  *     summary: Thirdweb auth-payload doğrulama endpoint'i
  *     description: |
@@ -272,7 +272,7 @@ router.post('/auth/verify',
 
 /**
  * @openapi
- * /webhooks/thirdweb:
+ * /api/webhooks/thirdweb:
  *   post:
  *     summary: Thirdweb Engine webhook endpoint
  *     description: |
@@ -546,7 +546,7 @@ router.post('/',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events:
+ * /api/webhooks/thirdweb/events:
  *   post:
  *     summary: Thirdweb Contract Subscription webhook endpoint
  *     description: |
@@ -770,7 +770,7 @@ router.post('/events',
 
 /**
  * @openapi
- * /webhooks/thirdweb/health:
+ * /api/webhooks/thirdweb/health:
  *   get:
  *     summary: Webhook service health check
  *     tags: [Webhooks]
@@ -792,7 +792,7 @@ router.get('/health', (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /webhooks/thirdweb/logs:
+ * /api/webhooks/thirdweb/logs:
  *   get:
  *     summary: Son webhook loglarını getir
  *     tags: [Webhooks]
@@ -844,7 +844,7 @@ router.get('/logs',
 
 /**
  * @openapi
- * /webhooks/thirdweb/stats:
+ * /api/webhooks/thirdweb/stats:
  *   get:
  *     summary: Webhook istatistiklerini getir
  *     tags: [Webhooks]
@@ -866,7 +866,7 @@ router.get('/stats',
 
 /**
  * @openapi
- * /webhooks/thirdweb/logs/{queueId}:
+ * /api/webhooks/thirdweb/logs/{queueId}:
  *   get:
  *     summary: Queue ID ile webhook log getir
  *     tags: [Webhooks]
@@ -920,7 +920,7 @@ router.get('/logs/:queueId',
 
 /**
  * @openapi
- * /webhooks/thirdweb/transaction/{transactionId}:
+ * /api/webhooks/thirdweb/transaction/{transactionId}:
  *   get:
  *     summary: Transaction ID ile webhook logları getir
  *     tags: [Webhooks]
@@ -974,7 +974,7 @@ router.get('/transaction/:transactionId',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events/logs:
+ * /api/webhooks/thirdweb/events/logs:
  *   get:
  *     summary: Son contract event loglarını getir
  *     tags: [Webhooks]
@@ -1035,7 +1035,7 @@ router.get('/events/logs',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events/stats:
+ * /api/webhooks/thirdweb/events/stats:
  *   get:
  *     summary: Contract event istatistiklerini getir
  *     tags: [Webhooks]
@@ -1062,7 +1062,7 @@ router.get('/events/stats',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events/by-hash/{transactionHash}:
+ * /api/webhooks/thirdweb/events/by-hash/{transactionHash}:
  *   get:
  *     summary: Transaction hash ile event logları getir
  *     tags: [Webhooks]
@@ -1110,7 +1110,7 @@ router.get('/events/by-hash/:transactionHash',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events/by-wallet/{walletId}:
+ * /api/webhooks/thirdweb/events/by-wallet/{walletId}:
  *   get:
  *     summary: Wallet ID ile event logları getir
  *     tags: [Webhooks]
@@ -1165,7 +1165,7 @@ router.get('/events/by-wallet/:walletId',
 
 /**
  * @openapi
- * /webhooks/thirdweb/events/reprocess:
+ * /api/webhooks/thirdweb/events/reprocess:
  *   post:
  *     summary: İşlenmemiş event'leri yeniden işle
  *     tags: [Webhooks]

@@ -65,7 +65,7 @@ const prisma = getPrisma();
 
 /**
  * @openapi
- * /admin/content/posts/stats:
+ * /api/admin/content/posts/stats:
  *   get:
  *     summary: İçerik post istatistikleri (toplam, türe göre, boosted, event’e bağlı)
  *     tags: [Admin - Content]
@@ -99,7 +99,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/posts:
+ * /api/admin/content/posts:
  *   get:
  *     summary: Post listesi (sayfalama, filtre, arama)
  *     tags: [Admin - Content]
@@ -213,7 +213,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/posts/{id}:
+ * /api/admin/content/posts/{id}:
  *   get:
  *     summary: Tek post detayı
  *     tags: [Admin - Content]
@@ -312,7 +312,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/posts:
+ * /api/admin/content/posts:
  *   post:
  *     summary: Yeni post oluştur (admin announcement/duyuru için)
  *     tags: [Admin - Content]
@@ -464,7 +464,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/content/posts/{id}:
+ * /api/admin/content/posts/{id}:
  *   patch:
  *     summary: Post güncelle (title, body, isBoosted, category vb.)
  *     tags: [Admin - Content]
@@ -574,7 +574,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/posts/{id}:
+ * /api/admin/content/posts/{id}:
  *   delete:
  *     summary: "Post sil (cascade: yorumlar, beğeniler vb.)"
  *     tags: [Admin - Content]
@@ -619,7 +619,7 @@ router.delete(
 
 /**
  * @openapi
- * /admin/content/comments/stats:
+ * /api/admin/content/comments/stats:
  *   get:
  *     summary: Yorum istatistikleri
  *     tags: [Admin - Content]
@@ -644,7 +644,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/comments:
+ * /api/admin/content/comments:
  *   get:
  *     summary: Yorum listesi (sayfalama, postId, userId filtreleri)
  *     tags: [Admin - Content]
@@ -723,7 +723,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/comments/{id}:
+ * /api/admin/content/comments/{id}:
  *   get:
  *     summary: Tek yorum detayı
  *     tags: [Admin - Content]
@@ -786,7 +786,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/comments/{id}:
+ * /api/admin/content/comments/{id}:
  *   patch:
  *     summary: Yorum güncelle (body)
  *     tags: [Admin - Content]
@@ -854,7 +854,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/comments/{id}:
+ * /api/admin/content/comments/{id}:
  *   delete:
  *     summary: Yorum sil
  *     tags: [Admin - Content]
@@ -899,7 +899,7 @@ router.delete(
 
 /**
  * @openapi
- * /admin/content/feed-highlights:
+ * /api/admin/content/feed-highlights:
  *   get:
  *     summary: Feed highlight listesi
  *     tags: [Admin - Content]
@@ -929,7 +929,7 @@ router.delete(
 
 /**
  * @swagger
- * /admin/content/feed-highlights/stats:
+ * /api/admin/content/feed-highlights/stats:
  *   get:
  *     tags: [Admin - Content]
  *     summary: Get feed highlights statistics
@@ -1001,7 +1001,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/feed-highlights:
+ * /api/admin/content/feed-highlights:
  *   post:
  *     summary: Feed highlight ekle
  *     tags: [Admin - Content]
@@ -1058,7 +1058,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/content/feed-highlights/{id}:
+ * /api/admin/content/feed-highlights/{id}:
  *   patch:
  *     summary: Feed highlight güncelle (reason)
  *     tags: [Admin - Content]
@@ -1112,7 +1112,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/feed-highlights/{id}:
+ * /api/admin/content/feed-highlights/{id}:
  *   delete:
  *     summary: Feed highlight kaldır
  *     tags: [Admin - Content]
@@ -1151,7 +1151,7 @@ router.delete(
 
 /**
  * @swagger
- * /admin/content/trending/stats:
+ * /api/admin/content/trending/stats:
  *   get:
  *     tags: [Admin - Content]
  *     summary: Get trending posts statistics
@@ -1193,7 +1193,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/trending:
+ * /api/admin/content/trending:
  *   get:
  *     summary: Trending post listesi
  *     tags: [Admin - Content]
@@ -1251,7 +1251,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/trending:
+ * /api/admin/content/trending:
  *   post:
  *     summary: Trending’e post ekle
  *     tags: [Admin - Content]
@@ -1315,7 +1315,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/content/trending/{id}:
+ * /api/admin/content/trending/{id}:
  *   patch:
  *     summary: Trending kaydı güncelle (score, trendPeriod)
  *     tags: [Admin - Content]
@@ -1373,7 +1373,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/trending/{id}:
+ * /api/admin/content/trending/{id}:
  *   delete:
  *     summary: Trending’den kaldır
  *     tags: [Admin - Content]
@@ -1412,7 +1412,7 @@ router.delete(
 
 /**
  * @openapi
- * /admin/content/top-community-choices:
+ * /api/admin/content/top-community-choices:
  *   get:
  *     summary: Top community choice listesi
  *     tags: [Admin - Content]
@@ -1469,7 +1469,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/top-community-choices:
+ * /api/admin/content/top-community-choices:
  *   post:
  *     summary: Top community choice ekle
  *     tags: [Admin - Content]
@@ -1526,7 +1526,7 @@ router.post(
 
 /**
  * @openapi
- * /admin/content/top-community-choices/{id}:
+ * /api/admin/content/top-community-choices/{id}:
  *   patch:
  *     summary: Top community choice güncelle (reason, badgeLabel)
  *     tags: [Admin - Content]
@@ -1583,7 +1583,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/top-community-choices/{id}:
+ * /api/admin/content/top-community-choices/{id}:
  *   delete:
  *     summary: Top community choice kaldır
  *     tags: [Admin - Content]
@@ -1622,7 +1622,7 @@ router.delete(
 
 /**
  * @openapi
- * /admin/content/manual-review-flags:
+ * /api/admin/content/manual-review-flags:
  *   get:
  *     summary: Manual review flag listesi
  *     tags: [Admin - Content]
@@ -1686,7 +1686,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/manual-review-flags/{id}:
+ * /api/admin/content/manual-review-flags/{id}:
  *   get:
  *     summary: Tek manual review flag detayı
  *     tags: [Admin - Content]
@@ -1735,7 +1735,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/manual-review-flags/{id}:
+ * /api/admin/content/manual-review-flags/{id}:
  *   patch:
  *     summary: Manual review flag güncelle (status)
  *     tags: [Admin - Content]
@@ -1802,7 +1802,7 @@ router.patch(
 
 /**
  * @openapi
- * /admin/content/moderation-actions:
+ * /api/admin/content/moderation-actions:
  *   get:
  *     summary: Moderation action listesi
  *     tags: [Admin - Content]
@@ -1874,7 +1874,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/moderation-actions/{id}:
+ * /api/admin/content/moderation-actions/{id}:
  *   get:
  *     summary: Tek moderation action detayı
  *     tags: [Admin - Content]
@@ -1928,7 +1928,7 @@ router.get(
 
 /**
  * @openapi
- * /admin/content/tags:
+ * /api/admin/content/tags:
  *   get:
  *     summary: İçerik tag listesi (aggregate veya postId’ye göre)
  *     tags: [Admin - Content]
@@ -1958,7 +1958,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/content/tags-categories/stats:
+ * /api/admin/content/tags-categories/stats:
  *   get:
  *     tags: [Admin - Content]
  *     summary: Get tags and categories statistics

@@ -57,7 +57,7 @@ const nftUpload = createUpload('ADMIN_IMAGES', 'MEDIUM');
 
 /**
  * @openapi
- * /admin/nft/upload-image:
+ * /api/admin/nft/upload-image:
  *   post:
  *     summary: Upload NFT image to MinIO (nfts/ folder)
  *     tags: [Admin - NFT]
@@ -1035,7 +1035,7 @@ router.delete(
 
 /**
  * @swagger
- * /admin/nft/marketplace/stats:
+ * /api/admin/nft/marketplace/stats:
  *   get:
  *     tags: [Admin - NFT]
  *     summary: Get NFT marketplace statistics

@@ -1163,7 +1163,7 @@ router.delete(
 
 /**
  * @swagger
- * /admin/brands/bridge-program/stats:
+ * /api/admin/brands/bridge-program/stats:
  *   get:
  *     tags: [Admin - Brands]
  *     summary: Get bridge program statistics
@@ -1214,7 +1214,7 @@ router.get(
 
 /**
  * @swagger
- * /admin/brands/leaderboards/stats:
+ * /api/admin/brands/leaderboards/stats:
  *   get:
  *     tags: [Admin - Brands]
  *     summary: Get brand leaderboards statistics

@@ -10,7 +10,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /medusa/store/products/{productId}:
+ * /api/medusa/store/products/{productId}:
  *   get:
  *     summary: Medusa ürün bilgisini getir
  *     description: Medusa.js sunucusundan ürün ID'sine göre ürün bilgisini çeker.
@@ -72,7 +72,7 @@ router.get(
 
 /**
  * @openapi
- * /medusa/store/product-categories:
+ * /api/medusa/store/product-categories:
  *   get:
  *     summary: Medusa kategorilerini getir
  *     description: Medusa.js sunucusundan parent kategori ID'sine göre kategorileri çeker.
@@ -143,7 +143,7 @@ router.get(
 
 /**
  * @openapi
- * /medusa/store/filterable-products:
+ * /api/medusa/store/filterable-products:
  *   get:
  *     summary: Medusa filtrelenebilir ürünleri getir
  *     description: Medusa.js sunucusundan kategori ID'sine göre filtrelenebilir ürünleri çeker.

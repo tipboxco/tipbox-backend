@@ -222,7 +222,7 @@ export const swaggerAuthHelperJs = `
       try {
         const url = args[0] ? args[0].toString() : '';
         const method = (args[1]?.method || 'GET').toUpperCase();
-        if ((url.includes('/auth/login') || url.includes('/admin/login')) && method === 'POST') {
+        if ((url.includes('/api/auth/login') || url.includes('/api/admin/login')) && method === 'POST') {
           const clone = response.clone();
           const data = await clone.json().catch(() => null);
           const token = data?.token || data?.access_token || data?.accessToken;

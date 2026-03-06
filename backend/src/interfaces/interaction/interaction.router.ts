@@ -17,7 +17,7 @@ router.use(authMiddleware);
 
 /**
  * @openapi
- * /interactions/posts/{postId}/like:
+ * /api/interactions/posts/{postId}/like:
  *   post:
  *     summary: Post'u beğen
  *     tags: [Interactions]
@@ -57,7 +57,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/like:
+ * /api/interactions/posts/{postId}/like:
  *   delete:
  *     summary: Post beğenisini geri al
  *     tags: [Interactions]
@@ -95,7 +95,7 @@ router.delete(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/upvote:
+ * /api/interactions/posts/{postId}/upvote:
  *   post:
  *     summary: Event içindeki Free Post'a upvote at
  *     description: Sadece type FREE ve eventId olan post'lar upvote edilebilir. Kendi post'una upvote atamazsın.
@@ -136,7 +136,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/upvote:
+ * /api/interactions/posts/{postId}/upvote:
  *   delete:
  *     summary: Event içindeki Free Post'tan upvote'u geri çek
  *     tags: [Interactions]
@@ -174,7 +174,7 @@ router.delete(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/bookmark:
+ * /api/interactions/posts/{postId}/bookmark:
  *   post:
  *     summary: Post'u favorilere ekle
  *     tags: [Interactions]
@@ -211,7 +211,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/bookmark:
+ * /api/interactions/posts/{postId}/bookmark:
  *   delete:
  *     summary: Favorilerden çıkar
  *     tags: [Interactions]
@@ -247,7 +247,7 @@ router.delete(
 
 /**
  * @openapi
- * /interactions/bookmarks:
+ * /api/interactions/bookmarks:
  *   get:
  *     summary: Kullanıcının favorilerini getir
  *     tags: [Interactions]
@@ -282,7 +282,7 @@ router.get(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/comments:
+ * /api/interactions/posts/{postId}/comments:
  *   post:
  *     summary: Post'a yorum yap
  *     tags: [Interactions]
@@ -354,7 +354,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/comments:
+ * /api/interactions/posts/{postId}/comments:
  *   get:
  *     summary: Post'un yorumlarını getir
  *     tags: [Interactions]
@@ -409,7 +409,7 @@ router.get(
 
 /**
  * @openapi
- * /interactions/comments/{commentId}:
+ * /api/interactions/comments/{commentId}:
  *   put:
  *     summary: Yorumu güncelle
  *     description: Sadece yorumun sahibi, yorumu oluşturduktan sonra 15 dakika içinde güncelleyebilir.
@@ -482,7 +482,7 @@ router.put(
 
 /**
  * @openapi
- * /interactions/comments/{commentId}:
+ * /api/interactions/comments/{commentId}:
  *   delete:
  *     summary: Yorumu sil
  *     tags: [Interactions]
@@ -515,7 +515,7 @@ router.delete(
 
 /**
  * @openapi
- * /interactions/comments/{commentId}/like:
+ * /api/interactions/comments/{commentId}/like:
  *   post:
  *     summary: Yorumu beğen
  *     tags: [Interactions]
@@ -548,7 +548,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/comments/{commentId}/like:
+ * /api/interactions/comments/{commentId}/like:
  *   delete:
  *     summary: Yorum beğenisini geri al
  *     tags: [Interactions]
@@ -583,7 +583,7 @@ router.delete(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/share:
+ * /api/interactions/posts/{postId}/share:
  *   post:
  *     summary: Post'u paylaş
  *     tags: [Interactions]
@@ -647,7 +647,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/share-to-dm:
+ * /api/interactions/posts/{postId}/share-to-dm:
  *   post:
  *     summary: Post'u trust listesindeki bir kullanıcıya DM ile paylaş
  *     description: Trust listesinden seçilen kullanıcıya post kartı + altında metin olarak mesaj gönderir. Thread yoksa oluşturulur.
@@ -731,7 +731,7 @@ router.post(
 
 /**
  * @openapi
- * /interactions/posts/{postId}/status:
+ * /api/interactions/posts/{postId}/status:
  *   get:
  *     summary: Kullanıcının post ile etkileşim durumu
  *     tags: [Interactions]

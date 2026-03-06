@@ -47,7 +47,7 @@ const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 /**
  * @openapi
- * /admin/news/upload-image:
+ * /api/admin/news/upload-image:
  *   post:
  *     summary: Upload news banner image to MinIO (news/ folder)
  *     tags: [Admin - News]

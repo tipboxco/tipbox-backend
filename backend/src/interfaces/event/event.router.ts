@@ -166,7 +166,7 @@ const userService = new UserService();
 
 /**
  * @openapi
- * /events/achievements:
+ * /api/events/achievements:
  *   get:
  *     summary: Kullanıcının tüm achievement rozetlerini getir
  *     description: Achievement sekmesindeki badge listesini status bilgisiyle (not-started, in_progress, completed) birlikte döner. Infinity scroll destekler.
@@ -241,7 +241,7 @@ router.get(
 
 /**
  * @openapi
- * /events/limited:
+ * /api/events/limited:
  *   get:
  *     summary: Aktif limited time event bilgisini getir
  *     description: Kullanıcı için aktif olan limited time event'i, leaderboard ve kullanıcı skoruyla birlikte döner.
@@ -282,7 +282,7 @@ router.get(
 
 /**
  * @openapi
- * /events/my-events:
+ * /api/events/my-events:
  *   get:
  *     summary: Kullanıcının katıldığı aktif event'leri getir
  *     description: Kullanıcının post attığı ve halen aktif olan event'lerin listesini getirir.
@@ -356,7 +356,7 @@ router.get(
 
 /**
  * @openapi
- * /events/active:
+ * /api/events/active:
  *   get:
  *     summary: Aktif event'leri getir
  *     description: Şu anda devam eden aktif event'lerin listesini getirir. Scroll ile pagination destekler.
@@ -430,7 +430,7 @@ router.get(
 
 /**
  * @openapi
- * /events/upcoming:
+ * /api/events/upcoming:
  *   get:
  *     summary: Yaklaşan event'leri getir
  *     description: Gelecekte başlayacak event'lerin listesini getirir. Scroll ile pagination destekler.
@@ -504,7 +504,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}:
+ * /api/events/{eventId}:
  *   get:
  *     summary: Event detayını getir
  *     description: Belirli bir event'in detaylı bilgilerini getirir (banner, rewards, isJoined, vb.)
@@ -554,7 +554,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/posts:
+ * /api/events/{eventId}/posts:
  *   get:
  *     summary: Event post'larını getir
  *     description: Event'e ait post'ları getirir. Feed formatında döner. Scroll ile pagination destekler.
@@ -677,7 +677,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/badges:
+ * /api/events/{eventId}/badges:
  *   get:
  *     summary: Event badge'lerini kullanıcı progress'i ile getir
  *     description: Event'te kazanılabilecek tüm badge'lerin listesini kullanıcının ilerleme bilgisi ile birlikte getirir. Her badge için rarity, category ve detaylı progress bilgisi içerir.
@@ -803,7 +803,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/join:
+ * /api/events/{eventId}/join:
  *   post:
  *     summary: Event'e katıl
  *     description: Kullanıcının event'e katılmasını sağlar. Response formatı GET /events/{eventId} ile aynıdır.
@@ -867,7 +867,7 @@ router.post(
 
 /**
  * @openapi
- * /events/{eventId}/leave:
+ * /api/events/{eventId}/leave:
  *   post:
  *     summary: Event'ten ayrıl
  *     description: Kullanıcının event'ten ayrılmasını sağlar. Response formatı GET /events/{eventId} ile aynıdır. Idempotent endpoint - zaten ayrılmışsa hata vermez.
@@ -926,7 +926,7 @@ router.post(
 
 /**
  * @openapi
- * /events/{eventId}/progress:
+ * /api/events/{eventId}/progress:
  *   get:
  *     summary: Kullanıcının event ilerlemesini getir
  *     description: Kullanıcının event'teki metriklerini, badge progress'ini ve leaderboard'unu getirir
@@ -980,7 +980,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/leaderboard:
+ * /api/events/{eventId}/leaderboard:
  *   get:
  *     summary: Event leaderboard'unu getir
  *     description: Event'in sıralı kullanıcı listesini getirir
@@ -1048,7 +1048,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/requirements:
+ * /api/events/{eventId}/requirements:
  *   get:
  *     summary: Event gereksinimlerini ve ilerlemeyi getir
  *     description: Event gereksinimlerini ve kullanıcının ilerlemesini getirir.
@@ -1141,7 +1141,7 @@ router.get(
 
 /**
  * @openapi
- * /events/{eventId}/badges/{badgeId}:
+ * /api/events/{eventId}/badges/{badgeId}:
  *   get:
  *     summary: Event badge detayı ve kullanıcı ilerlemesi
  *     description: Belirli bir event badge'inin detaylarını ve kullanıcının o badge'deki ilerlemesini getirir.
@@ -1299,7 +1299,7 @@ router.get(
 
 /**
  * @openapi
- * /events/search:
+ * /api/events/search:
  *   get:
  *     summary: Event'lerde arama yap
  *     description: Community Events ve Achievement Ladder'da event araması yapar. Event başlığı ve açıklamasında arama yapar.
