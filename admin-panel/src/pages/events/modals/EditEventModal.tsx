@@ -3,6 +3,7 @@ import {
   Modal,
   Form,
   Input,
+  Upload,
   Select,
   Button,
   Alert,
@@ -10,9 +11,11 @@ import {
   Space,
   message as antdMessage,
 } from 'antd';
+import { CloudUploadOutlined } from '@ant-design/icons';
 import {
   fetchEvent,
   updateEvent,
+  uploadEventImage,
 } from '../../../api/admin-events';
 import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
 
@@ -40,6 +43,8 @@ function EditEventModal({ open, eventId, onClose, onSuccess }: EditEventModalPro
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string>('');
 
   useEffect(() => {
     if (!open) return;
@@ -61,6 +66,7 @@ function EditEventModal({ open, eventId, onClose, onSuccess }: EditEventModalPro
             feedType: data.feedType,
             imageUrl: data.imageUrl ?? '',
           });
+          setImagePreview(data.imageUrl ?? '');
         }
       } catch (e) {
         if (!cancelled) {
@@ -77,6 +83,23 @@ function EditEventModal({ open, eventId, onClose, onSuccess }: EditEventModalPro
       cancelled = true;
     };
   }, [open, eventId, form]);
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const res = await uploadEventImage(file);
+      if (res.data?.url) {
+        setImagePreview(res.data.url);
+        form.setFieldValue('imageUrl', res.data.url);
+        antdMessage.success('Event image uploaded');
+      }
+    } catch (err) {
+      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+    return false;
+  };
 
   const handleSubmit = async (values: FormValues) => {
     setSaving(true);
@@ -179,8 +202,48 @@ function EditEventModal({ open, eventId, onClose, onSuccess }: EditEventModalPro
             </Select>
           </Form.Item>
 
-          <Form.Item label="Image URL" name="imageUrl">
-            <Input type="url" placeholder="https://..." />
+          <Form.Item label="Event Banner" name="imageUrl">
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Upload
+                beforeUpload={handleImageUpload}
+                showUploadList={false}
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={uploadingImage}
+              >
+                <Button icon={<CloudUploadOutlined />} loading={uploadingImage} size="small">
+                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                </Button>
+              </Upload>
+              {imagePreview && (
+                <div>
+                  <img
+                    src={imagePreview}
+                    alt="Event Banner"
+                    style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4 }}
+                  />
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() => {
+                      setImagePreview('');
+                      form.setFieldValue('imageUrl', '');
+                    }}
+                    style={{ marginTop: 4 }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+              <Input
+                value={imagePreview}
+                onChange={(e) => {
+                  setImagePreview(e.target.value);
+                  form.setFieldValue('imageUrl', e.target.value);
+                }}
+                placeholder="or paste image URL"
+                size="small"
+              />
+            </Space>
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>

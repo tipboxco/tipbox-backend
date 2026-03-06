@@ -6,6 +6,7 @@ import {
   fetchCollection,
   fetchActionTypes,
   createCollectionGoal,
+  uploadBadgeImage,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../types/admin';
 import { CreatableFormDrawer } from '../../components/form';
@@ -121,10 +122,27 @@ function CreateBadgeModal({
     // 2. Visual
     {
       name: 'imageUrl',
-      label: 'Badge Image URL',
-      type: 'text',
-      maxLength: 1000,
-      placeholder: 'https://example.com/badge.png',
+      label: 'Badge Image',
+      type: 'upload',
+      required: false,
+      placeholder: 'Upload badge image (JPG, PNG, GIF, WebP - Max 5MB)',
+      uploadConfig: {
+        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024, // 5MB
+        onUpload: async (file: File) => {
+          try {
+            const response = await uploadBadgeImage(file);
+            if (!response.data?.url) {
+              throw new Error('Upload failed - no URL returned');
+            }
+            return response.data.url;
+          } catch (error) {
+            throw new Error(
+              error instanceof Error ? error.message : 'Failed to upload image'
+            );
+          }
+        },
+      },
     },
 
     // 3. Description

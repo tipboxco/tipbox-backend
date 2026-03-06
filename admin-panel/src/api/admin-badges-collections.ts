@@ -63,6 +63,12 @@ export async function uploadMedia(file: File) {
   }
 }
 
+export async function uploadBadgeImage(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>(`${prefix}/upload-image`, formData);
+}
+
 export async function fetchCollectionsStats() {
   return get<AdminCollectionStatsResponse>(`${prefix}/collections/stats`);
 }

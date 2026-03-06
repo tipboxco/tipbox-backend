@@ -32,6 +32,7 @@ import {
   fetchBadge,
   deleteBadge,
   fetchBadgeOwners,
+  uploadBadgeImage,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeDetailResponse, AdminBadgeOwnerListItem } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
@@ -300,9 +301,17 @@ function BadgeSummaryTab({
     // 3. Visual
     {
       name: 'imageUrl',
-      label: 'Badge Image URL',
-      type: 'text',
-      maxLength: 1000,
+      label: 'Badge Image',
+      type: 'upload',
+      uploadConfig: {
+        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024,
+        onUpload: async (file: File) => {
+          const response = await uploadBadgeImage(file);
+          if (!response.data?.url) throw new Error('Upload failed');
+          return response.data.url;
+        },
+      },
     },
 
     // 4. Description

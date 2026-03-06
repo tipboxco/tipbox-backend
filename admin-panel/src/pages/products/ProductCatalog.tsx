@@ -207,6 +207,36 @@ function ProductCatalog() {
 
   const columns: ColumnsType<AdminProductListItem> = [
     {
+      title: 'Image',
+      dataIndex: 'imageUrl',
+      key: 'imageUrl',
+      width: 80,
+      render: (url: string) =>
+        url ? (
+          <img
+            src={url}
+            alt="Product"
+            style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              background: '#f0f0f0',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#999',
+              fontSize: 12,
+            }}
+          >
+            N/A
+          </div>
+        ),
+    },
+    {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',

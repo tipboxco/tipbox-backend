@@ -3,6 +3,7 @@ import {
   Modal,
   Form,
   Input,
+  Upload,
   Button,
   Alert,
   Spin,
@@ -10,10 +11,12 @@ import {
   message as antdMessage,
   Image,
 } from 'antd';
+import { CloudUploadOutlined } from '@ant-design/icons';
 import {
   fetchUserAvatar,
   createUserAvatar,
   updateUserAvatar,
+  uploadUserAvatar,
 } from '../../../api/admin-users';
 import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
 
@@ -35,6 +38,7 @@ function EditUserAvatarModal({ open, userId, onClose, onSuccess }: EditUserAvata
   const [error, setError] = useState<string | null>(null);
   const [existingAvatarId, setExistingAvatarId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +74,23 @@ function EditUserAvatarModal({ open, userId, onClose, onSuccess }: EditUserAvata
       cancelled = true;
     };
   }, [open, userId, form]);
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const res = await uploadUserAvatar(file);
+      if (res.data?.url) {
+        setPreviewUrl(res.data.url);
+        form.setFieldValue('imageUrl', res.data.url);
+        antdMessage.success('Avatar image uploaded');
+      }
+    } catch (err) {
+      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+    return false;
+  };
 
   const handleSubmit = async (values: FormValues) => {
     if (!values.imageUrl.trim()) {
@@ -129,17 +150,33 @@ function EditUserAvatarModal({ open, userId, onClose, onSuccess }: EditUserAvata
           )}
 
           <Form.Item
-            label="Avatar Image URL"
+            label="Avatar Image"
             name="imageUrl"
             rules={[
-              { required: true, message: 'Image URL is required' },
-              { type: 'url', message: 'Please enter a valid URL' },
+              { required: true, message: 'Image is required' },
             ]}
           >
-            <Input
-              placeholder="https://example.com/avatar.jpg"
-              onChange={(e) => setPreviewUrl(e.target.value)}
-            />
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Upload
+                beforeUpload={handleImageUpload}
+                showUploadList={false}
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={uploadingImage}
+              >
+                <Button icon={<CloudUploadOutlined />} loading={uploadingImage} size="small">
+                  {uploadingImage ? 'Uploading...' : 'Upload Avatar'}
+                </Button>
+              </Upload>
+              <Input
+                value={previewUrl}
+                onChange={(e) => {
+                  setPreviewUrl(e.target.value);
+                  form.setFieldValue('imageUrl', e.target.value);
+                }}
+                placeholder="or paste image URL"
+                size="small"
+              />
+            </Space>
           </Form.Item>
 
           {previewUrl && (

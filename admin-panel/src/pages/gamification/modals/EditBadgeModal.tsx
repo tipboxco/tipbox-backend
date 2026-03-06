@@ -4,17 +4,19 @@ import {
   Form,
   Input,
   Select,
-  InputNumber,
   Button,
   Alert,
   Spin,
   Space,
+  Upload,
   message as antdMessage,
 } from 'antd';
+import { CloudUploadOutlined } from '@ant-design/icons';
 import {
   fetchBadge,
   updateBadge,
   fetchBadgeCategories,
+  uploadBadgeImage,
 } from '../../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem } from '../../../types/admin';
 import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
@@ -42,6 +44,8 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string>('');
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +72,7 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
               categoryId: badgeRes.data.categoryId,
               collectionId: badgeRes.data.collectionId ?? '',
             });
+            setImagePreview(badgeRes.data.imageUrl ?? '');
           }
           if (categoriesRes.data) {
             setCategories(categoriesRes.data);
@@ -88,6 +93,23 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
       cancelled = true;
     };
   }, [open, badgeId, form]);
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const res = await uploadBadgeImage(file);
+      if (res.data?.url) {
+        setImagePreview(res.data.url);
+        form.setFieldValue('imageUrl', res.data.url);
+        antdMessage.success('Badge image uploaded');
+      }
+    } catch (err) {
+      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+    return false;
+  };
 
   const handleSubmit = async (values: FormValues) => {
     setSaving(true);
@@ -187,8 +209,48 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
           </Form.Item>
 
           {/* 2. Visual */}
-          <Form.Item label="Badge Image URL" name="imageUrl">
-            <Input type="url" placeholder="https://example.com/badge.png" />
+          <Form.Item label="Badge Image" name="imageUrl">
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Upload
+                beforeUpload={handleImageUpload}
+                showUploadList={false}
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={uploadingImage}
+              >
+                <Button icon={<CloudUploadOutlined />} loading={uploadingImage} size="small">
+                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                </Button>
+              </Upload>
+              {imagePreview && (
+                <div>
+                  <img
+                    src={imagePreview}
+                    alt="Badge"
+                    style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4 }}
+                  />
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() => {
+                      setImagePreview('');
+                      form.setFieldValue('imageUrl', '');
+                    }}
+                    style={{ marginTop: 4 }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+              <Input
+                value={imagePreview}
+                onChange={(e) => {
+                  setImagePreview(e.target.value);
+                  form.setFieldValue('imageUrl', e.target.value);
+                }}
+                placeholder="or paste image URL"
+                size="small"
+              />
+            </Space>
           </Form.Item>
 
           {/* 3. Description */}

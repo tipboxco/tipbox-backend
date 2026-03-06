@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Card,
@@ -11,6 +11,7 @@ import {
   Modal,
   Form,
   Input,
+  Upload,
   message,
   Table,
   Tag,
@@ -22,6 +23,7 @@ import {
   EditOutlined,
   UserOutlined,
   FileTextOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
@@ -29,6 +31,7 @@ import {
   fetchProduct,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
 } from '../../api/admin-products';
 import type {
   AdminProductDetailResponse,
@@ -45,6 +48,10 @@ function ProductDetail() {
   const [error, setError] = useState<string | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState('');
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [thumbnailPreview, setThumbnailPreview] = useState('');
 
   const loadProduct = async () => {
     if (!id) return;
@@ -73,6 +80,8 @@ function ProductDetail() {
       message.success('Product updated successfully');
       setEditModalOpen(false);
       form.resetFields();
+      setImagePreview('');
+      setThumbnailPreview('');
       loadProduct();
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Failed to update product');
@@ -99,6 +108,38 @@ function ProductDetail() {
     });
   };
 
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const res = await uploadProductImage(file);
+      const url = res.data?.url ?? '';
+      setImagePreview(url);
+      form.setFieldValue('imageUrl', url);
+      message.success('Image uploaded successfully');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+    return false;
+  };
+
+  const handleThumbnailUpload = async (file: File) => {
+    setUploadingThumbnail(true);
+    try {
+      const res = await uploadProductImage(file);
+      const url = res.data?.url ?? '';
+      setThumbnailPreview(url);
+      form.setFieldValue('thumbnail', url);
+      message.success('Thumbnail uploaded successfully');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Failed to upload thumbnail');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+    return false;
+  };
+
   const openEditModal = () => {
     if (!product) return;
     form.setFieldsValue({
@@ -111,6 +152,8 @@ function ProductDetail() {
       imageUrl: product.imageUrl ?? undefined,
       thumbnail: product.thumbnail ?? undefined,
     });
+    setImagePreview(product.imageUrl ?? '');
+    setThumbnailPreview(product.thumbnail ?? '');
     setEditModalOpen(true);
   };
 
@@ -325,6 +368,8 @@ function ProductDetail() {
         onCancel={() => {
           setEditModalOpen(false);
           form.resetFields();
+          setImagePreview('');
+          setThumbnailPreview('');
         }}
         onOk={() => form.submit()}
         width={600}
@@ -352,11 +397,91 @@ function ProductDetail() {
           <Form.Item name="brandId" label="Brand ID">
             <Input placeholder="Optional brand ID" />
           </Form.Item>
-          <Form.Item name="imageUrl" label="Image URL">
-            <Input placeholder="https://..." />
+          <Form.Item name="imageUrl" label="Product Image">
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Upload
+                beforeUpload={handleImageUpload}
+                showUploadList={false}
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={uploadingImage}
+              >
+                <Button icon={<CloudUploadOutlined />} loading={uploadingImage} size="small">
+                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                </Button>
+              </Upload>
+              {imagePreview && (
+                <div>
+                  <img
+                    src={imagePreview}
+                    alt="Product"
+                    style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4 }}
+                  />
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() => {
+                      setImagePreview('');
+                      form.setFieldValue('imageUrl', '');
+                    }}
+                    style={{ marginTop: 4 }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+              <Input
+                value={imagePreview}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                  setImagePreview(e.target.value);
+                  form.setFieldValue('imageUrl', e.target.value);
+                }}
+                placeholder="or paste image URL"
+                size="small"
+              />
+            </Space>
           </Form.Item>
-          <Form.Item name="thumbnail" label="Thumbnail URL">
-            <Input placeholder="https://..." />
+          <Form.Item name="thumbnail" label="Thumbnail">
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Upload
+                beforeUpload={handleThumbnailUpload}
+                showUploadList={false}
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                disabled={uploadingThumbnail}
+              >
+                <Button icon={<CloudUploadOutlined />} loading={uploadingThumbnail} size="small">
+                  {uploadingThumbnail ? 'Uploading...' : 'Upload Thumbnail'}
+                </Button>
+              </Upload>
+              {thumbnailPreview && (
+                <div>
+                  <img
+                    src={thumbnailPreview}
+                    alt="Thumbnail"
+                    style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4 }}
+                  />
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() => {
+                      setThumbnailPreview('');
+                      form.setFieldValue('thumbnail', '');
+                    }}
+                    style={{ marginTop: 4 }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+              <Input
+                value={thumbnailPreview}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                  setThumbnailPreview(e.target.value);
+                  form.setFieldValue('thumbnail', e.target.value);
+                }}
+                placeholder="or paste thumbnail URL"
+                size="small"
+              />
+            </Space>
           </Form.Item>
         </Form>
       </Modal>

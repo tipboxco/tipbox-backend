@@ -42,6 +42,7 @@ import {
   fetchCollectionGoals,
   updateCollectionGoal,
   deleteCollectionGoal,
+  uploadMedia,
   type AdminCollectionCategoryMain,
   type AdminCollectionGoalListItem,
 } from '../../api/admin-badges-collections';
@@ -368,11 +369,18 @@ function CollectionSummaryTab({
     // 4. Cover Image
     {
       name: 'bannerUrl',
-      label: 'Cover Image URL',
-      type: 'text',
-      maxLength: 1000,
+      label: 'Cover Image',
+      type: 'upload',
       span: 2,
-      placeholder: 'https://...'
+      uploadConfig: {
+        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024,
+        onUpload: async (file: File) => {
+          const response = await uploadMedia(file);
+          if (!response.data?.url) throw new Error('Upload failed');
+          return response.data.url;
+        },
+      },
     },
 
     // 5. Rewards & Conditions

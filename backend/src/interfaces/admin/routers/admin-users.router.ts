@@ -171,6 +171,56 @@ router.get(
 
 /**
  * @openapi
+ * /admin/users/upload-avatar:
+ *   post:
+ *     summary: Avatar resmi yükle (S3)
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Yükleme başarılı
+ *       400:
+ *         description: Dosya gerekli veya geçersiz format
+ */
+router.post(
+  '/upload-avatar',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Dosya gerekli (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Sadece JPG, PNG, GIF ve WebP desteklenir' });
+    }
+    const fileName = `avatars/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'User avatar image yüklendi',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  }),
+);
+
+/**
+ * @openapi
  * /admin/users/{id}/avatar:
  *   get:
  *     summary: Kullanıcının aktif avatar bilgisi

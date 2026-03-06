@@ -1,4 +1,4 @@
-import { get, patch, put, post, del } from './client';
+import { get, patch, put, post, del, postFormData } from './client';
 import type {
   AdminUserListItem,
   AdminUserDetailResponse,
@@ -98,6 +98,12 @@ export async function updateUserAvatar(
 
 export async function createUserAvatar(userId: string, body: { imageUrl: string }) {
   return post<AdminAvatarResponse>(`${prefix}/users/${userId}/avatar`, body);
+}
+
+export async function uploadUserAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>(`${prefix}/users/upload-avatar`, formData);
 }
 
 export async function fetchUserEvents(

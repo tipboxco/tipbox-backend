@@ -3,6 +3,7 @@ import { Card, Form, Input, Select, DatePicker, Button, Space, Alert, Row, Col, 
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import { useEditableForm } from './useEditableForm';
 import EditableDrawer from './EditableDrawer';
+import UploadFormField from './UploadFormField';
 import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
 import type { EditableFormSectionProps, FieldConfig } from './types';
 
@@ -104,6 +105,9 @@ export default function EditableFormSection({
             maxLength={field.maxLength}
           />
         );
+
+      case 'upload':
+        return <UploadFormField field={field} form={form} />;
 
       case 'text':
       default:
