@@ -25,6 +25,10 @@ import ContentComments from './pages/content/ContentComments';
 import TrendingPosts from './pages/content/TrendingPosts';
 import TagsCategories from './pages/content/TagsCategories';
 import FeedHighlights from './pages/content/FeedHighlights';
+import BoostOptions from './pages/content/BoostOptions';
+import ContentCollections from './pages/content/ContentCollections';
+import TopCommunityChoices from './pages/content/TopCommunityChoices';
+import ManualReviewFlags from './pages/content/ManualReviewFlags';
 
 // Product pages
 import ProductCatalog from './pages/products/ProductCatalog';
@@ -34,6 +38,8 @@ import ProductGroups from './pages/products/ProductGroups';
 import ProductSuggestions from './pages/products/ProductSuggestions';
 import UserInventories from './pages/products/UserInventories';
 import ProductComparisons from './pages/products/ProductComparisons';
+import CategoryManagement from './pages/products/CategoryManagement';
+import ComparisonMetrics from './pages/products/ComparisonMetrics';
 
 // Brand pages
 import BrandList from './pages/brands/BrandList';
@@ -41,6 +47,7 @@ import BridgeProgram from './pages/brands/BridgeProgram';
 import BrandSurveys from './pages/brands/BrandSurveys';
 import BrandLeaderboards from './pages/brands/BrandLeaderboards';
 import BrandRewards from './pages/brands/BrandRewards';
+import BrandCategories from './pages/brands/BrandCategories';
 
 // News pages
 import NewsList from './pages/news/NewsList';
@@ -67,13 +74,14 @@ import Transactions from './pages/commerce/Transactions';
 import Rewards from './pages/commerce/Rewards';
 import Subscriptions from './pages/commerce/Subscriptions';
 import Invoices from './pages/commerce/Invoices';
+import RewardClaims from './pages/commerce/RewardClaims';
 
 // Crypto pages
 import Wallets from './pages/crypto/Wallets';
 import NFTs from './pages/crypto/NFTs';
 import NFTMarketplace from './pages/crypto/NFTMarketplace';
-import Lootboxes from './pages/crypto/Lootboxes';
 import TokenTransfers from './pages/crypto/TokenTransfers';
+import TipsManagement from './pages/crypto/TipsManagement';
 
 // Communication pages
 import Notifications from './pages/communication/Notifications';
@@ -82,10 +90,31 @@ import DMModeration from './pages/communication/DMModeration';
 import SupportRequests from './pages/communication/SupportRequests';
 import ExpertRequests from './pages/communication/ExpertRequests';
 
+// Moderation pages
+import ModerationUserReports from './pages/moderation/UserReports';
+import ModerationUserReportDetail from './pages/moderation/UserReportDetail';
+
+// Billing pages
+import SubscriptionPlans from './pages/billing/SubscriptionPlans';
+
+// Support pages
+import DMSupportSessions from './pages/support/DMSupportSessions';
+
+// Marketing pages
+import MarketplaceBanners from './pages/marketing/MarketplaceBanners';
+
+// Analytics pages (additional)
+import AiExperienceSplits from './pages/analytics/AiExperienceSplits';
+
+// User pages (additional)
+import UserFeedPreferences from './pages/users/UserFeedPreferences';
+
 // System pages
 import AdminLogs from './pages/system/AdminLogs';
 import SystemSettings from './pages/system/SystemSettings';
 import ModerationActions from './pages/system/ModerationActions';
+import ExperienceConfig from './pages/system/ExperienceConfig';
+import UserThemes from './pages/system/UserThemes';
 
 /** Redirect logged-in user to home if they visit /login */
 function LoginRedirect() {
@@ -131,6 +160,7 @@ function App() {
           <Route path="users/reports" element={<UserReports />} />
           <Route path="users/reports/:id" element={<UserReportDetail />} />
           <Route path="users/banned" element={<BannedUsers />} />
+          <Route path="users/feed-preferences" element={<UserFeedPreferences />} />
           <Route path="users/:id" element={<UserDetail />} />
 
           {/* Content — posts/:id before other content so :id matches */}
@@ -140,6 +170,10 @@ function App() {
           <Route path="content/trending" element={<TrendingPosts />} />
           <Route path="content/feed-highlights" element={<FeedHighlights />} />
           <Route path="content/tags" element={<TagsCategories />} />
+          <Route path="content/boost-options" element={<BoostOptions />} />
+          <Route path="content/collections" element={<ContentCollections />} />
+          <Route path="content/top-community-choices" element={<TopCommunityChoices />} />
+          <Route path="content/manual-review-flags" element={<ManualReviewFlags />} />
 
           {/* Products - static routes first, :id last */}
           <Route path="products" element={<ProductCatalog />} />
@@ -148,6 +182,8 @@ function App() {
           <Route path="products/suggestions" element={<ProductSuggestions />} />
           <Route path="products/inventories" element={<UserInventories />} />
           <Route path="products/comparisons" element={<ProductComparisons />} />
+          <Route path="products/category-management" element={<CategoryManagement />} />
+          <Route path="products/comparison-metrics" element={<ComparisonMetrics />} />
           <Route path="products/:id" element={<ProductDetail />} />
 
           {/* Brands */}
@@ -156,6 +192,7 @@ function App() {
           <Route path="brands/surveys" element={<BrandSurveys />} />
           <Route path="brands/leaderboards" element={<BrandLeaderboards />} />
           <Route path="brands/rewards" element={<BrandRewards />} />
+          <Route path="brands/categories" element={<BrandCategories />} />
 
           {/* News */}
           <Route path="news" element={<NewsList />} />
@@ -186,13 +223,14 @@ function App() {
           <Route path="commerce/rewards" element={<Rewards />} />
           <Route path="commerce/subscriptions" element={<Subscriptions />} />
           <Route path="commerce/invoices" element={<Invoices />} />
+          <Route path="commerce/reward-claims" element={<RewardClaims />} />
 
           {/* Crypto */}
           <Route path="crypto/wallets" element={<Wallets />} />
           <Route path="crypto/nfts" element={<NFTs />} />
           <Route path="crypto/marketplace" element={<NFTMarketplace />} />
-          <Route path="crypto/lootboxes" element={<Lootboxes />} />
           <Route path="crypto/transfers" element={<TokenTransfers />} />
+          <Route path="crypto/tips" element={<TipsManagement />} />
 
           {/* Communication */}
           <Route path="communication/notifications" element={<Notifications />} />
@@ -203,11 +241,27 @@ function App() {
 
           {/* Analytics */}
           <Route path="analytics" element={<Analytics />} />
+          <Route path="analytics/ai-experience-splits" element={<AiExperienceSplits />} />
+
+          {/* Moderation */}
+          <Route path="moderation/user-reports" element={<ModerationUserReports />} />
+          <Route path="moderation/user-reports/:id" element={<ModerationUserReportDetail />} />
+
+          {/* Billing */}
+          <Route path="billing/subscription-plans" element={<SubscriptionPlans />} />
+
+          {/* Support */}
+          <Route path="support/dm-sessions" element={<DMSupportSessions />} />
+
+          {/* Marketing */}
+          <Route path="marketing/marketplace-banners" element={<MarketplaceBanners />} />
 
           {/* System */}
           <Route path="system/logs" element={<AdminLogs />} />
           <Route path="system/settings" element={<SystemSettings />} />
           <Route path="system/moderation" element={<ModerationActions />} />
+          <Route path="system/experience-config" element={<ExperienceConfig />} />
+          <Route path="system/user-themes" element={<UserThemes />} />
           </Route>
         </Routes>
         </AuthProvider>

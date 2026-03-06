@@ -37,6 +37,13 @@ import adminUserThemesRouter from './routers/admin-user-themes.router';
 import adminUserFeedPreferencesRouter from './routers/admin-user-feed-preferences.router';
 import adminDMSupportSessionsRouter from './routers/admin-dm-support-sessions.router';
 import adminAiExperienceSplitsRouter from './routers/admin-ai-experience-splits.router';
+import adminCategoriesRouter from './routers/admin-categories.router';
+import adminBoostOptionsRouter from './routers/admin-boost-options.router';
+import adminExperienceConfigRouter from './routers/admin-experience-config.router';
+import adminComparisonMetricsRouter from './routers/admin-comparison-metrics.router';
+import adminExpertRouter from './routers/admin-expert.router';
+import adminRewardClaimsRouter from './routers/admin-reward-claims.router';
+import adminBridgeRouter from './routers/admin-bridge.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -247,5 +254,12 @@ router.use('/user-themes', authMiddleware, requireAdmin, adminUserThemesRouter);
 router.use('/user-feed-preferences', authMiddleware, requireAdmin, adminUserFeedPreferencesRouter);
 router.use('/dm-support-sessions', authMiddleware, requireAdmin, adminDMSupportSessionsRouter);
 router.use('/ai-experience-splits', authMiddleware, requireAdmin, adminAiExperienceSplitsRouter);
+router.use('/categories', authMiddleware, requireAdmin, adminCategoriesRouter);
+router.use('/boost-options', authMiddleware, requireAdmin, adminBoostOptionsRouter);
+router.use('/experience-config', authMiddleware, requireAdmin, adminExperienceConfigRouter);
+router.use('/comparison-metrics', authMiddleware, requireAdmin, adminComparisonMetricsRouter);
+router.use('/expert-requests', authMiddleware, requireAdmin, adminExpertRouter);
+router.use('/reward-claims', authMiddleware, requireAdmin, adminRewardClaimsRouter);
+router.use('/bridge', authMiddleware, requireAdmin, adminBridgeRouter);
 
 export default router;

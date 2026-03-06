@@ -452,6 +452,11 @@ router.patch(
       throw new NotFoundError('NFT not found');
     }
 
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+
     const nft = await prisma.nFT.update({
       where: { id },
       data: body,

@@ -10,10 +10,7 @@ import {
   Spin,
   Avatar,
   Typography,
-  Badge,
   Modal,
-  Form,
-  Select,
   Input,
   message,
 } from 'antd';
@@ -21,39 +18,25 @@ import {
   ArrowLeftOutlined,
   UserOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import {
   fetchUserReport,
-  updateUserReport,
+  resolveUserReport,
   deleteUserReport,
-  type UserReportDetail,
+  type UserReportDetail as UserReportDetailType,
 } from '../../api/admin-user-reports';
 
 const { Title, Text } = Typography;
 
-const REPORT_TYPE_COLORS: Record<string, string> = {
-  POST: 'blue',
-  COMMENT: 'cyan',
-  USER: 'purple',
-  MESSAGE: 'orange',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: 'gold',
-  REVIEWING: 'processing',
-  RESOLVED: 'success',
-  DISMISSED: 'default',
-};
-
 function UserReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [report, setReport] = useState<UserReportDetail | null>(null);
+  const [report, setReport] = useState<UserReportDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const [updateForm] = Form.useForm();
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [adminNote, setAdminNote] = useState('');
 
   const loadReport = async () => {
     if (!id) return;
@@ -74,50 +57,36 @@ function UserReportDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const handleUpdate = async (values: { status: string; reviewNote?: string }) => {
+  const handleResolve = async () => {
     if (!id) return;
-
     try {
-      await updateUserReport(id, {
-        status: values.status as 'PENDING' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED',
-        reviewNote: values.reviewNote || null,
-      });
-      message.success('Report updated successfully');
-      setUpdateModalOpen(false);
-      updateForm.resetFields();
+      await resolveUserReport(id, { adminNote: adminNote || null });
+      message.success('Report resolved');
+      setResolveModalOpen(false);
+      setAdminNote('');
       loadReport();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to update report');
+      message.error(e instanceof Error ? e.message : 'Failed to resolve report');
     }
   };
 
   const handleDelete = async () => {
     if (!id) return;
-
     Modal.confirm({
-      title: 'Dismiss Report',
-      content: 'Are you sure you want to dismiss this report?',
-      okText: 'Dismiss',
+      title: 'Delete Report',
+      content: 'Are you sure you want to delete this report? This action cannot be undone.',
+      okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
         try {
           await deleteUserReport(id);
-          message.success('Report dismissed successfully');
+          message.success('Report deleted');
           navigate('/moderation/user-reports');
         } catch (e) {
-          message.error(e instanceof Error ? e.message : 'Failed to dismiss report');
+          message.error(e instanceof Error ? e.message : 'Failed to delete report');
         }
       },
     });
-  };
-
-  const openUpdateModal = () => {
-    if (!report) return;
-    updateForm.setFieldsValue({
-      status: report.status,
-      reviewNote: report.reviewNote || '',
-    });
-    setUpdateModalOpen(true);
   };
 
   if (loading) {
@@ -157,46 +126,59 @@ function UserReportDetail() {
         >
           Back to Reports
         </Button>
-        <Button
-          type="primary"
-          icon={<CheckCircleOutlined />}
-          onClick={openUpdateModal}
-        >
-          Update Status
-        </Button>
+        {!report.resolved && (
+          <Button
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            onClick={() => {
+              setAdminNote('');
+              setResolveModalOpen(true);
+            }}
+          >
+            Resolve
+          </Button>
+        )}
         <Button
           danger
-          icon={<CloseCircleOutlined />}
+          icon={<DeleteOutlined />}
           onClick={handleDelete}
-          disabled={report.status === 'DISMISSED'}
         >
-          Dismiss
+          Delete
         </Button>
       </Space>
 
       <Card title={<Title level={4}>Report Details</Title>} style={{ marginBottom: 16 }}>
         <Descriptions column={2} bordered>
           <Descriptions.Item label="Report ID">{report.id}</Descriptions.Item>
-          <Descriptions.Item label="Type">
-            <Tag color={REPORT_TYPE_COLORS[report.reportType]}>{report.reportType}</Tag>
+          <Descriptions.Item label="Category">
+            <Tag>{report.category}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="Status">
-            <Badge status={STATUS_COLORS[report.status] as any} text={report.status} />
+            <Tag color={report.resolved ? 'success' : 'warning'}>
+              {report.resolved ? 'Resolved' : 'Open'}
+            </Tag>
           </Descriptions.Item>
           <Descriptions.Item label="Created">
             {new Date(report.createdAt).toLocaleString()}
-          </Descriptions.Item>
-          <Descriptions.Item label="Reason" span={2}>
-            <Text strong>{report.reason}</Text>
           </Descriptions.Item>
           {report.description && (
             <Descriptions.Item label="Description" span={2}>
               {report.description}
             </Descriptions.Item>
           )}
-          {report.contentId && (
-            <Descriptions.Item label="Content ID" span={2}>
-              <Text code>{report.contentId}</Text>
+          {report.resolvedAt && (
+            <Descriptions.Item label="Resolved At">
+              {new Date(report.resolvedAt).toLocaleString()}
+            </Descriptions.Item>
+          )}
+          {report.resolvedBy && (
+            <Descriptions.Item label="Resolved By">
+              <Text code>{report.resolvedBy}</Text>
+            </Descriptions.Item>
+          )}
+          {report.adminNote && (
+            <Descriptions.Item label="Admin Note" span={2}>
+              {report.adminNote}
             </Descriptions.Item>
           )}
         </Descriptions>
@@ -206,14 +188,14 @@ function UserReportDetail() {
         <Space align="center">
           <Avatar
             size={64}
-            src={report.reporter.avatarUrl}
+            src={undefined}
             icon={<UserOutlined />}
           />
           <div>
             <div>
               <Text strong>
                 <Link to={`/users/${report.reporter.id}`}>
-                  {report.reporter.username || report.reporter.displayName || 'Unknown'}
+                  {report.reporter.userName || report.reporter.displayName || 'Unknown'}
                 </Link>
               </Text>
             </div>
@@ -233,16 +215,14 @@ function UserReportDetail() {
         <Space align="center">
           <Avatar
             size={64}
-            src={report.reportedUser.avatarUrl}
+            src={undefined}
             icon={<UserOutlined />}
           />
           <div>
             <div>
               <Text strong>
                 <Link to={`/users/${report.reportedUser.id}`}>
-                  {report.reportedUser.username ||
-                    report.reportedUser.displayName ||
-                    'Unknown'}
+                  {report.reportedUser.userName || report.reportedUser.displayName || 'Unknown'}
                 </Link>
               </Text>
               <Tag style={{ marginLeft: 8 }}>{report.reportedUser.status}</Tag>
@@ -259,50 +239,25 @@ function UserReportDetail() {
         </Space>
       </Card>
 
-      {report.reviewer && (
-        <Card title="Review Information" style={{ marginBottom: 16 }}>
-          <Descriptions column={1} bordered>
-            <Descriptions.Item label="Reviewer">
-              {report.reviewer.username || report.reviewer.displayName || 'Unknown'}
-            </Descriptions.Item>
-            {report.reviewNote && (
-              <Descriptions.Item label="Review Note">{report.reviewNote}</Descriptions.Item>
-            )}
-            <Descriptions.Item label="Last Updated">
-              {new Date(report.updatedAt).toLocaleString()}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-      )}
-
-      {/* Update Report Modal */}
       <Modal
-        title="Update Report"
-        open={updateModalOpen}
+        title="Resolve Report"
+        open={resolveModalOpen}
         onCancel={() => {
-          setUpdateModalOpen(false);
-          updateForm.resetFields();
+          setResolveModalOpen(false);
+          setAdminNote('');
         }}
-        onOk={() => updateForm.submit()}
-        okText="Update"
+        onOk={handleResolve}
+        okText="Resolve"
       >
-        <Form form={updateForm} layout="vertical" onFinish={handleUpdate}>
-          <Form.Item
-            name="status"
-            label="Status"
-            rules={[{ required: true, message: 'Please select status' }]}
-          >
-            <Select>
-              <Select.Option value="PENDING">Pending</Select.Option>
-              <Select.Option value="REVIEWING">Reviewing</Select.Option>
-              <Select.Option value="RESOLVED">Resolved</Select.Option>
-              <Select.Option value="DISMISSED">Dismissed</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="reviewNote" label="Review Note">
-            <Input.TextArea rows={4} placeholder="Add a note about your review decision" />
-          </Form.Item>
-        </Form>
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ fontWeight: 500 }}>Admin Note (optional)</label>
+        </div>
+        <Input.TextArea
+          rows={4}
+          placeholder="Add a note about your resolution"
+          value={adminNote}
+          onChange={(e) => setAdminNote(e.target.value)}
+        />
       </Modal>
     </div>
   );

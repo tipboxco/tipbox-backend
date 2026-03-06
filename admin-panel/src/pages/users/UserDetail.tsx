@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Card,
   Tabs,
@@ -13,9 +13,14 @@ import {
   Image,
   Descriptions,
   Modal,
+  Form,
+  InputNumber,
+  Input,
+  Checkbox,
+  message as antdMessage,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { UserOutlined, ExclamationCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { UserOutlined, ExclamationCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, LogoutOutlined, DollarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import ViewActionButton from '../../components/ViewActionButton';
 import IdDisplay from '../../components/IdDisplay';
@@ -32,6 +37,9 @@ import {
   fetchUserTipsTransactions,
   banUser,
   unbanUser,
+  deleteUser,
+  forceLogoutUser,
+  adjustWalletBalance,
 } from '../../api/admin-users';
 import { fetchUserPosts } from '../../api/admin-content';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
@@ -59,6 +67,7 @@ type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'posts' | 
 
 function UserDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [user, setUser] = useState<AdminUserDetailResponse | null>(null);
   const [moderation, setModeration] = useState<AdminModerationHistoryItem[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<AdminLoginAttemptListItem[]>([]);
@@ -83,6 +92,9 @@ function UserDetail() {
   const [editRolesModalOpen, setEditRolesModalOpen] = useState(false);
   const [editAvatarModalOpen, setEditAvatarModalOpen] = useState(false);
   const [grantBadgeModalOpen, setGrantBadgeModalOpen] = useState(false);
+  const [adjustBalanceModalOpen, setAdjustBalanceModalOpen] = useState(false);
+  const [adjustBalanceForm] = Form.useForm();
+  const [selectedWallet, setSelectedWallet] = useState<AdminWalletSummaryItem | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -331,6 +343,67 @@ function UserDetail() {
     });
   };
 
+  const handleDeleteUser = () => {
+    if (!id) return;
+    Modal.confirm({
+      title: 'Delete User',
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to permanently delete this user? All associated data will be removed. This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await deleteUser(id);
+          antdMessage.success('User deleted successfully');
+          navigate('/users');
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete user');
+        }
+      },
+    });
+  };
+
+  const handleForceLogout = () => {
+    if (!id) return;
+    Modal.confirm({
+      title: 'Force Logout',
+      icon: <ExclamationCircleOutlined />,
+      content: 'This will invalidate all active sessions for this user. They will need to log in again.',
+      onOk: async () => {
+        try {
+          await forceLogoutUser(id);
+          antdMessage.success('User sessions invalidated');
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to force logout');
+        }
+      },
+    });
+  };
+
+  const handleAdjustBalance = async (values: { amount: number; reason: string; adjustLockedBalance?: boolean }) => {
+    if (!selectedWallet) return;
+    try {
+      await adjustWalletBalance(selectedWallet.id, values);
+      antdMessage.success('Balance adjusted successfully');
+      setAdjustBalanceModalOpen(false);
+      adjustBalanceForm.resetFields();
+      setSelectedWallet(null);
+      // Refresh wallet data
+      if (id) {
+        const [walletRes, summaryRes, txRes] = await Promise.all([
+          fetchUserWallet(id),
+          fetchUserTipsSummary(id),
+          fetchUserTipsTransactions(id, { limit: 20, offset: 0 }),
+        ]);
+        setWallet(Array.isArray(walletRes.data) ? walletRes.data : []);
+        setTipsSummary(summaryRes.data ?? null);
+        setTipsTransactions(Array.isArray(txRes.data) ? txRes.data : []);
+      }
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to adjust balance');
+    }
+  };
+
   if (!id) {
     return <div><Alert message="Invalid user" type="error" showIcon /></div>;
   }
@@ -521,6 +594,24 @@ function UserDetail() {
       key: 'created',
       width: 150,
       render: (date: string) => date ? new Date(date).toLocaleString('en-US') : '—',
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 120,
+      render: (_, record) => (
+        <Button
+          size="small"
+          icon={<DollarOutlined />}
+          onClick={() => {
+            setSelectedWallet(record);
+            adjustBalanceForm.resetFields();
+            setAdjustBalanceModalOpen(true);
+          }}
+        >
+          Adjust
+        </Button>
+      ),
     },
   ];
 
@@ -966,15 +1057,23 @@ function UserDetail() {
         backTo="/users"
         backLabel="Back to list"
         actions={
-          user.status === 'BANNED' ? (
-            <Button onClick={handleUnban} loading={saving}>
-              Unban
+          <Space>
+            <Button icon={<LogoutOutlined />} onClick={handleForceLogout} loading={saving}>
+              Force Logout
             </Button>
-          ) : (
-            <Button danger onClick={handleBan} loading={saving}>
-              Ban
+            {user.status === 'BANNED' ? (
+              <Button onClick={handleUnban} loading={saving}>
+                Unban
+              </Button>
+            ) : (
+              <Button danger onClick={handleBan} loading={saving}>
+                Ban
+              </Button>
+            )}
+            <Button danger type="primary" icon={<DeleteOutlined />} onClick={handleDeleteUser}>
+              Delete User
             </Button>
-          )
+          </Space>
         }
       />
 
@@ -1037,6 +1136,44 @@ function UserDetail() {
             setGrantBadgeModalOpen(false);
           }}
         />
+      )}
+
+      {adjustBalanceModalOpen && selectedWallet && (
+        <Modal
+          title={`Adjust Balance — Wallet ${selectedWallet.id.slice(0, 8)}...`}
+          open={adjustBalanceModalOpen}
+          onCancel={() => {
+            setAdjustBalanceModalOpen(false);
+            adjustBalanceForm.resetFields();
+            setSelectedWallet(null);
+          }}
+          onOk={() => adjustBalanceForm.submit()}
+          okText="Adjust"
+        >
+          <Descriptions column={2} bordered size="small" style={{ marginBottom: 16 }}>
+            <Descriptions.Item label="Current Balance">{selectedWallet.balance}</Descriptions.Item>
+            <Descriptions.Item label="Locked Balance">{selectedWallet.lockedBalance}</Descriptions.Item>
+          </Descriptions>
+          <Form form={adjustBalanceForm} layout="vertical" onFinish={handleAdjustBalance}>
+            <Form.Item
+              name="amount"
+              label="Amount (positive to add, negative to subtract)"
+              rules={[{ required: true, message: 'Please enter amount' }]}
+            >
+              <InputNumber style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              name="reason"
+              label="Reason"
+              rules={[{ required: true, message: 'Please enter a reason' }]}
+            >
+              <Input.TextArea rows={3} placeholder="Why is this balance being adjusted?" />
+            </Form.Item>
+            <Form.Item name="adjustLockedBalance" valuePropName="checked">
+              <Checkbox>Also adjust locked balance</Checkbox>
+            </Form.Item>
+          </Form>
+        </Modal>
       )}
     </div>
   );

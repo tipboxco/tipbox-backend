@@ -9,6 +9,7 @@ import { generateIdForModel } from '../../../infrastructure/ids/id.strategy';
 import { createUpload } from '../../../infrastructure/config/file-upload.config';
 import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import { S3Service } from '../../../infrastructure/s3/s3.service';
 
 // Import schemas
@@ -292,6 +293,98 @@ router.get(
     }));
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
+  })
+);
+
+router.post(
+  '/:id/participants',
+  validateBody(z.object({ userId: z.string().uuid() })),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: eventId } = req.params;
+    const adminId = req.user?.id;
+    const { userId } = req.body;
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundError('Event not found');
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    if (!user) throw new NotFoundError('User not found');
+
+    // Check if already a participant
+    const existing = await prisma.eventStats.findUnique({
+      where: { userId_eventId: { userId, eventId } },
+    });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'User is already a participant in this event' });
+    }
+
+    const stats = await prisma.eventStats.create({
+      data: {
+        userId,
+        eventId,
+        totalParticipated: 0,
+        totalComments: 0,
+        helpfulVotesReceived: 0,
+        eventPostsCount: 0,
+        eventLikesReceived: 0,
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'EVENT_PARTICIPANT_ADD',
+        description: `Added user ${userId} to event ${eventId}`,
+        entityType: 'event_stats',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin added event participant', { adminId, eventId, userId });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: stats.id,
+        userId: stats.userId,
+        eventId: stats.eventId,
+        createdAt: stats.createdAt.toISOString(),
+      },
+    });
+  })
+);
+
+router.delete(
+  '/:id/participants/:participantId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: eventId, participantId } = req.params;
+    const adminId = req.user?.id;
+
+    const stats = await prisma.eventStats.findUnique({ where: { id: participantId } });
+    if (!stats || stats.eventId !== eventId) {
+      throw new NotFoundError('Event participant not found');
+    }
+
+    // Delete related event rewards for this user in this event
+    await prisma.eventReward.deleteMany({
+      where: { userId: stats.userId, eventId },
+    });
+
+    await prisma.eventStats.delete({ where: { id: participantId } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'EVENT_PARTICIPANT_REMOVE',
+        description: `Removed user ${stats.userId} from event ${eventId}`,
+        entityType: 'event_stats',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin removed event participant', { adminId, eventId, userId: stats.userId, participantId });
+
+    return res.json({ success: true, message: 'Participant removed from event' });
   })
 );
 
@@ -650,6 +743,10 @@ router.patch(
     if (body.mainCategoryId !== undefined) updateData.mainCategoryId = body.mainCategoryId;
     if (body.subCategoryId !== undefined) updateData.subCategoryId = body.subCategoryId;
     if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && event.imageUrl && body.imageUrl !== event.imageUrl) {
+      try { await s3Service.deleteFile(event.imageUrl); } catch { /* ignore */ }
+    }
     const updated = await prisma.event.update({
       where: { id },
       data: updateData,

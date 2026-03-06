@@ -361,6 +361,14 @@ router.patch(
 
     const updateData: Record<string, unknown> = { ...body };
 
+    // Clean up old images from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+    if (body.thumbnailUrl !== undefined && existing.thumbnailUrl && body.thumbnailUrl !== existing.thumbnailUrl) {
+      try { await s3Service.deleteFile(existing.thumbnailUrl); } catch { /* ignore */ }
+    }
+
     const news = await prisma.news.update({
       where: { id },
       data: updateData,

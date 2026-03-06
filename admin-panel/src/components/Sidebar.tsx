@@ -65,6 +65,10 @@ const menuItems: MenuItem[] = [
       { key: 'content-trending', label: 'Trending Posts', path: '/content/trending' },
       { key: 'content-highlights', label: 'Feed Highlights', path: '/content/feed-highlights' },
       { key: 'content-tags', label: 'Tags & Categories', path: '/content/tags' },
+      { key: 'content-boost-options', label: 'Boost Options', path: '/content/boost-options' },
+      { key: 'content-collections', label: 'Collections', path: '/content/collections' },
+      { key: 'content-top-community', label: 'Top Community Choices', path: '/content/top-community-choices' },
+      { key: 'content-review-flags', label: 'Manual Review Flags', path: '/content/manual-review-flags' },
     ],
   },
   {
@@ -78,6 +82,8 @@ const menuItems: MenuItem[] = [
       { key: 'products-suggestions', label: 'Product Suggestions', path: '/products/suggestions' },
       { key: 'products-inventories', label: 'User Inventories', path: '/products/inventories' },
       { key: 'products-comparisons', label: 'Comparisons', path: '/products/comparisons' },
+      { key: 'products-category-management', label: 'Category Management', path: '/products/category-management' },
+      { key: 'products-comparison-metrics', label: 'Comparison Metrics', path: '/products/comparison-metrics' },
     ],
   },
   {
@@ -90,6 +96,7 @@ const menuItems: MenuItem[] = [
       { key: 'brands-surveys', label: 'Brand Surveys', path: '/brands/surveys' },
       { key: 'brands-leaderboards', label: 'Leaderboards', path: '/brands/leaderboards' },
       { key: 'brands-rewards', label: 'Rewards', path: '/brands/rewards' },
+      { key: 'brands-categories', label: 'Brand Categories', path: '/brands/categories' },
     ],
   },
   {
@@ -131,6 +138,7 @@ const menuItems: MenuItem[] = [
       { key: 'commerce-subscriptions', label: 'Subscriptions', path: '/commerce/subscriptions' },
       { key: 'commerce-subscription-plans', label: 'Subscription Plans', path: '/billing/subscription-plans' },
       { key: 'commerce-invoices', label: 'Invoices', path: '/commerce/invoices' },
+      { key: 'commerce-reward-claims', label: 'Reward Claims', path: '/commerce/reward-claims' },
     ],
   },
   {
@@ -141,8 +149,8 @@ const menuItems: MenuItem[] = [
       { key: 'crypto-wallets', label: 'Wallets', path: '/crypto/wallets' },
       { key: 'crypto-nfts', label: 'NFTs', path: '/crypto/nfts' },
       { key: 'crypto-marketplace', label: 'NFT Marketplace', path: '/crypto/marketplace' },
-      { key: 'crypto-lootboxes', label: 'Lootboxes', path: '/crypto/lootboxes' },
       { key: 'crypto-transfers', label: 'Token Transfers', path: '/crypto/transfers' },
+      { key: 'crypto-tips', label: 'Tips Management', path: '/crypto/tips' },
     ],
   },
   {
@@ -192,6 +200,7 @@ const menuItems: MenuItem[] = [
       { key: 'system-settings', label: 'Settings', path: '/system/settings' },
       { key: 'system-moderation', label: 'Moderation Actions', path: '/system/moderation' },
       { key: 'system-themes', label: 'User Themes', path: '/system/user-themes' },
+      { key: 'system-experience-config', label: 'Experience Config', path: '/system/experience-config' },
     ],
   },
 ];

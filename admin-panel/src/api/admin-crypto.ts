@@ -266,39 +266,6 @@ export type ModerateListingInput = {
   reason?: string | null;
 };
 
-/* ========== Lootboxes ========== */
-
-export type AdminLootboxStatsResponse = {
-  total: number;
-  locked: number;
-  unlocked: number;
-  totalTipsLocked: number;
-  avgTipsPerLootbox: number;
-};
-
-export type AdminLootboxListItem = {
-  id: string;
-  userId: string;
-  userEmail: string | null;
-  username: string | null;
-  tipsLocked: number;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type AdminLootboxDetailResponse = AdminLootboxListItem & {
-  user: {
-    id: string;
-    email: string | null;
-    username: string | null;
-  };
-};
-
-export type UnlockLootboxInput = {
-  force?: boolean;
-};
-
 /* ========== Query Parameters ========== */
 
 export type WalletsQueryParams = {
@@ -370,17 +337,6 @@ export type NFTMarketListingsQueryParams = {
   status?: string;
   minPrice?: number;
   maxPrice?: number;
-  sort?: string;
-  order?: 'asc' | 'desc';
-};
-
-export type LootboxQueryParams = {
-  limit?: number;
-  offset?: number;
-  userId?: string;
-  status?: string;
-  minTips?: number;
-  maxTips?: number;
   sort?: string;
   order?: 'asc' | 'desc';
 };
@@ -611,39 +567,6 @@ export async function moderateNFTListing(
   return patch<{ message: string }>(`/admin/nft/marketplace/${id}/moderate`, data);
 }
 
-/* ========== Lootboxes ========== */
-
-export async function fetchLootboxStats(): Promise<ApiResponse<AdminLootboxStatsResponse>> {
-  return get<AdminLootboxStatsResponse>('/admin/nft/lootbox/stats');
-}
-
-export async function fetchLootboxes(
-  params: LootboxQueryParams = {}
-): Promise<ApiResponse<AdminLootboxListItem[]>> {
-  const query = {
-    limit: params.limit ?? 50,
-    offset: params.offset ?? 0,
-    userId: params.userId,
-    status: params.status,
-    minTips: params.minTips,
-    maxTips: params.maxTips,
-    sort: params.sort ?? 'createdAt',
-    order: params.order ?? 'desc',
-  };
-  return get<AdminLootboxListItem[]>('/admin/nft/lootbox', query);
-}
-
-export async function fetchLootbox(id: string): Promise<ApiResponse<AdminLootboxDetailResponse>> {
-  return get<AdminLootboxDetailResponse>(`/admin/nft/lootbox/${id}`);
-}
-
-export async function unlockLootbox(
-  id: string,
-  data: UnlockLootboxInput = {}
-): Promise<ApiResponse<{ message: string }>> {
-  return post<{ message: string }>(`/admin/nft/lootbox/${id}/unlock`, data);
-}
-
 // ==================== Aliases for Backward Compatibility ====================
 
 /* NFT Marketplace Aliases */
@@ -682,5 +605,3 @@ export const fetchTokenTransfer = async (id: string): Promise<ApiResponse<AdminT
 };
 export const createTokenTransfer = createTipsTransfer;
 
-/* Lootbox Aliases */
-export const openLootbox = unlockLootbox;

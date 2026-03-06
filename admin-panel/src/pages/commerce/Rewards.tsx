@@ -286,7 +286,6 @@ function Rewards() {
                 <Select.Option value="ACHIEVEMENT">Achievement</Select.Option>
                 <Select.Option value="EVENT">Event</Select.Option>
                 <Select.Option value="NFT">NFT</Select.Option>
-                <Select.Option value="LOOTBOX">Lootbox</Select.Option>
               </Select>
             </Space>
           </Row>

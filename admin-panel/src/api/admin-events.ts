@@ -101,6 +101,14 @@ export async function fetchEventParticipants(
   return get<AdminEventParticipantListItem[]>(`${prefix}/events/${eventId}/participants`, query);
 }
 
+export async function addEventParticipant(eventId: string, body: { userId: string }) {
+  return post<AdminEventParticipantListItem>(`${prefix}/events/${eventId}/participants`, body);
+}
+
+export async function removeEventParticipant(eventId: string, participantId: string) {
+  return del<{ message: string }>(`${prefix}/events/${eventId}/participants/${participantId}`);
+}
+
 export async function fetchEventAnalytics(eventId: string) {
   return get<AdminEventAnalyticsResponse>(`${prefix}/events/${eventId}/analytics`);
 }

@@ -11,6 +11,7 @@ import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 import { S3Service } from '../../../infrastructure/s3/s3.service';
 import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
+import { z } from 'zod';
 
 // Import schemas from modular structure
 import {
@@ -2396,5 +2397,256 @@ router.get(
  *       403:
  *         description: Forbidden
  */
+
+// ==================== User Titles ====================
+
+const AdminUserTitlesQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  offset: z.coerce.number().int().nonnegative().default(0),
+  userId: z.string().uuid().optional(),
+  search: z.string().optional(),
+  sort: z.enum(['createdAt', 'earnedAt', 'title']).default('earnedAt'),
+  order: z.enum(['asc', 'desc']).default('desc'),
+});
+
+const AdminCreateUserTitleSchema = z.object({
+  title: z.string().min(1).max(500),
+});
+
+/**
+ * GET /admin/users/titles
+ * List all user titles
+ */
+router.get(
+  '/titles',
+  validateQuery(AdminUserTitlesQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = AdminUserTitlesQuerySchema.parse(req.query);
+
+    const where: Record<string, unknown> = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.search) {
+      where.title = { contains: query.search, mode: 'insensitive' };
+    }
+
+    const [titles, total] = await Promise.all([
+      prisma.userTitle.findMany({
+        where,
+        take: query.limit,
+        skip: query.offset,
+        orderBy: { [query.sort]: query.order },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { userName: true, displayName: true } },
+            },
+          },
+        },
+      }),
+      prisma.userTitle.count({ where }),
+    ]);
+
+    const data = titles.map((t) => ({
+      id: t.id,
+      userId: t.userId,
+      userName: t.user.profile?.userName ?? t.user.email,
+      displayName: t.user.profile?.displayName ?? null,
+      title: t.title,
+      earnedAt: t.earnedAt.toISOString(),
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return res.json({
+      success: true,
+      data,
+      pagination: { total, limit: query.limit, offset: query.offset },
+    });
+  })
+);
+
+/**
+ * GET /admin/users/:userId/titles
+ * List titles for a specific user
+ */
+router.get(
+  '/:userId/titles',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const titles = await prisma.userTitle.findMany({
+      where: { userId },
+      orderBy: { earnedAt: 'desc' },
+    });
+
+    const data = titles.map((t) => ({
+      id: t.id,
+      title: t.title,
+      earnedAt: t.earnedAt.toISOString(),
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * POST /admin/users/:userId/titles
+ * Award a title to a user
+ */
+router.post(
+  '/:userId/titles',
+  validateBody(AdminCreateUserTitleSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const adminId = req.user?.id;
+    const body = AdminCreateUserTitleSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const title = await prisma.userTitle.create({
+      data: {
+        userId,
+        title: body.title,
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'USER_TITLE_GRANT',
+        description: `Granted title "${body.title}" to user ${userId}`,
+        entityType: 'user_title',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin granted user title', { adminId, userId, title: body.title });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: title.id,
+        userId: title.userId,
+        title: title.title,
+        earnedAt: title.earnedAt.toISOString(),
+        createdAt: title.createdAt.toISOString(),
+      },
+    });
+  })
+);
+
+/**
+ * DELETE /admin/users/titles/:titleId
+ * Remove a user title
+ */
+router.delete(
+  '/titles/:titleId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { titleId } = req.params;
+    const adminId = req.user?.id;
+
+    const title = await prisma.userTitle.findUnique({ where: { id: titleId } });
+    if (!title) {
+      throw new NotFoundError('User title not found');
+    }
+
+    await prisma.userTitle.delete({ where: { id: titleId } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'USER_TITLE_REVOKE',
+        description: `Revoked title "${title.title}" from user ${title.userId}`,
+        entityType: 'user_title',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin revoked user title', { adminId, titleId, userId: title.userId });
+
+    return res.json({ success: true, message: 'User title removed successfully' });
+  })
+);
+
+/**
+ * POST /admin/users/:id/force-logout
+ * Deactivate all push tokens for a user
+ */
+router.post(
+  '/:id/force-logout',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+
+    const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const result = await prisma.pushToken.updateMany({
+      where: { userId: id, isActive: true },
+      data: { isActive: false },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'USER_FORCE_LOGOUT',
+        description: `Force logged out user ${id} (${result.count} tokens deactivated)`,
+        entityType: 'user',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin force logged out user', { adminId, userId: id, tokensDeactivated: result.count });
+
+    return res.json({
+      success: true,
+      message: `User force logged out (${result.count} tokens deactivated)`,
+    });
+  })
+);
+
+/**
+ * DELETE /admin/users/:id
+ * Permanently delete a user and all associated data
+ */
+router.delete(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    if (adminId === id) {
+      return res.status(400).json({ success: false, message: 'Cannot delete your own account' });
+    }
+
+    // Log BEFORE delete (because AdminLog also cascades with user)
+    logger.warn('Admin deleting user', { adminId, targetUserId: id, targetEmail: user.email });
+
+    await prisma.user.delete({ where: { id } });
+
+    return res.json({ success: true, message: 'User and all associated data deleted successfully' });
+  })
+);
 
 export default router;

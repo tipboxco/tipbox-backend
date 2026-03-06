@@ -362,6 +362,11 @@ router.patch(
       updateData.metadata = body.metadata as Record<string, unknown>;
     }
 
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+
     const product = await prisma.product.update({
       where: { id },
       data: updateData,
@@ -1231,6 +1236,36 @@ router.delete(
     logger.info('Product group deleted', { groupId: id, adminId });
 
     return res.json({ success: true, message: 'Product group deleted' });
+  })
+);
+
+/**
+ * POST /admin/products/groups/upload-image
+ * Upload product group image to MinIO (product-groups/ folder)
+ */
+router.post(
+  '/groups/upload-image',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `product-groups/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Product group image uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
   })
 );
 

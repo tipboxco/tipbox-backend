@@ -555,6 +555,10 @@ router.patch(
     if (body.completionBonus !== undefined) updateData.completionBonus = body.completionBonus;
     if (body.unlockCondition !== undefined) updateData.unlockCondition = body.unlockCondition;
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId;
+    // Clean up old banner from S3 if being replaced
+    if (body.bannerUrl !== undefined && collection.bannerUrl && body.bannerUrl !== collection.bannerUrl) {
+      try { await s3Service.deleteFile(collection.bannerUrl); } catch { /* ignore */ }
+    }
     const updated = await prisma.badgeCollection.update({
       where: { id },
       data: updateData,
@@ -612,6 +616,36 @@ router.delete(
       },
     });
     return res.json({ success: true, message: 'Koleksiyon silindi' });
+  })
+);
+
+/**
+ * POST /admin/badges/collections/upload-banner
+ * Upload badge collection banner image to MinIO (collections/banners/ folder)
+ */
+router.post(
+  '/collections/upload-banner',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `collections/banners/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Badge collection banner uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
   })
 );
 
@@ -942,6 +976,10 @@ router.patch(
     if (body.rewardMultiplier !== undefined) updateData.rewardMultiplier = body.rewardMultiplier;
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId;
     if (body.collectionId !== undefined) updateData.collectionId = body.collectionId;
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && badge.imageUrl && body.imageUrl !== badge.imageUrl) {
+      try { await s3Service.deleteFile(badge.imageUrl); } catch { /* ignore */ }
+    }
     const updated = await prisma.badge.update({
       where: { id },
       data: updateData,

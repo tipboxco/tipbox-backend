@@ -26,11 +26,12 @@ import {
   DownOutlined,
   StopOutlined,
   DownloadOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
-import { fetchUsersStats, fetchUsers, banUser, unbanUser } from '../../api/admin-users';
+import { fetchUsersStats, fetchUsers, banUser, unbanUser, deleteUser } from '../../api/admin-users';
 import type { AdminUserListItem, AdminUsersStatsResponse } from '../../types/admin';
 import { BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
@@ -289,6 +290,24 @@ function UserList() {
     }
   };
 
+  const handleDeleteUser = (userId: string, displayName: string) => {
+    Modal.confirm({
+      title: 'Delete User',
+      content: `Are you sure you want to permanently delete "${displayName}"? This action cannot be undone.`,
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await deleteUser(userId);
+          message.success('User deleted successfully');
+          loadUsers();
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to delete user');
+        }
+      },
+    });
+  };
+
   const columns: ColumnsType<AdminUserListItem> = [
     {
       title: 'Display Name',
@@ -352,8 +371,19 @@ function UserList() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
-      render: (_, record) => <ViewActionButton to={`/users/${record.id}`} />,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
+      render: (_, record) => (
+        <Space size="small">
+          <ViewActionButton to={`/users/${record.id}`} />
+          <Button
+            size="small"
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteUser(record.id, record.displayName ?? record.email ?? record.id)}
+          />
+        </Space>
+      ),
     },
   ];
 

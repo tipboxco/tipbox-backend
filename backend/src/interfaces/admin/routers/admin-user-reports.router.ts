@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
-import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
@@ -13,7 +12,12 @@ const prisma = getPrisma();
 /**
  * User Reports Management Router
  * Routes are mounted at /admin/user-reports
- * All routes require authMiddleware and requireAdmin (applied at mount point)
+ *
+ * UserReport schema fields:
+ *   id, reportedUserId, reporterId, category, description,
+ *   resolved (boolean), resolvedAt, resolvedBy (UUID), adminNote,
+ *   createdAt, updatedAt
+ * Relations: reportedUser, reporter
  */
 
 // ==================== Schemas ====================
@@ -21,80 +25,69 @@ const prisma = getPrisma();
 const AdminUserReportsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   offset: z.coerce.number().int().nonnegative().default(0),
-  status: z.enum(['PENDING', 'REVIEWING', 'RESOLVED', 'DISMISSED']).optional(),
-  reportType: z.enum(['POST', 'COMMENT', 'USER', 'MESSAGE']).optional(),
+  resolved: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === 'true' ? true : v === 'false' ? false : undefined)),
+  category: z.string().optional(),
   reporterId: z.string().uuid().optional(),
   reportedUserId: z.string().uuid().optional(),
   search: z.string().optional(),
-  sort: z.enum(['createdAt', 'updatedAt']).default('createdAt'),
+  sort: z.enum(['createdAt', 'updatedAt', 'category']).default('createdAt'),
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
-const AdminUpdateUserReportSchema = z.object({
-  status: z.enum(['PENDING', 'REVIEWING', 'RESOLVED', 'DISMISSED']).optional(),
-  reviewNote: z.string().max(1000).nullable().optional(),
-  reviewerId: z.string().uuid().nullable().optional(),
+const AdminResolveReportSchema = z.object({
+  adminNote: z.string().max(2000).nullable().optional(),
 });
 
-// ==================== User Reports ====================
+// ==================== Stats ====================
 
-/**
- * GET /admin/user-reports/stats
- * Get user reports statistics
- */
 router.get(
   '/stats',
   asyncHandler(async (_req: Request, res: Response) => {
-    const [total, pending, reviewing, resolved, dismissed, byType] = await Promise.all([
+    const [total, open, resolved, byCategory] = await Promise.all([
       prisma.userReport.count(),
-      prisma.userReport.count({ where: { status: 'PENDING' } }),
-      prisma.userReport.count({ where: { status: 'REVIEWING' } }),
-      prisma.userReport.count({ where: { status: 'RESOLVED' } }),
-      prisma.userReport.count({ where: { status: 'DISMISSED' } }),
+      prisma.userReport.count({ where: { resolved: false } }),
+      prisma.userReport.count({ where: { resolved: true } }),
       prisma.userReport.groupBy({
-        by: ['reportType'],
+        by: ['category'],
         _count: { id: true },
       }),
     ]);
 
-    const byTypeMap = byType.reduce((acc, item) => {
-      acc[item.reportType] = item._count.id;
-      return acc;
-    }, {} as Record<string, number>);
+    const byCategoryMap = byCategory.reduce(
+      (acc, item) => {
+        acc[item.category] = item._count.id;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return res.json({
       success: true,
-      data: {
-        total,
-        pending,
-        reviewing,
-        resolved,
-        dismissed,
-        byType: byTypeMap,
-      },
+      data: { total, open, resolved, byCategory: byCategoryMap },
     });
-  })
+  }),
 );
 
-/**
- * GET /admin/user-reports
- * List user reports with pagination and filters
- */
+// ==================== CRUD ====================
+
 router.get(
   '/',
   validateQuery(AdminUserReportsQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const query = AdminUserReportsQuerySchema.parse(req.query);
 
-    const where: Prisma.UserReportWhereInput = {};
-    if (query.status) where.status = query.status;
-    if (query.reportType) where.reportType = query.reportType;
+    const where: Record<string, unknown> = {};
+    if (query.resolved !== undefined) where.resolved = query.resolved;
+    if (query.category) where.category = query.category;
     if (query.reporterId) where.reporterId = query.reporterId;
     if (query.reportedUserId) where.reportedUserId = query.reportedUserId;
     if (query.search) {
       where.OR = [
-        { reason: { contains: query.search, mode: 'insensitive' } },
         { description: { contains: query.search, mode: 'insensitive' } },
+        { category: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -108,34 +101,15 @@ router.get(
           reporter: {
             select: {
               id: true,
-              profile: {
-                select: {
-                  userName: true,
-                  displayName: true,
-                },
-              },
+              email: true,
+              profile: { select: { userName: true, displayName: true } },
             },
           },
           reportedUser: {
             select: {
               id: true,
               email: true,
-              profile: {
-                select: {
-                  userName: true,
-                  displayName: true,
-                },
-              },
-            },
-          },
-          reviewer: {
-            select: {
-              id: true,
-              profile: {
-                select: {
-                  userName: true,
-                },
-              },
+              profile: { select: { userName: true, displayName: true } },
             },
           },
         },
@@ -143,42 +117,31 @@ router.get(
       prisma.userReport.count({ where }),
     ]);
 
-    const formattedReports = reports.map((report) => ({
-      id: report.id,
-      reportType: report.reportType,
-      reason: report.reason,
-      description: report.description,
-      status: report.status,
-      reporterId: report.reporterId,
-      reporterUsername: report.reporter?.profile?.userName || null,
-      reporterDisplayName: report.reporter?.profile?.displayName || null,
-      reportedUserId: report.reportedUserId,
-      reportedUsername: report.reportedUser?.profile?.userName || null,
-      reportedUserEmail: report.reportedUser?.email || null,
-      contentId: report.contentId,
-      reviewerId: report.reviewerId,
-      reviewerUsername: report.reviewer?.profile?.userName || null,
-      reviewNote: report.reviewNote,
-      createdAt: report.createdAt.toISOString(),
-      updatedAt: report.updatedAt.toISOString(),
+    const data = reports.map((r) => ({
+      id: r.id,
+      category: r.category,
+      description: r.description,
+      resolved: r.resolved,
+      resolvedAt: r.resolvedAt?.toISOString() ?? null,
+      resolvedBy: r.resolvedBy,
+      adminNote: r.adminNote,
+      reporterId: r.reporterId,
+      reporterName: r.reporter.profile?.userName ?? r.reporter.email,
+      reportedUserId: r.reportedUserId,
+      reportedUserName: r.reportedUser.profile?.userName ?? r.reportedUser.email,
+      reportedUserEmail: r.reportedUser.email,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
     }));
 
     return res.json({
       success: true,
-      data: formattedReports,
-      pagination: {
-        total,
-        limit: query.limit,
-        offset: query.offset,
-      },
+      data,
+      pagination: { total, limit: query.limit, offset: query.offset },
     });
-  })
+  }),
 );
 
-/**
- * GET /admin/user-reports/:id
- * Get single user report details
- */
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
@@ -191,13 +154,7 @@ router.get(
           select: {
             id: true,
             email: true,
-            profile: {
-              select: {
-                userName: true,
-                displayName: true,
-                avatarUrl: true,
-              },
-            },
+            profile: { select: { userName: true, displayName: true } },
           },
         },
         reportedUser: {
@@ -205,24 +162,7 @@ router.get(
             id: true,
             email: true,
             status: true,
-            profile: {
-              select: {
-                userName: true,
-                displayName: true,
-                avatarUrl: true,
-              },
-            },
-          },
-        },
-        reviewer: {
-          select: {
-            id: true,
-            profile: {
-              select: {
-                userName: true,
-                displayName: true,
-              },
-            },
+            profile: { select: { userName: true, displayName: true } },
           },
         },
       },
@@ -232,159 +172,112 @@ router.get(
       throw new NotFoundError('User report not found');
     }
 
-    const formattedReport = {
-      id: report.id,
-      reportType: report.reportType,
-      reason: report.reason,
-      description: report.description,
-      status: report.status,
-      contentId: report.contentId,
-      reporter: {
-        id: report.reporter.id,
-        email: report.reporter.email,
-        username: report.reporter.profile?.userName || null,
-        displayName: report.reporter.profile?.displayName || null,
-        avatarUrl: report.reporter.profile?.avatarUrl || null,
-      },
-      reportedUser: {
-        id: report.reportedUser.id,
-        email: report.reportedUser.email,
-        status: report.reportedUser.status,
-        username: report.reportedUser.profile?.userName || null,
-        displayName: report.reportedUser.profile?.displayName || null,
-        avatarUrl: report.reportedUser.profile?.avatarUrl || null,
-      },
-      reviewer: report.reviewer ? {
-        id: report.reviewer.id,
-        username: report.reviewer.profile?.userName || null,
-        displayName: report.reviewer.profile?.displayName || null,
-      } : null,
-      reviewNote: report.reviewNote,
-      createdAt: report.createdAt.toISOString(),
-      updatedAt: report.updatedAt.toISOString(),
-    };
-
     return res.json({
       success: true,
-      data: formattedReport,
+      data: {
+        id: report.id,
+        category: report.category,
+        description: report.description,
+        resolved: report.resolved,
+        resolvedAt: report.resolvedAt?.toISOString() ?? null,
+        resolvedBy: report.resolvedBy,
+        adminNote: report.adminNote,
+        reporter: {
+          id: report.reporter.id,
+          email: report.reporter.email,
+          userName: report.reporter.profile?.userName ?? null,
+          displayName: report.reporter.profile?.displayName ?? null,
+        },
+        reportedUser: {
+          id: report.reportedUser.id,
+          email: report.reportedUser.email,
+          status: report.reportedUser.status,
+          userName: report.reportedUser.profile?.userName ?? null,
+          displayName: report.reportedUser.profile?.displayName ?? null,
+        },
+        createdAt: report.createdAt.toISOString(),
+        updatedAt: report.updatedAt.toISOString(),
+      },
     });
-  })
+  }),
 );
 
-/**
- * PATCH /admin/user-reports/:id
- * Update user report (status, review notes)
- */
 router.patch(
-  '/:id',
-  validateBody(AdminUpdateUserReportSchema),
+  '/:id/resolve',
+  validateBody(AdminResolveReportSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user?.id;
-    const body = AdminUpdateUserReportSchema.parse(req.body);
+    const body = AdminResolveReportSchema.parse(req.body);
 
-    const existingReport = await prisma.userReport.findUnique({
-      where: { id },
-    });
-
-    if (!existingReport) {
+    const report = await prisma.userReport.findUnique({ where: { id } });
+    if (!report) {
       throw new NotFoundError('User report not found');
     }
 
-    const updateData: Prisma.UserReportUpdateInput = {};
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.reviewNote !== undefined) updateData.reviewNote = body.reviewNote;
-    if (body.reviewerId !== undefined) {
-      updateData.reviewerId = body.reviewerId;
-    } else if (body.status === 'REVIEWING' && !existingReport.reviewerId) {
-      // Auto-assign current admin if moving to REVIEWING
-      updateData.reviewerId = adminId;
-    }
-
-    const updatedReport = await prisma.userReport.update({
+    const updated = await prisma.userReport.update({
       where: { id },
-      data: updateData,
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
       data: {
-        adminId: adminId || 'system',
-        action: 'USER_REPORT_UPDATE',
-        description: `Updated report ${id}: status=${body.status || 'unchanged'}`,
-        entityType: 'user_report',
-        entityId: 0, // Using string ID
+        resolved: true,
+        resolvedAt: new Date(),
+        resolvedBy: adminId ?? null,
+        ...(body.adminNote !== undefined ? { adminNote: body.adminNote } : {}),
       },
     });
 
-    logger.info('Admin updated user report', {
-      adminId,
-      reportId: id,
-      status: body.status,
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'USER_REPORT_RESOLVE',
+        description: `Resolved user report ${id} (category: ${report.category})`,
+        entityType: 'user_report',
+        entityId: 0,
+      },
     });
+
+    logger.info('Admin resolved user report', { adminId, reportId: id });
 
     return res.json({
       success: true,
       data: {
-        id: updatedReport.id,
-        status: updatedReport.status,
-        reviewNote: updatedReport.reviewNote,
-        reviewerId: updatedReport.reviewerId,
-        updatedAt: updatedReport.updatedAt.toISOString(),
+        id: updated.id,
+        resolved: updated.resolved,
+        resolvedAt: updated.resolvedAt?.toISOString() ?? null,
+        resolvedBy: updated.resolvedBy,
+        adminNote: updated.adminNote,
+        updatedAt: updated.updatedAt.toISOString(),
       },
     });
-  })
+  }),
 );
 
-/**
- * DELETE /admin/user-reports/:id
- * Delete user report (soft delete by setting status to DISMISSED)
- */
 router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = req.user?.id;
 
-    const report = await prisma.userReport.findUnique({
-      where: { id },
-    });
-
+    const report = await prisma.userReport.findUnique({ where: { id } });
     if (!report) {
       throw new NotFoundError('User report not found');
     }
 
-    // Soft delete by dismissing
-    await prisma.userReport.update({
-      where: { id },
-      data: {
-        status: 'DISMISSED',
-        reviewerId: adminId || null,
-        reviewNote: 'Deleted by admin',
-      },
-    });
+    await prisma.userReport.delete({ where: { id } });
 
-    // Log admin action
     await prisma.adminLog.create({
       data: {
         adminId: adminId || 'system',
         action: 'USER_REPORT_DELETE',
-        description: `Dismissed report ${id}`,
+        description: `Deleted user report ${id} (category: ${report.category})`,
         entityType: 'user_report',
         entityId: 0,
       },
     });
 
-    logger.info('Admin dismissed user report', {
-      adminId,
-      reportId: id,
-    });
+    logger.info('Admin deleted user report', { adminId, reportId: id });
 
-    return res.json({
-      success: true,
-      message: 'User report dismissed successfully',
-    });
-  })
+    return res.json({ success: true, message: 'User report deleted successfully' });
+  }),
 );
 
 export default router;

@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
+import { z } from 'zod';
 import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 import { generateIdForModel } from '../../../infrastructure/ids/id.strategy';
 import logger from '../../../infrastructure/logger/logger';
@@ -2024,6 +2025,204 @@ router.get(
     }
     const data: AdminContentTagListItem[] = aggregated.map((r) => ({ tag: r.tag, count: r._count.tag }));
     return res.json({ success: true, data });
+  })
+);
+
+// ==================== Content Collections ====================
+
+const AdminContentCollectionsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  offset: z.coerce.number().int().nonnegative().default(0),
+  userId: z.string().uuid().optional(),
+  search: z.string().optional(),
+  sort: z.enum(['createdAt', 'name']).default('createdAt'),
+  order: z.enum(['asc', 'desc']).default('desc'),
+});
+
+const AdminUpdateContentCollectionSchema = z.object({
+  name: z.string().min(1).max(500).optional(),
+  description: z.string().max(2000).nullable().optional(),
+});
+
+/**
+ * GET /admin/content/collections
+ * List content collections
+ */
+router.get(
+  '/collections',
+  validateQuery(AdminContentCollectionsQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = AdminContentCollectionsQuerySchema.parse(req.query);
+
+    const where: Record<string, unknown> = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { description: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [collections, total] = await Promise.all([
+      prisma.contentCollection.findMany({
+        where,
+        take: query.limit,
+        skip: query.offset,
+        orderBy: { [query.sort]: query.order },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { userName: true, displayName: true } },
+            },
+          },
+        },
+      }),
+      prisma.contentCollection.count({ where }),
+    ]);
+
+    const data = collections.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      userId: c.userId,
+      userName: c.user.profile?.userName ?? c.user.email,
+      displayName: c.user.profile?.displayName ?? null,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+    }));
+
+    return res.json({
+      success: true,
+      data,
+      pagination: { total, limit: query.limit, offset: query.offset },
+    });
+  })
+);
+
+/**
+ * GET /admin/content/collections/:id
+ * Get collection details
+ */
+router.get(
+  '/collections/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const collection = await prisma.contentCollection.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true, displayName: true } },
+          },
+        },
+      },
+    });
+
+    if (!collection) {
+      throw new NotFoundError('Content collection not found');
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        id: collection.id,
+        name: collection.name,
+        description: collection.description,
+        userId: collection.userId,
+        userName: collection.user.profile?.userName ?? collection.user.email,
+        displayName: collection.user.profile?.displayName ?? null,
+        createdAt: collection.createdAt.toISOString(),
+        updatedAt: collection.updatedAt.toISOString(),
+      },
+    });
+  })
+);
+
+/**
+ * PATCH /admin/content/collections/:id
+ * Update/moderate a collection
+ */
+router.patch(
+  '/collections/:id',
+  validateBody(AdminUpdateContentCollectionSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+    const body = AdminUpdateContentCollectionSchema.parse(req.body);
+
+    const existing = await prisma.contentCollection.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Content collection not found');
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.description !== undefined) updateData.description = body.description ?? null;
+
+    const updated = await prisma.contentCollection.update({
+      where: { id },
+      data: updateData,
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'CONTENT_COLLECTION_UPDATE',
+        description: `Updated content collection ${id}`,
+        entityType: 'content_collection',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin updated content collection', { adminId, collectionId: id, changes: body });
+
+    return res.json({
+      success: true,
+      data: {
+        id: updated.id,
+        name: updated.name,
+        description: updated.description,
+        updatedAt: updated.updatedAt.toISOString(),
+      },
+    });
+  })
+);
+
+/**
+ * DELETE /admin/content/collections/:id
+ * Delete a content collection
+ */
+router.delete(
+  '/collections/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+
+    const collection = await prisma.contentCollection.findUnique({ where: { id } });
+    if (!collection) {
+      throw new NotFoundError('Content collection not found');
+    }
+
+    await prisma.contentCollection.delete({ where: { id } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'CONTENT_COLLECTION_DELETE',
+        description: `Deleted content collection: ${collection.name}`,
+        entityType: 'content_collection',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin deleted content collection', { adminId, collectionId: id });
+
+    return res.json({ success: true, message: 'Content collection deleted successfully' });
   })
 );
 

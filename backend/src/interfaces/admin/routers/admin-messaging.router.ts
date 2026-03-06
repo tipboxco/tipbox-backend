@@ -4,6 +4,7 @@ import { validateBody, validateQuery } from '../../../infrastructure/middleware/
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, ValidationError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
+import { z } from 'zod';
 
 // Import schemas
 import {
@@ -843,9 +844,7 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const [total, sent, delivered] = await Promise.all([
       prisma.notification.count(),
-      prisma.notification.count({
-        where: { sentAt: { not: null } },
-      }),
+      prisma.notification.count(),
       prisma.notification.count({
         where: { read: true },
       }),
@@ -907,6 +906,273 @@ router.get(
     };
 
     return res.json({ success: true, data });
+  })
+);
+
+// ==================== Notifications Management ====================
+
+const AdminNotificationsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  offset: z.coerce.number().int().nonnegative().default(0),
+  userId: z.string().uuid().optional(),
+  type: z.string().optional(),
+  read: z
+    .string()
+    .optional()
+    .transform((v) => (v === 'true' ? true : v === 'false' ? false : undefined)),
+  sort: z.enum(['createdAt']).default('createdAt'),
+  order: z.enum(['asc', 'desc']).default('desc'),
+});
+
+const AdminSendNotificationSchema = z.object({
+  userId: z.string().uuid(),
+  type: z.string().min(1).max(100),
+  title: z.string().min(1).max(500),
+  message: z.string().min(1).max(5000),
+  data: z.record(z.unknown()).optional(),
+});
+
+const AdminBroadcastNotificationSchema = z.object({
+  type: z.string().min(1).max(100),
+  title: z.string().min(1).max(500),
+  message: z.string().min(1).max(5000),
+  data: z.record(z.unknown()).optional(),
+});
+
+/**
+ * GET /admin/messaging/notifications
+ * List notifications with pagination and filters
+ */
+router.get(
+  '/notifications',
+  validateQuery(AdminNotificationsQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = AdminNotificationsQuerySchema.parse(req.query);
+
+    const where: Record<string, unknown> = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.type) where.type = query.type;
+    if (query.read !== undefined) where.read = query.read;
+
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        take: query.limit,
+        skip: query.offset,
+        orderBy: { [query.sort]: query.order },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { userName: true, displayName: true } },
+            },
+          },
+        },
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    const data = notifications.map((n) => ({
+      id: n.id,
+      userId: n.userId,
+      userName: n.user.profile?.userName ?? n.user.email,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      read: n.read,
+      readAt: n.readAt?.toISOString() ?? null,
+      createdAt: n.createdAt.toISOString(),
+    }));
+
+    return res.json({
+      success: true,
+      data,
+      pagination: { total, limit: query.limit, offset: query.offset },
+    });
+  })
+);
+
+/**
+ * GET /admin/messaging/notifications/:id
+ * Get notification details
+ */
+router.get(
+  '/notifications/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const notification = await prisma.notification.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true, displayName: true } },
+          },
+        },
+      },
+    });
+
+    if (!notification) {
+      throw new NotFoundError('Notification not found');
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        id: notification.id,
+        userId: notification.userId,
+        userName: notification.user.profile?.userName ?? notification.user.email,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        read: notification.read,
+        readAt: notification.readAt?.toISOString() ?? null,
+        createdAt: notification.createdAt.toISOString(),
+      },
+    });
+  })
+);
+
+/**
+ * POST /admin/messaging/notifications/send
+ * Send notification to a specific user
+ */
+router.post(
+  '/notifications/send',
+  validateBody(AdminSendNotificationSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    const body = AdminSendNotificationSchema.parse(req.body);
+
+    // Verify user exists
+    const user = await prisma.user.findUnique({ where: { id: body.userId } });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const notification = await prisma.notification.create({
+      data: {
+        userId: body.userId,
+        type: body.type,
+        title: body.title,
+        message: body.message,
+        data: body.data ?? {},
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'NOTIFICATION_SEND',
+        description: `Sent notification to user ${body.userId}: ${body.title}`,
+        entityType: 'notification',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin sent notification', { adminId, notificationId: notification.id, userId: body.userId });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: notification.id,
+        userId: notification.userId,
+        type: notification.type,
+        title: notification.title,
+        createdAt: notification.createdAt.toISOString(),
+      },
+    });
+  })
+);
+
+/**
+ * POST /admin/messaging/notifications/broadcast
+ * Send notification to all users (or a segment)
+ */
+router.post(
+  '/notifications/broadcast',
+  validateBody(AdminBroadcastNotificationSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    const body = AdminBroadcastNotificationSchema.parse(req.body);
+
+    // Get all active users
+    const users = await prisma.user.findMany({
+      where: { status: { not: 'banned' } },
+      select: { id: true },
+    });
+
+    const notifications = await prisma.notification.createMany({
+      data: users.map((u) => ({
+        userId: u.id,
+        type: body.type,
+        title: body.title,
+        message: body.message,
+        data: body.data ?? {},
+      })),
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'NOTIFICATION_BROADCAST',
+        description: `Broadcast notification to ${users.length} users: ${body.title}`,
+        entityType: 'notification',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin broadcast notification', {
+      adminId,
+      recipientCount: users.length,
+      title: body.title,
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        recipientCount: notifications.count,
+        title: body.title,
+        type: body.type,
+      },
+    });
+  })
+);
+
+/**
+ * DELETE /admin/messaging/notifications/:id
+ * Delete a notification
+ */
+router.delete(
+  '/notifications/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+
+    const notification = await prisma.notification.findUnique({ where: { id } });
+    if (!notification) {
+      throw new NotFoundError('Notification not found');
+    }
+
+    await prisma.notification.delete({ where: { id } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: adminId || 'system',
+        action: 'NOTIFICATION_DELETE',
+        description: `Deleted notification ${id}`,
+        entityType: 'notification',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin deleted notification', { adminId, notificationId: id });
+
+    return res.json({ success: true, message: 'Notification deleted successfully' });
   })
 );
 

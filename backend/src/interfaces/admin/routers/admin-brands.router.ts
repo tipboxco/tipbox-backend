@@ -433,6 +433,17 @@ router.patch(
       updateData.tags = body.tags;
     }
 
+    // Clean up old images from S3 if being replaced
+    if (body.logoUrl !== undefined && existing.logoUrl && body.logoUrl !== existing.logoUrl) {
+      try { await s3Service.deleteFile(existing.logoUrl); } catch { /* ignore */ }
+    }
+    if (body.bannerUrl !== undefined && existing.bannerUrl && body.bannerUrl !== existing.bannerUrl) {
+      try { await s3Service.deleteFile(existing.bannerUrl); } catch { /* ignore */ }
+    }
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+
     const brand = await prisma.brand.update({
       where: { id },
       data: updateData,
@@ -623,6 +634,11 @@ router.patch(
     const existing = await prisma.brandCategory.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundError('Brand category not found');
+    }
+
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
     }
 
     const category = await prisma.brandCategory.update({

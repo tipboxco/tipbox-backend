@@ -4,61 +4,49 @@ const prefix = '/admin';
 
 export interface UserReportStatsResponse {
   total: number;
-  pending: number;
-  reviewing: number;
+  open: number;
   resolved: number;
-  dismissed: number;
-  byType: Record<string, number>;
+  byCategory: Record<string, number>;
 }
 
 export interface UserReportListItem {
   id: string;
-  reportType: 'POST' | 'COMMENT' | 'USER' | 'MESSAGE';
-  reason: string;
+  category: string;
   description: string | null;
-  status: 'PENDING' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
+  resolved: boolean;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  adminNote: string | null;
   reporterId: string;
-  reporterUsername: string | null;
-  reporterDisplayName: string | null;
+  reporterName: string | null;
   reportedUserId: string;
-  reportedUsername: string | null;
+  reportedUserName: string | null;
   reportedUserEmail: string | null;
-  contentId: string | null;
-  reviewerId: string | null;
-  reviewerUsername: string | null;
-  reviewNote: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface UserReportDetail {
   id: string;
-  reportType: 'POST' | 'COMMENT' | 'USER' | 'MESSAGE';
-  reason: string;
+  category: string;
   description: string | null;
-  status: 'PENDING' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
-  contentId: string | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  adminNote: string | null;
   reporter: {
     id: string;
     email: string;
-    username: string | null;
+    userName: string | null;
     displayName: string | null;
-    avatarUrl: string | null;
   };
   reportedUser: {
     id: string;
     email: string;
     status: string;
-    username: string | null;
+    userName: string | null;
     displayName: string | null;
-    avatarUrl: string | null;
   };
-  reviewer: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-  } | null;
-  reviewNote: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,12 +58,12 @@ export async function fetchUserReportsStats() {
 export async function fetchUserReports(params?: {
   limit?: number;
   offset?: number;
-  status?: 'PENDING' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
-  reportType?: 'POST' | 'COMMENT' | 'USER' | 'MESSAGE';
+  resolved?: 'true' | 'false';
+  category?: string;
   reporterId?: string;
   reportedUserId?: string;
   search?: string;
-  sort?: 'createdAt' | 'updatedAt';
+  sort?: 'createdAt' | 'updatedAt' | 'category';
   order?: 'asc' | 'desc';
 }) {
   const query: Record<string, string | number | undefined> = {
@@ -84,8 +72,8 @@ export async function fetchUserReports(params?: {
     sort: params?.sort ?? 'createdAt',
     order: params?.order ?? 'desc',
   };
-  if (params?.status) query.status = params.status;
-  if (params?.reportType) query.reportType = params.reportType;
+  if (params?.resolved) query.resolved = params.resolved;
+  if (params?.category) query.category = params.category;
   if (params?.reporterId) query.reporterId = params.reporterId;
   if (params?.reportedUserId) query.reportedUserId = params.reportedUserId;
   if (params?.search) query.search = params.search;
@@ -96,21 +84,15 @@ export async function fetchUserReport(id: string) {
   return get<UserReportDetail>(`${prefix}/user-reports/${id}`);
 }
 
-export async function updateUserReport(
-  id: string,
-  body: {
-    status?: 'PENDING' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
-    reviewNote?: string | null;
-    reviewerId?: string | null;
-  }
-) {
+export async function resolveUserReport(id: string, body: { adminNote?: string | null }) {
   return patch<{
     id: string;
-    status: string;
-    reviewNote: string | null;
-    reviewerId: string | null;
+    resolved: boolean;
+    resolvedAt: string | null;
+    resolvedBy: string | null;
+    adminNote: string | null;
     updatedAt: string;
-  }>(`${prefix}/user-reports/${id}`, body);
+  }>(`${prefix}/user-reports/${id}/resolve`, body);
 }
 
 export async function deleteUserReport(id: string) {

@@ -19,6 +19,7 @@ import {
   Statistic,
   Descriptions,
   Checkbox,
+  Alert,
   message as antdMessage,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -32,6 +33,8 @@ import {
   fetchEvent,
   deleteEvent,
   fetchEventParticipants,
+  addEventParticipant,
+  removeEventParticipant,
   fetchEventAnalytics,
   fetchEventBadges,
   updateEventBadge,
@@ -499,30 +502,67 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
   const [list, setList] = useState<AdminEventParticipantListItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, limit: 20, offset: 0 });
   const [loading, setLoading] = useState(true);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addUserId, setAddUserId] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+
+  const load = async (offset = pagination.offset) => {
+    setLoading(true);
+    try {
+      const res = await fetchEventParticipants(eventId, {
+        limit: 20,
+        offset,
+        sort: 'eventPostsCount',
+        order: 'desc',
+      });
+      setList(res.data ?? []);
+      if (res.pagination) setPagination(res.pagination);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetchEventParticipants(eventId, {
-          limit: 20,
-          offset: pagination.offset,
-          sort: 'eventPostsCount',
-          order: 'desc',
-        });
-        if (!cancelled) {
-          setList(res.data ?? []);
-          if (res.pagination) setPagination(res.pagination);
+    load(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  const handleRemoveParticipant = (participantId: string, displayName: string) => {
+    Modal.confirm({
+      title: 'Remove Participant',
+      content: `Are you sure you want to remove "${displayName}" from this event? Their event rewards will also be removed.`,
+      okText: 'Remove',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await removeEventParticipant(eventId, participantId);
+          antdMessage.success('Participant removed');
+          load();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove participant');
         }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId, pagination.offset]);
+      },
+    });
+  };
+
+  const handleAddParticipant = async () => {
+    if (!addUserId.trim()) {
+      antdMessage.warning('Please enter a user ID');
+      return;
+    }
+    setAddLoading(true);
+    try {
+      await addEventParticipant(eventId, { userId: addUserId.trim() });
+      antdMessage.success('Participant added');
+      setAddModalOpen(false);
+      setAddUserId('');
+      load();
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add participant');
+    } finally {
+      setAddLoading(false);
+    }
+  };
 
   const columns: ColumnsType<AdminEventParticipantListItem> = [
     {
@@ -571,17 +611,40 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
       width: 80,
       align: 'right',
     },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Button
+          size="small"
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveParticipant(record.id, record.userDisplayName ?? record.userId)}
+        />
+      ),
+    },
   ];
 
   const handleTableChange = (pag: TablePaginationConfig) => {
     const newOffset = ((pag.current ?? 1) - 1) * 20;
     setPagination((prev) => ({ ...prev, offset: newOffset }));
+    load(newOffset);
   };
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <Card bordered title="Participants">
+    <Card
+      bordered
+      title="Participants"
+      extra={
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>
+          Add Participant
+        </Button>
+      }
+    >
       <Table
         columns={columns}
         dataSource={list}
@@ -599,6 +662,29 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No participants yet." />,
         }}
       />
+
+      <Modal
+        title="Add Participant"
+        open={addModalOpen}
+        onCancel={() => {
+          setAddModalOpen(false);
+          setAddUserId('');
+        }}
+        onOk={handleAddParticipant}
+        confirmLoading={addLoading}
+        okText="Add"
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>User ID</label>
+            <Input
+              placeholder="Enter user UUID"
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+            />
+          </div>
+        </Space>
+      </Modal>
     </Card>
   );
 }

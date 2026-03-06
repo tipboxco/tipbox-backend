@@ -239,7 +239,6 @@ function NFTCreateModal({ open, onClose, onSuccess }: NFTCreateModalProps) {
               <Select placeholder="Select NFT type">
                 <Select.Option value="BADGE">Badge</Select.Option>
                 <Select.Option value="COSMETIC">Cosmetic</Select.Option>
-                <Select.Option value="LOOTBOX">Lootbox</Select.Option>
               </Select>
             </Form.Item>
           </Col>

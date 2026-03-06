@@ -362,6 +362,11 @@ router.patch(
       updateData.endDate = body.endDate ? new Date(body.endDate) : null;
     }
 
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existingBanner.imageUrl && body.imageUrl !== existingBanner.imageUrl) {
+      try { await s3Service.deleteFile(existingBanner.imageUrl); } catch { /* ignore */ }
+    }
+
     const updatedBanner = await prisma.marketplaceBanner.update({
       where: { id },
       data: updateData,

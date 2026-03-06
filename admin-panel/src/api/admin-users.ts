@@ -153,6 +153,21 @@ export async function fetchUserTipsTransactions(
   return get<AdminTipsTransactionListItem[]>(`${prefix}/users/${userId}/tips-transactions`, query);
 }
 
+export async function deleteUser(id: string) {
+  return del<{ message: string }>(`${prefix}/users/${id}`);
+}
+
+export async function forceLogoutUser(id: string) {
+  return post<{ message: string }>(`${prefix}/users/${id}/force-logout`, {});
+}
+
+export async function adjustWalletBalance(
+  walletId: string,
+  body: { amount: number; reason: string; adjustLockedBalance?: boolean }
+) {
+  return patch<AdminWalletSummaryItem>(`${prefix}/wallets/${walletId}/adjust`, body);
+}
+
 // ==================== Additional Stats Functions ====================
 
 export interface BannedUsersStatsResponse {

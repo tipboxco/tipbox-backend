@@ -370,7 +370,6 @@ function NFTs() {
               >
                 <Select.Option value="BADGE">Badge</Select.Option>
                 <Select.Option value="COSMETIC">Cosmetic</Select.Option>
-                <Select.Option value="LOOTBOX">Lootbox</Select.Option>
               </Select>
               <Select
                 placeholder="Rarity"
