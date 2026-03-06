@@ -79,32 +79,37 @@ function getMediaBaseUrlFromRequest(req: ExpressRequest): string {
 /**
  * Ortak public media base URL
  * - Tüm görsel URL'leri için TEK kontrol noktası
- * - Önerilen: MEDIA_PUBLIC_BASE_URL (public erişim için)
- * - MEDIA_PUBLIC_BASE_URL yoksa: mevcut request'ten türetilir (request context varsa)
- * - Backward-compat: SEED_MEDIA_BASE_URL / MINIO_PUBLIC_ENDPOINT (deprecated)
- * - Fallback: BASE_URL'den port 9000 türetilir (legacy)
+ *
+ * Öncelik sırası:
+ * 1. MEDIA_PUBLIC_BASE_URL (explicit override)
+ * 2. SEED_MEDIA_BASE_URL (asıl kullanılan env)
+ * 3. MINIO_PUBLIC_ENDPOINT (legacy)
+ * 4. Request context (ağ değişince otomatik adapte olur)
+ * 5. BASE_URL → port 9000 türetme (legacy)
+ * 6. S3_ENDPOINT (dev fallback)
  *
  * Bu fonksiyonun döndürdüğü değer "public object base" olmalıdır:
  * - Direct MinIO: `http://<ip>:9000/tipbox-media`
  * - Nginx proxy:  `https://api-test.tipbox.co/media`
  */
 export function getPublicMediaBaseUrl(): string {
-  // 1) Yeni önerilen env
+  // 1) Explicit override (her zaman en yüksek öncelik)
   const mediaPublicBaseUrl = process.env.MEDIA_PUBLIC_BASE_URL;
   if (mediaPublicBaseUrl) return normalizePublicObjectBaseUrl(mediaPublicBaseUrl);
 
-  // 2) Request'ten türet (MEDIA_PUBLIC_BASE_URL yoksa; böylece ağ değişince env güncellemeye gerek kalmaz)
+  // 2) SEED_MEDIA_BASE_URL — ana env değişkeni
+  const seedMediaBase = process.env.SEED_MEDIA_BASE_URL;
+  if (seedMediaBase) return normalizePublicObjectBaseUrl(seedMediaBase);
+
+  // 3) Legacy env
+  const minioPublic = process.env.MINIO_PUBLIC_ENDPOINT;
+  if (minioPublic) return normalizePublicObjectBaseUrl(minioPublic);
+
+  // 4) Request'ten türet (env yoksa; ağ değişince otomatik adapte olur)
   const ctx = getCurrentContext();
   if (ctx?.req) return normalizePublicObjectBaseUrl(getMediaBaseUrlFromRequest(ctx.req as ExpressRequest));
 
-  // 3) Deprecated env'ler (geriye dönük uyumluluk)
-  const deprecatedSeedBase = process.env.SEED_MEDIA_BASE_URL;
-  if (deprecatedSeedBase) return normalizePublicObjectBaseUrl(deprecatedSeedBase);
-
-  const deprecatedMinioPublic = process.env.MINIO_PUBLIC_ENDPOINT;
-  if (deprecatedMinioPublic) return normalizePublicObjectBaseUrl(deprecatedMinioPublic);
-
-  // 4) Legacy fallback: BASE_URL'den 9000 türet
+  // 5) Legacy fallback: BASE_URL'den 9000 türet
   const baseUrl = process.env.BASE_URL;
   if (baseUrl) {
     try {
@@ -119,8 +124,7 @@ export function getPublicMediaBaseUrl(): string {
     }
   }
 
-  // 5) Son çare: S3_ENDPOINT'ten public üretmeyi dene (dev için)
-  // Not: Bu sadece development'ta bir "life-saver" olmalı; ideal değil.
+  // 6) Son çare: S3_ENDPOINT'ten public üretmeyi dene (dev için)
   const s3Endpoint = process.env.S3_ENDPOINT;
   if (s3Endpoint) {
     const isDevelopment = (process.env.NODE_ENV || 'development') === 'development';
@@ -131,7 +135,7 @@ export function getPublicMediaBaseUrl(): string {
   }
 
   throw new Error(
-    'MEDIA_PUBLIC_BASE_URL (önerilen) veya SEED_MEDIA_BASE_URL/MINIO_PUBLIC_ENDPOINT veya BASE_URL set edilmelidir.'
+    'SEED_MEDIA_BASE_URL veya MEDIA_PUBLIC_BASE_URL veya BASE_URL set edilmelidir.'
   );
 }
 /**

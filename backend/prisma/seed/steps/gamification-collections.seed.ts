@@ -271,6 +271,58 @@ export async function seedGamificationCollections(prisma: PrismaClient) {
     });
   }
 
+  // ===== ACHIEVEMENT PROGRESS for featured (non-internal) users =====
+  const goals = await prisma.achievementGoal.findMany({ take: 5 });
+  if (goals.length > 0) {
+    const seedUsers = await prisma.user.findMany({ take: 15, select: { id: true } });
+    // Pick 5 users for progress seeding
+    const progressUsers = seedUsers.slice(0, Math.min(5, seedUsers.length));
+    let progressCreated = 0;
+
+    for (let i = 0; i < progressUsers.length; i++) {
+      const user = progressUsers[i];
+      if (!user) continue;
+
+      // Give each user progress on 2-3 goals
+      const userGoals = goals.slice(0, Math.min(3, goals.length));
+      for (let j = 0; j < userGoals.length; j++) {
+        const goal = userGoals[j];
+        if (!goal) continue;
+
+        // Vary progress: some near completion (>80%), some mid-range (30-60%), one completed
+        let progress: number;
+        let completed = false;
+        if (j === 0 && i === 0) {
+          // First user, first goal: completed
+          progress = goal.pointsRequired;
+          completed = true;
+        } else if (j === 0) {
+          // Near completion (80-95%)
+          progress = Math.floor(goal.pointsRequired * (0.8 + Math.random() * 0.15));
+        } else {
+          // Mid-range (30-60%)
+          progress = Math.floor(goal.pointsRequired * (0.3 + Math.random() * 0.3));
+        }
+
+        await prisma.userAchievement.upsert({
+          where: {
+            userId_goalId: { userId: user.id, goalId: goal.id },
+          },
+          update: { progress, completed, completedAt: completed ? new Date() : null },
+          create: {
+            userId: user.id,
+            goalId: goal.id,
+            progress,
+            completed,
+            completedAt: completed ? new Date() : null,
+          },
+        });
+        progressCreated++;
+      }
+    }
+    console.log(`   - ${progressCreated} UserAchievement progress records created`);
+  }
+
   console.log('✅ Gamification Collections seeded:');
   console.log('   - 3 BadgeCollections created');
   console.log('   - 6 Badges created');

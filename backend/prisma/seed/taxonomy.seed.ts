@@ -31,12 +31,6 @@ export async function seedTaxonomy(): Promise<void> {
     { name: 'Office', isActive: true },
     { name: 'Outdoor', isActive: true },
     { name: 'Other', isActive: true },
-    // App / survey condition-style options (Excellent, Good, …)
-    { name: 'Excellent', isActive: true },
-    { name: 'Good', isActive: true },
-    { name: 'Average', isActive: true },
-    { name: 'Poor', isActive: true },
-    { name: 'Very poor', isActive: true },
   ];
 
   await Promise.all(
@@ -53,12 +47,6 @@ export async function seedTaxonomy(): Promise<void> {
     { name: 'Professional use', isActive: true },
     { name: 'Gift', isActive: true },
     { name: 'Other', isActive: true },
-    // App / survey frequency-style options
-    { name: 'Rarely Use', isActive: true },
-    { name: 'Rarely', isActive: true },
-    { name: 'Daily', isActive: true },
-    { name: '1-2 times a week', isActive: true },
-    { name: '3-4 times a week', isActive: true },
   ];
 
   await Promise.all(

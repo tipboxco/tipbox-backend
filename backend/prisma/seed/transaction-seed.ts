@@ -91,19 +91,18 @@ async function seedWallets(userIds: string[]): Promise<Map<string, string>> {
 }
 
 /**
- * Priority kullanıcı ID'leri (seed.ts'deki SEED_USERS ile uyumlu)
+ * Featured kullanıcı ID'leri (seed.ts'deki FEATURED_USER_IDS ile uyumlu)
  */
 const PRIORITY_USER_IDS = [
-  '480f5de9-b691-4d70-a6a8-2789226f4e07', // omer@tipbox.co
-  '11111111-1111-4111-a111-111111111111', // tuna@tipbox.co
-  '22222222-2222-4222-a222-222222222222', // mehmet@tipbox.co
-  '33333333-3333-4333-a333-333333333333', // ibrahim@tipbox.co
-  '44444444-4444-4444-a444-444444444444', // burakcan@tipbox.co
-  '55555555-5555-4555-a555-555555555555', // mihrac@tipbox.co
-  'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', // irem@tipbox.co
-  'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', // furkan@tipbox.co
-  'cccccccc-cccc-4ccc-cccc-cccccccccccc', // aycan@tipbox.co
-  '99999999-9999-4999-9999-999999999999', // ozan@tipbox.co
+  '10000000-0000-4000-a000-000000000001', // elif@tipbox.co
+  '10000000-0000-4000-a000-000000000002', // can@tipbox.co
+  '10000000-0000-4000-a000-000000000003', // zeynep@tipbox.co
+  '10000000-0000-4000-a000-000000000005', // selin@tipbox.co
+  '10000000-0000-4000-a000-000000000006', // emre@tipbox.co
+  '10000000-0000-4000-a000-000000000007', // deniz@tipbox.co
+  '10000000-0000-4000-a000-000000000008', // baris@tipbox.co
+  '10000000-0000-4000-a000-000000000010', // berkay@tipbox.co
+  '10000000-0000-4000-a000-000000000011', // asli@tipbox.co
 ];
 
 /**
