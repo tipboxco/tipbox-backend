@@ -49,9 +49,8 @@ router.post(
       return res.status(400).json({ success: false, error: 'Invalid JSON' });
     }
 
-    logger.info({
+    logger.debug({
       message: 'Alchemy webhook payload received',
-      webhookPayload: parsed,
       webhookId: parsed.webhookId,
       type: parsed.type,
       id: parsed.id,

@@ -109,6 +109,15 @@ export class AlchemyWebhookService {
     if (hasAlchemyGraphBlock(payload)) {
       const block = getAlchemyGraphBlock(payload);
       if (block) {
+        const logs = block.logs ?? [];
+        if (logs.length === 0) {
+          logger.debug({
+            message: 'Alchemy webhook block with no logs (skipped)',
+            webhookId: payload.webhookId,
+            blockNumber: block.number,
+          });
+          return { success: true, message: 'No logs in block' };
+        }
         const result = await this.processBlockLogs(block);
         logger.info({
           message: 'Alchemy webhook graph block processed',
@@ -121,13 +130,10 @@ export class AlchemyWebhookService {
       }
     }
 
-    logger.info({
-      message: 'Alchemy webhook processed',
+    logger.debug({
+      message: 'Alchemy webhook received (non-graph)',
       webhookId: payload.webhookId,
-      id: payload.id,
       type: payload.type,
-      eventKeys: payload.event && typeof payload.event === 'object' ? Object.keys(payload.event) : undefined,
-      activityLength: (payload.event as { activity?: unknown[] })?.activity?.length,
     });
     return { success: true, message: 'Webhook received' };
   }
