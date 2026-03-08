@@ -236,9 +236,12 @@ function EventSummaryTab({
         <Descriptions.Item label="End">{new Date(event.endDate).toLocaleString()}</Descriptions.Item>
         <Descriptions.Item label="Image">
           {event.imageUrl ? (
-            <a href={event.imageUrl} target="_blank" rel="noreferrer">
-              View
-            </a>
+            <Image
+              src={event.imageUrl}
+              width={60}
+              height={40}
+              style={{ objectFit: 'cover', borderRadius: 4 }}
+            />
           ) : (
             '—'
           )}

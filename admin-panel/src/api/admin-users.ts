@@ -106,6 +106,10 @@ export async function uploadUserAvatar(file: File) {
   return postFormData<{ url: string }>(`${prefix}/users/upload-avatar`, formData);
 }
 
+export async function deleteUserAvatar(userId: string) {
+  return del<void>(`${prefix}/users/${userId}/avatar`);
+}
+
 export async function fetchUserEvents(
   userId: string,
   params?: { limit?: number; offset?: number; sort?: string; order?: 'asc' | 'desc' }

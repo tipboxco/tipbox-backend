@@ -12,6 +12,7 @@ import {
   Button,
   Dropdown,
   Modal,
+  Avatar,
   message,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -315,7 +316,12 @@ function UserList() {
       key: 'displayName',
       width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
-      render: (text) => text ?? '—',
+      render: (text: string | null, record: AdminUserListItem) => (
+        <Space size="small" align="center">
+          <Avatar src={record.avatarUrl} icon={<UserOutlined />} size={28} />
+          <span>{text ?? '—'}</span>
+        </Space>
+      ),
     },
     {
       title: 'Username',

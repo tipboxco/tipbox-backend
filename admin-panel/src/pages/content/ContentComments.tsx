@@ -8,21 +8,33 @@ import {
   Space,
   Empty,
   Alert,
+  Avatar,
+  Tag,
+  Button,
+  Popconfirm,
+  message as antdMessage,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { CommentOutlined } from '@ant-design/icons';
+import {
+  CommentOutlined,
+  HeartOutlined,
+  UserOutlined,
+  CheckCircleOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import IdDisplay from '../../components/IdDisplay';
 import {
   fetchContentCommentsStats,
   fetchContentComments,
+  deleteContentComment,
 } from '../../api/admin-content';
 import type {
   AdminContentCommentStatsResponse,
   AdminContentCommentListItem,
 } from '../../types/admin';
-import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
+import { TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -89,82 +101,116 @@ function ContentComments() {
     };
   }, [pagination.offset, postId, userId, sort, order]);
 
-  const userDisplay = (c: AdminContentCommentListItem) =>
-    c.userDisplayName || c.userName || (c.userId ? <IdDisplay id={c.userId} variant="compact" copyable={false} /> : '—');
-
-  const columns: ColumnsType<AdminContentCommentListItem> = [
-    {
-      title: 'Comment (excerpt)',
-      key: 'comment',
-      width: TABLE_COLUMN_WIDTHS.VERY_LONG_TEXT,
-      ellipsis: true,
-      render: (_, record) => (
-        <span title={record.comment}>
-          {record.commentExcerpt ??
-            (record.comment.length > 80
-              ? record.comment.slice(0, 80) + '…'
-              : record.comment)}
-        </span>
-      ),
-    },
-    {
-      title: 'Post',
-      key: 'post',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FIXED,
-      ellipsis: true,
-      render: (_, record) =>
-        record.postTitle
-          ? record.postTitle.length > 50
-            ? record.postTitle.slice(0, 50) + '…'
-            : record.postTitle
-          : record.postId,
-    },
-    {
-      title: 'Author',
-      key: 'user',
-      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
-      ellipsis: true,
-      render: (_, record) => (
-        <Link
-          to={`/users/${record.userId}`}
-          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
-        >
-          {userDisplay(record)}
-        </Link>
-      ),
-    },
-    {
-      title: 'Is Answer',
-      dataIndex: 'isAnswer',
-      key: 'isAnswer',
-      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
-      ellipsis: true,
-      render: (isAnswer) => (isAnswer ? 'Yes' : '—'),
-    },
-    {
-      title: 'Likes',
-      dataIndex: 'likesCount',
-      key: 'likesCount',
-      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
-      align: 'right',
-      ellipsis: true,
-    },
-    {
-      title: 'Created',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
-      ellipsis: true,
-      render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
-    },
-  ];
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteContentComment(commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+      antdMessage.success('Comment deleted');
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to delete comment');
+    }
+  };
 
   const handleTableChange = (pag: TablePaginationConfig) => {
     const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
     setPagination((prev) => ({ ...prev, offset: newOffset }));
   };
 
+  const userDisplay = (c: AdminContentCommentListItem) =>
+    c.userDisplayName || c.userName || (c.userId ? <IdDisplay id={c.userId} variant="compact" copyable={false} /> : '—');
+
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
+  const columns: ColumnsType<AdminContentCommentListItem> = [
+    {
+      title: 'Author',
+      key: 'user',
+      width: 180,
+      ellipsis: true,
+      render: (_: unknown, record: AdminContentCommentListItem) => (
+        <Link
+          to={`/users/${record.userId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
+          <Avatar size={28} icon={<UserOutlined />} />
+          {userDisplay(record)}
+        </Link>
+      ),
+    },
+    {
+      title: 'Comment',
+      key: 'comment',
+      ellipsis: true,
+      render: (_: unknown, record: AdminContentCommentListItem) => {
+        const text = record.comment.length > 140 ? record.comment.slice(0, 140) + '…' : record.comment;
+        return (
+          <Space size={8}>
+            <span title={record.comment}>{text}</span>
+            {record.isAnswer && (
+              <Tag color="green" style={{ margin: 0, fontSize: 11 }}>
+                <CheckCircleOutlined /> Answer
+              </Tag>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Post',
+      key: 'post',
+      width: 200,
+      ellipsis: true,
+      render: (_: unknown, record: AdminContentCommentListItem) => (
+        <Link
+          to={`/content/posts/${record.postId}`}
+          style={{ color: 'var(--tipbox-badge-outline)' }}
+        >
+          {record.postTitle
+            ? record.postTitle.length > 45
+              ? record.postTitle.slice(0, 45) + '…'
+              : record.postTitle
+            : <IdDisplay id={record.postId} variant="compact" copyable={false} />}
+        </Link>
+      ),
+    },
+    {
+      title: 'Likes',
+      dataIndex: 'likesCount',
+      key: 'likesCount',
+      width: 70,
+      align: 'center',
+      render: (count: number) => (
+        <Space size={4}>
+          <HeartOutlined style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }} />
+          {count}
+        </Space>
+      ),
+    },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (date: string) =>
+        date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 50,
+      render: (_: unknown, record: AdminContentCommentListItem) => (
+        <Popconfirm
+          title="Delete this comment?"
+          onConfirm={() => handleDeleteComment(record.id)}
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+        >
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
+  ];
 
   const statsData: StatItemData[] | undefined = stats
     ? [
@@ -197,7 +243,6 @@ function ContentComments() {
         />
       )}
 
-      {/* Comment List */}
       <Card
         bordered
         title="Comment list"
@@ -206,44 +251,48 @@ function ContentComments() {
             <Input
               placeholder="Post ID"
               value={postId}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setPostId(e.target.value.trim());
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 150 }}
               allowClear
+              size="small"
             />
             <Input
-              placeholder="User ID (UUID)"
+              placeholder="User ID"
               value={userId}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setUserId(e.target.value.trim());
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              style={{ width: 180 }}
+              style={{ width: 150 }}
               allowClear
+              size="small"
             />
             <Select
               value={sort}
-              onChange={(value) => {
+              onChange={(value: string) => {
                 setSort(value as 'createdAt' | 'likesCount');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              style={{ width: 120 }}
+              style={{ width: 110 }}
+              size="small"
             >
               <Select.Option value="createdAt">Created</Select.Option>
               <Select.Option value="likesCount">Likes</Select.Option>
             </Select>
             <Select
               value={order}
-              onChange={(value) => {
+              onChange={(value: string) => {
                 setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              style={{ width: 100 }}
+              style={{ width: 110 }}
+              size="small"
             >
-              <Select.Option value="desc">Descending</Select.Option>
-              <Select.Option value="asc">Ascending</Select.Option>
+              <Select.Option value="desc">Newest</Select.Option>
+              <Select.Option value="asc">Oldest</Select.Option>
             </Select>
           </Space>
         }
@@ -254,19 +303,20 @@ function ContentComments() {
           rowKey="id"
           loading={loadingList}
           scroll={TABLE_SCROLL_CONFIGS.AUTO}
+          size="middle"
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Total ${total} records`,
+            showTotal: (total: number) => `${total} comments`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="No comments found. Try adjusting the filters."
+                description="No comments found"
               />
             ),
           }}

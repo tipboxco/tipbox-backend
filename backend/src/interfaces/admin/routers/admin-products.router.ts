@@ -663,6 +663,12 @@ router.get(
           orderBy: { rank: 'asc' },
           include: {
             _count: { select: { products: true, children: true } },
+            children: {
+              orderBy: { rank: 'asc' },
+              include: {
+                _count: { select: { products: true, children: true } },
+              },
+            },
           },
         },
       },
@@ -708,7 +714,13 @@ router.get(
         children: {
           orderBy: { rank: 'asc' },
           include: {
-            _count: { select: { products: true } },
+            _count: { select: { products: true, children: true } },
+            children: {
+              orderBy: { rank: 'asc' },
+              include: {
+                _count: { select: { products: true, children: true } },
+              },
+            },
           },
         },
       },
@@ -717,6 +729,24 @@ router.get(
     if (!category) {
       throw new NotFoundError('Category not found');
     }
+
+    type NestedCategory = typeof category.children[0] & {
+      children?: (typeof category.children[0])[];
+    };
+
+    const mapChild = (child: NestedCategory): AdminCategoryListItem => ({
+      id: child.id,
+      name: child.name,
+      description: child.description,
+      parentId: child.parentId,
+      thumbnail: child.thumbnail,
+      handle: child.handle,
+      rank: child.rank,
+      isActive: child.isActive,
+      level: child.level,
+      productCount: child._count.products,
+      children: (child.children || []).map((c) => mapChild(c as NestedCategory)),
+    });
 
     const data: AdminCategoryDetailResponse = {
       id: category.id,
@@ -729,19 +759,7 @@ router.get(
       isActive: category.isActive,
       metadata: category.metadata as Record<string, unknown> | null,
       productCount: category._count.products,
-      children: category.children.map((child) => ({
-        id: child.id,
-        name: child.name,
-        description: child.description,
-        parentId: child.parentId,
-        thumbnail: child.thumbnail,
-        handle: child.handle,
-        rank: child.rank,
-        isActive: child.isActive,
-        level: child.level,
-        productCount: child._count.products,
-        children: [],
-      })),
+      children: category.children.map((child) => mapChild(child as NestedCategory)),
     };
 
     return res.json({ success: true, data });
@@ -761,7 +779,26 @@ router.post(
 
     const body = req.body as AdminCreateCategoryInput;
 
-    const categoryData = {
+    // Compute level and mpath from parent
+    let level = 0;
+    let mpath = body.id;
+
+    if (body.parentId) {
+      const parent = await prisma.category.findUnique({
+        where: { id: body.parentId },
+        select: { level: true, mpath: true, id: true },
+      });
+      if (!parent) {
+        throw new NotFoundError('Parent category not found');
+      }
+      level = (parent.level ?? 0) + 1;
+      if (level > 2) {
+        throw new ValidationError('Maximum category depth is 3 levels (0, 1, 2)');
+      }
+      mpath = parent.mpath ? `${parent.mpath}.${body.id}` : `${parent.id}.${body.id}`;
+    }
+
+    const categoryData: Record<string, unknown> = {
       id: body.id,
       name: body.name,
       description: body.description ?? null,
@@ -770,10 +807,12 @@ router.post(
       handle: body.handle ?? null,
       rank: body.rank ?? null,
       isActive: body.isActive ?? true,
+      level,
+      mpath,
     };
 
     if (body.metadata) {
-      Object.assign(categoryData, { metadata: body.metadata });
+      categoryData.metadata = body.metadata;
     }
 
     const category = await prisma.category.create({
@@ -819,6 +858,32 @@ router.patch(
     const updateData: Record<string, unknown> = { ...body };
     if (body.metadata) {
       updateData.metadata = body.metadata as Record<string, unknown>;
+    }
+
+    // Recompute level and mpath if parentId changed
+    if (body.parentId !== undefined && body.parentId !== existing.parentId) {
+      if (body.parentId === null || body.parentId === '') {
+        // Moving to root
+        updateData.level = 0;
+        updateData.mpath = id;
+        updateData.parentId = null;
+      } else {
+        const newParent = await prisma.category.findUnique({
+          where: { id: body.parentId },
+          select: { level: true, mpath: true, id: true },
+        });
+        if (!newParent) {
+          throw new NotFoundError('Parent category not found');
+        }
+        const newLevel = (newParent.level ?? 0) + 1;
+        if (newLevel > 2) {
+          throw new ValidationError('Maximum category depth is 3 levels (0, 1, 2)');
+        }
+        updateData.level = newLevel;
+        updateData.mpath = newParent.mpath
+          ? `${newParent.mpath}.${id}`
+          : `${newParent.id}.${id}`;
+      }
     }
 
     const category = await prisma.category.update({

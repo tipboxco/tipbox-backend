@@ -11,6 +11,8 @@ import {
   Modal,
   message,
   Input,
+  Tag,
+  Avatar,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -18,6 +20,7 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
@@ -32,9 +35,20 @@ import {
 import type {
   AdminCategoryStatsResponse,
   AdminCategoryListItem,
-  UpdateCategoryInput,
 } from '../../api/admin-products';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
+
+const LEVEL_COLORS: Record<number, string> = {
+  0: 'blue',
+  1: 'green',
+  2: 'orange',
+};
+
+const LEVEL_LABELS: Record<number, string> = {
+  0: 'Level 1',
+  1: 'Level 2',
+  2: 'Level 3',
+};
 
 function ProductCategories() {
   const [stats, setStats] = useState<AdminCategoryStatsResponse | null>(null);
@@ -75,7 +89,7 @@ function ProductCategories() {
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'Failed to load categories';
       setError(errorMsg);
-      setCategories([]); // Ensure categories is always an array
+      setCategories([]);
       console.error('Failed to load categories:', e);
     } finally {
       setLoadingList(false);
@@ -154,7 +168,6 @@ function ProductCategories() {
       });
       message.success('Category name updated successfully');
 
-      // Update local state optimistically
       const updateCategoryInTree = (cats: AdminCategoryListItem[]): AdminCategoryListItem[] => {
         return cats.map(cat => {
           if (cat.id === record.id) {
@@ -183,92 +196,93 @@ function ProductCategories() {
     }
   };
 
-  // Backend already sends hierarchical data with children
-  // We only need to flatten it for display and filter to root categories only
-  const flattenHierarchy = (
-    nodes: AdminCategoryListItem[],
-    level = 0
-  ): (AdminCategoryListItem & { level: number; displayOrder?: number })[] => {
-    let result: (AdminCategoryListItem & { level: number; displayOrder?: number })[] = [];
-    nodes.forEach(node => {
-      result.push({ ...node, level, displayOrder: node.rank ?? 0 });
-      if (node.children && node.children.length > 0) {
-        result = result.concat(flattenHierarchy(node.children, level + 1));
-      }
-    });
-    return result;
-  };
-
-  // Build a flat map of all categories for parent lookup
-  const buildCategoryMap = (cats: AdminCategoryListItem[]): Map<string, AdminCategoryListItem> => {
-    const map = new Map<string, AdminCategoryListItem>();
-    const addToMap = (cat: AdminCategoryListItem) => {
-      map.set(cat.id, cat);
+  // Count all categories recursively
+  const countAll = (cats: AdminCategoryListItem[]): number => {
+    let count = 0;
+    for (const cat of cats) {
+      count += 1;
       if (cat.children && cat.children.length > 0) {
-        cat.children.forEach(addToMap);
+        count += countAll(cat.children);
       }
-    };
-    cats.forEach(addToMap);
-    return map;
+    }
+    return count;
   };
 
-  const categoryMap = buildCategoryMap(categories);
+  const countByLevel = (cats: AdminCategoryListItem[], targetLevel: number): number => {
+    let count = 0;
+    for (const cat of cats) {
+      if ((cat.level ?? 0) === targetLevel) count += 1;
+      if (cat.children && cat.children.length > 0) {
+        count += countByLevel(cat.children, targetLevel);
+      }
+    }
+    return count;
+  };
 
-  // Filter to only root categories (parentId is null)
+  // Filter to only root categories (parentId is null) for the tree table
   const rootCategories = categories.filter(cat => !cat.parentId);
-  const hierarchicalData = flattenHierarchy(rootCategories);
 
-  const columns: ColumnsType<AdminCategoryListItem & { level: number; displayOrder?: number }> = [
+  const columns: ColumnsType<AdminCategoryListItem> = [
     {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
       width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
-      render: (text, record) => {
+      render: (text: string, record: AdminCategoryListItem) => {
         const isEditing = editingKey === record.id;
-        const indent = record.level * 24;
+        const thumb = record.thumbnail;
 
         return (
-          <div style={{ paddingLeft: `${indent}px`, display: 'flex', alignItems: 'center' }}>
-            {record.level > 0 && <span style={{ marginRight: 4 }}>└ </span>}
+          <Space size="small" align="center">
+            {thumb ? (
+              <Avatar src={thumb} shape="square" size={32} />
+            ) : (
+              <Avatar icon={<PictureOutlined />} shape="square" size={32} />
+            )}
             {isEditing ? (
               <Input
                 value={editingValue}
-                onChange={(e) => setEditingValue(e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, record)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingValue(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent) => handleKeyDown(e, record)}
                 onBlur={() => saveEditingName(record)}
                 autoFocus
-                style={{ flex: 1 }}
                 size="small"
               />
             ) : (
               <span
                 onDoubleClick={() => startEditingName(record)}
-                style={{ cursor: 'pointer', flex: 1 }}
+                style={{ cursor: 'pointer' }}
                 title="Double-click to edit"
               >
                 {text}
               </span>
             )}
-          </div>
+          </Space>
         );
       },
     },
     {
-      title: 'Parent',
-      dataIndex: 'parentId',
-      key: 'parentName',
-      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
-      ellipsis: true,
-      render: (_: unknown, record: AdminCategoryListItem) =>
-        record.parentId ? (categoryMap.get(record.parentId)?.name ?? '—') : '—',
+      title: 'Level',
+      dataIndex: 'level',
+      key: 'level',
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
+      align: 'center',
+      render: (level: number | null) => {
+        const lvl = level ?? 0;
+        return (
+          <Tag color={LEVEL_COLORS[lvl] ?? 'default'}>
+            {LEVEL_LABELS[lvl] ?? `Level ${lvl + 1}`}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Order',
-      dataIndex: 'displayOrder',
-      key: 'displayOrder',
+      dataIndex: 'rank',
+      key: 'rank',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'center',
+      render: (rank: number | null) => rank ?? 0,
     },
     {
       title: 'Active',
@@ -276,9 +290,9 @@ function ProductCategories() {
       key: 'isActive',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'center',
-      render: (isActive, record) => (
+      render: (isActive: boolean | null, record: AdminCategoryListItem) => (
         <Switch
-          checked={isActive}
+          checked={isActive ?? false}
           onChange={() => handleToggleActive(record)}
           size="small"
         />
@@ -293,18 +307,17 @@ function ProductCategories() {
     },
     {
       title: 'Subcategories',
-      dataIndex: 'children',
       key: 'subcategoryCount',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
-      render: (_: unknown, record: AdminCategoryListItem & { children?: AdminCategoryListItem[] }) =>
+      render: (_: unknown, record: AdminCategoryListItem) =>
         record.children?.length ?? 0,
     },
     {
       title: '',
       key: 'action',
       width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
-      render: (_, record) => (
+      render: (_: unknown, record: AdminCategoryListItem) => (
         <Space size="small">
           <Button
             size="small"
@@ -324,10 +337,10 @@ function ProductCategories() {
     },
   ];
 
-  const topLevelCount = categories.filter(c => !c.parentId).length;
-  const withSubcategoriesCount = categories.filter(
-    c => c.children && c.children.length > 0
-  ).length;
+  const level1Count = countByLevel(rootCategories, 0);
+  const level2Count = countByLevel(rootCategories, 1);
+  const level3Count = countByLevel(rootCategories, 2);
+
   const statsData: StatItemData[] | undefined = stats
     ? [
         {
@@ -336,18 +349,18 @@ function ProductCategories() {
           icon: <AppstoreOutlined />,
         },
         {
-          label: 'Active',
-          value: stats.active,
+          label: 'Level 1',
+          value: level1Count,
           icon: <AppstoreOutlined />,
         },
         {
-          label: 'Top Level',
-          value: topLevelCount,
+          label: 'Level 2',
+          value: level2Count,
           icon: <AppstoreOutlined />,
         },
         {
-          label: 'With Subcategories',
-          value: withSubcategoriesCount,
+          label: 'Level 3',
+          value: level3Count,
           icon: <AppstoreOutlined />,
         },
       ]
@@ -357,7 +370,7 @@ function ProductCategories() {
     <div>
       <PageHeader
         title="Categories"
-        description="Manage product categories"
+        description="Manage product categories (3-level hierarchy)"
         icon={<AppstoreOutlined />}
         stats={statsData}
         statsLoading={loading}
@@ -375,7 +388,7 @@ function ProductCategories() {
       )}
 
       <Card variant="outlined">
-        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="end" align="middle">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
               Create Category
@@ -384,11 +397,15 @@ function ProductCategories() {
 
           <Table
             columns={columns}
-            dataSource={hierarchicalData}
+            dataSource={rootCategories}
             loading={loadingList}
             rowKey="id"
             pagination={false}
             scroll={TABLE_SCROLL_CONFIGS.AUTO}
+            expandable={{
+              defaultExpandAllRows: true,
+              childrenColumnName: 'children',
+            }}
             locale={{
               emptyText: <Empty description="No categories found" />,
             }}
@@ -396,14 +413,12 @@ function ProductCategories() {
         </Space>
       </Card>
 
-      {/* Create Category Modal */}
       <CategoryCreateModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onSuccess={handleCreateSuccess}
       />
 
-      {/* Edit Category Modal */}
       {selectedCategoryId && (
         <CategoryEditModal
           open={editModalOpen}

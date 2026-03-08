@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Card, Form, Input, Select, DatePicker, Button, Space, Alert, Row, Col, Typography, Grid, Descriptions } from 'antd';
+import { Card, Form, Input, Select, DatePicker, Button, Space, Alert, Row, Col, Typography, Grid, Descriptions, Image } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import { useEditableForm } from './useEditableForm';
 import EditableDrawer from './EditableDrawer';
@@ -64,9 +64,19 @@ export default function EditableFormSection({
    */
   const renderFieldValue = (field: FieldConfig) => {
     const value = data[field.name];
-    return field.render
-      ? field.render(value)
-      : (value !== null && value !== undefined ? String(value) : '—');
+    if (field.render) return field.render(value);
+    if (field.type === 'upload' && value) {
+      return (
+        <Image
+          src={String(value)}
+          width={40}
+          height={40}
+          style={{ objectFit: 'cover', borderRadius: 4 }}
+          fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIGZpbGw9IiNmMGYwZjAiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2JmYmZiZiIgZm9udC1zaXplPSIxMCI+PzwvdGV4dD48L3N2Zz4="
+        />
+      );
+    }
+    return value !== null && value !== undefined ? String(value) : '—';
   };
 
   /**

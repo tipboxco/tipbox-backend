@@ -141,7 +141,7 @@ router.get(
               email: true,
               profile: {
                 select: {
-                  username: true,
+                  userName: true,
                   displayName: true,
                 },
               },
@@ -161,7 +161,7 @@ router.get(
     const formattedSplits = splits.map((split) => ({
       id: split.id,
       userId: split.userId,
-      username: split.user?.profile?.username ?? null,
+      username: split.user?.profile?.userName ?? null,
       userEmail: split.user?.email ?? null,
       productId: split.productId,
       productName: split.product?.name ?? null,
@@ -207,7 +207,7 @@ router.get(
             status: true,
             profile: {
               select: {
-                username: true,
+                userName: true,
                 displayName: true,
                 avatarUrl: true,
               },
@@ -235,7 +235,7 @@ router.get(
         id: split.user.id,
         email: split.user.email,
         status: split.user.status,
-        username: split.user.profile?.username ?? null,
+        username: split.user.profile?.userName ?? null,
         displayName: split.user.profile?.displayName ?? null,
         avatarUrl: split.user.profile?.avatarUrl ?? null,
       },

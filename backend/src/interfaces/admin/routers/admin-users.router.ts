@@ -109,6 +109,7 @@ router.get(
           emailVerified: true,
           createdAt: true,
           profile: { select: { displayName: true, userName: true } },
+          avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 },
         },
         orderBy,
         take: limit,
@@ -125,6 +126,7 @@ router.get(
       createdAt: u.createdAt.toISOString(),
       displayName: u.profile?.displayName ?? null,
       userName: u.profile?.userName ?? null,
+      avatarUrl: u.avatars?.[0]?.imageUrl ? resolveMediaUrl(u.avatars[0].imageUrl, true) : null,
     }));
 
     const pagination: PaginationMeta = { total, limit, offset };
@@ -462,6 +464,58 @@ router.post(
       updatedAt: avatar.updatedAt.toISOString(),
     };
     return res.json({ success: true, message: 'Avatar eklendi', data });
+  })
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/avatar:
+ *   delete:
+ *     summary: Kullanıcının aktif avatarını sil
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Avatar silindi
+ *       404:
+ *         description: Kullanıcı veya avatar bulunamadı
+ */
+router.delete(
+  '/:id/avatar',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundError('Kullanıcı bulunamadı');
+
+    const activeAvatar = await prisma.userAvatar.findFirst({
+      where: { userId: id, isActive: true },
+    });
+    if (!activeAvatar) throw new NotFoundError('Aktif avatar bulunamadı');
+
+    await prisma.userAvatar.delete({ where: { id: activeAvatar.id } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'USER_AVATAR_DELETE',
+        description: `userId: ${id}, avatarId: ${activeAvatar.id}`,
+        entityType: 'user_avatar',
+        entityId: 0,
+      },
+    });
+
+    return res.json({ success: true, message: 'Avatar silindi' });
   })
 );
 

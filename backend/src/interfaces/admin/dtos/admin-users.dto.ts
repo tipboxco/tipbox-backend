@@ -8,6 +8,7 @@ export type AdminUserListItem = {
   createdAt: string;
   displayName?: string | null;
   userName?: string | null;
+  avatarUrl?: string | null;
 };
 
 export type AdminUserDetailResponse = AdminUserListItem & {

@@ -173,6 +173,7 @@ const menuItems: MenuItem[] = [
     children: [
       { key: 'analytics-overview', label: 'Overview', path: '/analytics' },
       { key: 'analytics-ai-splits', label: 'AI Experience Splits', path: '/analytics/ai-experience-splits' },
+      { key: 'analytics-ai-prompts', label: 'Experience Prompts', path: '/analytics/ai-prompts' },
     ],
   },
   {

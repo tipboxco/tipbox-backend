@@ -273,8 +273,20 @@ function BrandCategories() {
           >
             <Input placeholder="e.g., Electronics" />
           </Form.Item>
-          <Form.Item name="imageUrl" label="Image URL">
-            <Input placeholder="https://..." />
+          <Form.Item label="Image URL">
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <Form.Item name="imageUrl" noStyle>
+                <Input placeholder="https://..." />
+              </Form.Item>
+              <Form.Item noStyle dependencies={['imageUrl']}>
+                {() => {
+                  const url = createForm.getFieldValue('imageUrl');
+                  return url ? (
+                    <img src={url} alt="Preview" style={{ maxWidth: '100%', maxHeight: 80, borderRadius: 4, objectFit: 'cover' }} />
+                  ) : null;
+                }}
+              </Form.Item>
+            </Space>
           </Form.Item>
           <Form.Item name="categoryId" label="Category ID">
             <Input placeholder="Optional parent category ID" />
@@ -302,8 +314,20 @@ function BrandCategories() {
           >
             <Input placeholder="e.g., Electronics" />
           </Form.Item>
-          <Form.Item name="imageUrl" label="Image URL">
-            <Input placeholder="https://..." />
+          <Form.Item label="Image URL">
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <Form.Item name="imageUrl" noStyle>
+                <Input placeholder="https://..." />
+              </Form.Item>
+              <Form.Item noStyle dependencies={['imageUrl']}>
+                {() => {
+                  const url = editForm.getFieldValue('imageUrl');
+                  return url ? (
+                    <img src={url} alt="Preview" style={{ maxWidth: '100%', maxHeight: 80, borderRadius: 4, objectFit: 'cover' }} />
+                  ) : null;
+                }}
+              </Form.Item>
+            </Space>
           </Form.Item>
           <Form.Item name="categoryId" label="Category ID">
             <Input placeholder="Optional parent category ID" />
