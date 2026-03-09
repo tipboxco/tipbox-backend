@@ -55,20 +55,27 @@ const slugify = (text: string): string => {
     .replace(/^-+|-+$/g, '');
 };
 
-// Build tree data for TreeSelect
+// Build tree data for TreeSelect - only allow selecting categories up to level 1
+// (so the new child will be at most level 2, which is the max depth)
 const buildTreeData = (
   categories: AdminCategoryListItem[],
   excludeId?: string
-): { title: string; value: string; children?: unknown[] }[] => {
+): { title: string; value: string; children?: unknown[]; disabled?: boolean }[] => {
   return categories
-    .filter((cat) => cat.id !== excludeId) // Exclude self
-    .map((cat) => ({
-      title: cat.name,
-      value: cat.id,
-      children: cat.children && cat.children.length > 0
-        ? buildTreeData(cat.children, excludeId)
-        : undefined,
-    }));
+    .filter((cat) => cat.id !== excludeId)
+    .map((cat) => {
+      const level = cat.level ?? 0;
+      // Disable level 2 categories as parents (would create level 3 = too deep)
+      const disabled = level >= 2;
+      return {
+        title: `${cat.name} (Level ${level + 1})`,
+        value: cat.id,
+        disabled,
+        children: cat.children && cat.children.length > 0
+          ? buildTreeData(cat.children, excludeId)
+          : undefined,
+      };
+    });
 };
 
 function CategoryCreateModal({ open, onClose, onSuccess }: CategoryCreateModalProps) {
@@ -355,8 +362,8 @@ function CategoryCreateModal({ open, onClose, onSuccess }: CategoryCreateModalPr
         </Form.Item>
 
         <Alert
-          message="Note"
-          description="The category will be created with the specified hierarchy. You can reorder categories later."
+          message="Hierarchy Info"
+          description="Categories support 3 levels: Level 1 (root) → Level 2 (sub) → Level 3 (leaf). Select a parent to create a subcategory. Level 3 categories cannot have children."
           type="info"
           showIcon
           style={{ marginBottom: 16 }}

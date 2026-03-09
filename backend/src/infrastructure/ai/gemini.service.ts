@@ -7,7 +7,11 @@ import { CACHE_KEYS } from '../cache/cache-keys';
 import { CACHE_TTL } from '../cache/cache-ttl';
 import { AIMetricsService } from './ai-metrics.service';
 import { AIPipelineLogger } from './ai-pipeline-logger';
+import { getPrisma } from '../repositories/prisma.client';
 import crypto from 'crypto';
+
+const AI_PROMPT_CACHE_PREFIX = 'ai:prompt:';
+const AI_PROMPT_CACHE_TTL = 3600; // 1 hour
 
 // Input validation constants
 const MIN_EXPERIENCE_LENGTH = 3;
@@ -178,7 +182,7 @@ export class GeminiService {
             tokensUsed: aiResponse.metadata.tokensUsed,
             processingTimeMs: duration,
             model: this.config.model,
-            promptVersion: 'v2.1',
+            promptVersion: aiResponse.metadata.promptVersion,
           },
         };
         return result;
@@ -304,7 +308,7 @@ export class GeminiService {
    */
   private async callAIWithRetry(
     request: SplitExperienceRequest
-  ): Promise<Omit<SplitExperienceResponse, 'metadata'> & { metadata: { tokensUsed: number | null } }> {
+  ): Promise<Omit<SplitExperienceResponse, 'metadata'> & { metadata: { tokensUsed: number | null; promptVersion: string } }> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
@@ -351,8 +355,8 @@ export class GeminiService {
    */
   private async callAIWithTimeout(
     request: SplitExperienceRequest
-  ): Promise<Omit<SplitExperienceResponse, 'metadata'> & { metadata: { tokensUsed: number | null } }> {
-    const prompt = this.buildSplitExperiencePrompt(request);
+  ): Promise<Omit<SplitExperienceResponse, 'metadata'> & { metadata: { tokensUsed: number | null; promptVersion: string } }> {
+    const { prompt, version } = await this.buildSplitExperiencePrompt(request);
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
@@ -375,6 +379,7 @@ export class GeminiService {
         ...parsedResponse,
         metadata: {
           tokensUsed,
+          promptVersion: version,
         },
       };
     })();
@@ -390,140 +395,157 @@ export class GeminiService {
   }
 
   /**
-   * Prompt oluştur
+   * Load prompt template from DB with cache, fallback to hardcoded default
    */
-  private buildSplitExperiencePrompt(request: SplitExperienceRequest): string {
+  private async loadPromptTemplate(key: string): Promise<{ promptText: string; version: string }> {
+    const cacheKey = `${AI_PROMPT_CACHE_PREFIX}${key}`;
+
+    // Check cache first
+    const cached = await this.cache.get<{ promptText: string; version: string }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Load from DB
+    try {
+      const prisma = getPrisma();
+      const template = await prisma.aiPromptTemplate.findFirst({
+        where: { key, isActive: true },
+        select: { promptText: true, version: true },
+      });
+
+      if (template) {
+        await this.cache.set(cacheKey, template, AI_PROMPT_CACHE_TTL);
+        logger.info('Loaded AI prompt template from DB', { key, version: template.version });
+        return template;
+      }
+    } catch (error) {
+      logger.warn('Failed to load AI prompt from DB, using fallback', {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Fallback to hardcoded default
+    return { promptText: this.getDefaultSplitExperiencePrompt(), version: 'v2.1-hardcoded' };
+  }
+
+  /**
+   * Detect the language of user input text
+   */
+  private detectLanguage(text: string): string {
+    // Turkish-specific characters and common words
+    const turkishChars = /[çğıöşüÇĞİÖŞÜ]/;
+    const turkishWords =
+      /\b(bir|ve|bu|için|ile|çok|ama|da|de|den|dan|gibi|kadar|olan|olarak|daha|en|var|yok|iyi|kötü|aldım|aldık|geldi|oldu|bence|güzel|fiyat|ürün|kargo)\b/i;
+
+    if (turkishChars.test(text) || turkishWords.test(text)) {
+      return 'tr';
+    }
+
+    // Default to English for non-Turkish
+    return 'en';
+  }
+
+  /**
+   * Get language instruction to append to prompt
+   */
+  private getLanguageInstruction(language: string): string {
+    if (language === 'tr') {
+      return `\n\nDİL TALİMATI: Kullanıcı Türkçe yazmıştır. Tüm çıktıları (content, placeholder) Türkçe olarak üret. Türkçe dilbilgisi ve yazım kurallarına uy.`;
+    }
+
+    return `\n\nLANGUAGE INSTRUCTION: The user wrote in English. Generate all outputs (content, placeholder) in English. Follow English grammar and spelling rules.`;
+  }
+
+  /**
+   * Prompt oluştur - DB'den yükle veya varsayılan kullan
+   */
+  private async buildSplitExperiencePrompt(request: SplitExperienceRequest): Promise<{ prompt: string; version: string }> {
+    const { promptText, version } = await this.loadPromptTemplate('split-experience');
+
     const productInfo = [
-      `Ürün: ${request.productName}`,
-      request.productBrand ? `Marka: ${request.productBrand}` : null,
-      request.productDescription ? `Açıklama: ${request.productDescription}` : null,
+      `Product: ${request.productName}`,
+      request.productBrand ? `Brand: ${request.productBrand}` : null,
+      request.productDescription ? `Description: ${request.productDescription}` : null,
     ]
       .filter(Boolean)
       .join('\n');
 
+    // Detect language of user input
+    const language = this.detectLanguage(request.experienceText);
+    const languageInstruction = this.getLanguageInstruction(language);
+
+    const finalPrompt = promptText
+      .replace('{{PRODUCT_INFO}}', productInfo)
+      .replace('{{EXPERIENCE_TEXT}}', request.experienceText)
+      + languageInstruction;
+
+    return { prompt: finalPrompt.trim(), version };
+  }
+
+  /**
+   * Default hardcoded prompt (fallback when DB is unavailable)
+   */
+  private getDefaultSplitExperiencePrompt(): string {
     return `
-Bir kullanıcının ürün deneyimi metni var. Bu metni analiz edip iki kategoriye ayırman ve standartlaştırman gerekiyor:
+You have a user's product experience text. Analyze it and split it into two categories while standardizing the content:
 
-1. **Price and Shopping Experience (Fiyat ve Alışveriş Deneyimi)**
-   - Ürünün fiyatı, satın alma süreci, teslimat, kargo, ambalaj
-   - Ödeme seçenekleri, indirimler, kampanyalar
-   - Satıcı deneyimi, müşteri hizmetleri
+1. **Price and Shopping Experience**
+   - Product price, purchase process, delivery, shipping, packaging
+   - Payment options, discounts, campaigns
+   - Seller experience, customer service
 
-2. **Product and Usage Experience (Ürün ve Kullanım Deneyimi)**
-   - Ürünün performansı, kalitesi, özellikleri
-   - Kullanım deneyimi, dayanıklılık
-   - Ürünün beklentileri karşılama durumu
+2. **Product and Usage Experience**
+   - Product performance, quality, features
+   - Usage experience, durability
+   - Whether the product meets expectations
 
-${productInfo}
+{{PRODUCT_INFO}}
 
-Kullanıcı Deneyimi:
+User Experience:
 """
-${request.experienceText}
+{{EXPERIENCE_TEXT}}
 """
 
-KRİTİK KURALLAR:
+CRITICAL RULES:
 
-1. **İÇERİK STANDARTLAŞTIRMA:**
-   - Kısa ve öz metinleri, kategorinin standardına göre daha anlamlı ve düzgün cümleler haline getir
-   - Argo, kaba veya özensiz ifadeleri düzelt
-   - Türkçe dilbilgisi ve yazım kurallarına uy
-   - Metni profesyonel ama samimi bir tonda yeniden ifade et
-   - Anlamı koruyarak eksik bağlamları tamamla
+1. **CONTENT STANDARDIZATION:**
+   - Transform short and concise texts into more meaningful and proper sentences according to the category standard
+   - Fix slang, rude, or careless expressions
+   - Restate the text in a professional but friendly tone
+   - Complete missing contexts while preserving meaning
 
-2. **KATEGORİ AYIRMA:**
-   - Metni dikkatlice oku ve SADECE ilgili kategoriye ait bilgileri ayır
-   - Aynı metni her iki kategoriye de KOPYALAMA - bu kesinlikle yasak!
-   - Eğer metin sadece bir kategoriye aitse, diğer kategoriyi mutlaka null yap
-   - Her kategori için 1-5 arası bir rating (derecelendirme) ver
+2. **CATEGORY SEPARATION:**
+   - Read the text carefully and separate ONLY the information belonging to the relevant category
+   - NEVER copy the same text to both categories - this is strictly forbidden!
+   - If the text belongs to only one category, make the other category null
+   - Give a rating between 1-5 for each category
 
-3. **PLACEHOLDER OLUŞTURMA:**
-   - Eğer bir kategori için bilgi YOKSA, o kategoriyi null yap
-   - Eğer bir kategori için bilgi VAR AMA EKSİKSE, dinamik bir placeholder üret
-   - Placeholder, kullanıcıyı o kategorinin eksik kısımlarını doldurmaya yönlendirmeli
-   - Placeholder örnekleri:
-     * Fiyat kesiti varsa ama teslimat yoksa: "Teslimat sürecinden ve paketleme kalitesinden de bahsedin..."
-     * Ürün kesiti varsa ama kullanım süresi yoksa: "Ne kadar süredir kullanıyorsunuz? Uzun vadeli performansından bahsedin..."
-     * Fiyat kesiti varsa ama satın alma yeri yoksa: "Nereden satın aldınız? Satıcı deneyiminiz nasıldı?"
+3. **PLACEHOLDER GENERATION:**
+   - If there is NO information for a category, make that category null
+   - If information EXISTS BUT IS INCOMPLETE for a category, generate a dynamic placeholder
+   - The placeholder should guide the user to fill in the missing parts of that category
 
-ÖRNEKLER:
+IMPORTANT:
+- Standardize content but do not change the meaning
+- Make short texts more meaningful
+- Generate dynamic placeholders for incomplete categories
+- Do not add placeholders for complete categories
 
-Örnek 1 - Kısa Fiyat Metni (İyileştirme + Placeholder):
-Girdi: "Çok pahalı buldum, 18.000 TL verdim."
-Çıktı:
-\`\`\`json
-{
-  "priceAndShopping": {
-    "content": "Ürünü 18.000 TL'ye satın aldım ve fiyatını oldukça yüksek buldum.",
-    "rating": 2,
-    "placeholder": "Teslimat süreci, ödeme seçenekleri veya satıcı deneyiminiz hakkında da bilgi ekleyin..."
-  },
-  "productAndUsage": null
-}
-\`\`\`
-
-Örnek 2 - Kısa Ürün Metni (İyileştirme + Placeholder):
-Girdi: "Pil ömrü kötü."
-Çıktı:
-\`\`\`json
-{
-  "priceAndShopping": null,
-  "productAndUsage": {
-    "content": "Ürünün pil ömrü beklentilerimi karşılamadı ve yetersiz buldum.",
-    "rating": 2,
-    "placeholder": "Ürünün diğer özelliklerinden, performansından veya kullanım deneyiminizden de bahsedin..."
-  }
-}
-\`\`\`
-
-Örnek 3 - Sadece Teslimat (İyileştirme + Placeholder):
-Girdi: "Kargo çok hızlıydı, 2 günde geldi."
-Çıktı:
-\`\`\`json
-{
-  "priceAndShopping": {
-    "content": "Ürünün teslimatı oldukça hızlıydı, sipariş verdikten sadece 2 gün sonra elime ulaştı.",
-    "rating": 5,
-    "placeholder": "Ürünün fiyatından, satın alma sürecinden veya paketleme kalitesinden de bahsedin..."
-  },
-  "productAndUsage": null
-}
-\`\`\`
-
-Örnek 4 - Kapsamlı Metin (Her İki Kategori Tam):
-Girdi: "Dyson'dan 949 TL'ye aldım. Teslimat hızlıydı. Ürün çok iyi, lazer teknolojisi harika. Pil ömrü 60 dakika, evimi rahatça temizliyorum."
-Çıktı:
-\`\`\`json
-{
-  "priceAndShopping": {
-    "content": "Ürünü Dyson'dan 949 TL'ye satın aldım ve teslimat süreci oldukça hızlı gerçekleşti.",
-    "rating": 5
-  },
-  "productAndUsage": {
-    "content": "Ürünün performansından çok memnunum. Özellikle yeşil lazer teknolojisi oldukça etkili. Pil ömrü normal modda yaklaşık 60 dakika sürdüğü için evimi tek şarjda rahatça temizleyebiliyorum.",
-    "rating": 5
-  }
-}
-\`\`\`
-
-ÖNEMLI:
-- İçeriği standartlaştır ama anlamı değiştirme
-- Kısa metinleri daha anlamlı hale getir
-- Eksik kategoriler için dinamik placeholder üret
-- Tam kategoriler için placeholder ekleme
-
-Lütfen aşağıdaki JSON formatında yanıt ver:
+Please respond in the following JSON format:
 
 \`\`\`json
 {
   "priceAndShopping": {
     "content": "...",
     "rating": 1-5,
-    "placeholder": "..." (opsiyonel, sadece kategori eksikse)
+    "placeholder": "..." (optional, only if category is incomplete)
   } | null,
   "productAndUsage": {
     "content": "...",
     "rating": 1-5,
-    "placeholder": "..." (opsiyonel, sadece kategori eksikse)
+    "placeholder": "..." (optional, only if category is incomplete)
   } | null
 }
 \`\`\`

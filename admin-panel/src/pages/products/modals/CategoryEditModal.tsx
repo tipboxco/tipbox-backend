@@ -57,6 +57,7 @@ const slugify = (text: string): string => {
 };
 
 // Build tree data for TreeSelect, excluding current category and its descendants
+// Also disable level 2 categories as parents (would exceed 3-level max)
 const buildTreeData = (
   categories: AdminCategoryListItem[],
   excludeId: string,
@@ -65,10 +66,13 @@ const buildTreeData = (
   return categories
     .map((cat) => {
       const isExcluded = cat.id === excludeId || excludedDescendants.has(cat.id);
+      const level = cat.level ?? 0;
+      // Disable if excluded or if at level 2 (would create level 3+ child)
+      const disabled = isExcluded || level >= 2;
       return {
-        title: cat.name,
+        title: `${cat.name} (Level ${level + 1})`,
         value: cat.id,
-        disabled: isExcluded,
+        disabled,
         children: cat.children && cat.children.length > 0
           ? buildTreeData(cat.children, excludeId, excludedDescendants)
           : undefined,

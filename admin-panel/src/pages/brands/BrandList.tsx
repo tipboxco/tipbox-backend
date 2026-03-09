@@ -550,8 +550,20 @@ function BrandList() {
           >
             <Input placeholder="e.g., Apple" />
           </Form.Item>
-          <Form.Item name="logoUrl" label="Logo URL">
-            <Input placeholder="https://..." />
+          <Form.Item label="Logo URL">
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <Form.Item name="logoUrl" noStyle>
+                <Input placeholder="https://..." />
+              </Form.Item>
+              <Form.Item noStyle dependencies={['logoUrl']}>
+                {() => {
+                  const url = form.getFieldValue('logoUrl');
+                  return url ? (
+                    <img src={url} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: 80, borderRadius: 4, objectFit: 'cover' }} />
+                  ) : null;
+                }}
+              </Form.Item>
+            </Space>
           </Form.Item>
           <Form.Item name="categoryId" label="Category">
             <Select

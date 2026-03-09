@@ -105,6 +105,7 @@ import MarketplaceBanners from './pages/marketing/MarketplaceBanners';
 
 // Analytics pages (additional)
 import AiExperienceSplits from './pages/analytics/AiExperienceSplits';
+import AiPrompts from './pages/analytics/AiPrompts';
 
 // User pages (additional)
 import UserFeedPreferences from './pages/users/UserFeedPreferences';
@@ -242,6 +243,7 @@ function App() {
           {/* Analytics */}
           <Route path="analytics" element={<Analytics />} />
           <Route path="analytics/ai-experience-splits" element={<AiExperienceSplits />} />
+          <Route path="analytics/ai-prompts" element={<AiPrompts />} />
 
           {/* Moderation */}
           <Route path="moderation/user-reports" element={<ModerationUserReports />} />

@@ -2128,6 +2128,38 @@ model AiExperienceSplit {
   @@map("ai_experience_splits")
 }
 
+model AiPromptTemplate {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String   @unique
+  name          String
+  description   String?
+  promptText    String   @map("prompt_text") @db.Text
+  version       String   @default("v1.0")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdBy     String?  @map("created_by") @db.Uuid
+  updatedBy     String?  @map("updated_by") @db.Uuid
+
+  @@index([key])
+  @@index([isActive])
+  @@map("ai_prompt_templates")
+}
+
+model AiPromptVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  templateKey     String   @map("template_key")
+  version         String
+  promptText      String   @map("prompt_text") @db.Text
+  changeNote      String?  @map("change_note")
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdBy       String?  @map("created_by") @db.Uuid
+
+  @@index([templateKey])
+  @@index([createdAt])
+  @@map("ai_prompt_versions")
+}
+
 model BoostOption {
   id          String   @id @default(uuid()) @db.Uuid
   image       String?

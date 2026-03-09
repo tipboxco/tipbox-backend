@@ -39,7 +39,7 @@ function PageHeader({
   return (
     <div style={{ marginBottom: 24 }}>
       {backTo && (
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 8 }}>
           <Link to={backTo}>
             <Button type="link" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }}>
               {backLabel}
@@ -57,28 +57,19 @@ function PageHeader({
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-            }}
-          >
-            <Space orientation="vertical" size={4}>
-              <Space align="center" size={12}>
-                {icon && <span style={{ fontSize: 28 }}>{icon}</span>}
-                <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
-                  {title}
-                </Title>
-              </Space>
-              {description && (
-                <Text type="secondary" style={{ fontSize: 16 }}>
-                  {description}
-                </Text>
-              )}
+          <Space orientation="vertical" size={4}>
+            <Space align="center" size={12}>
+              {icon && <span style={{ fontSize: 28, display: 'inline-flex' }}>{icon}</span>}
+              <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
+                {title}
+              </Title>
             </Space>
-            {actions && !stats && <div>{actions}</div>}
-          </div>
+            {description && (
+              <Text type="secondary" style={{ fontSize: 16 }}>
+                {description}
+              </Text>
+            )}
+          </Space>
         </div>
 
         {stats && stats.length > 0 && (
@@ -115,6 +106,12 @@ function PageHeader({
 
         {actions && stats && <div>{actions}</div>}
       </div>
+
+      {actions && !stats && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   Space,
   Typography,
   Image,
+  Avatar,
   Descriptions,
   Modal,
   Form,
@@ -29,6 +30,7 @@ import {
   fetchUserModerationHistory,
   fetchUserLoginAttempts,
   fetchUserAvatar,
+  deleteUserAvatar,
   fetchUserEvents,
   fetchUserBadges,
   revokeUserBadge,
@@ -102,9 +104,13 @@ function UserDetail() {
     setLoading(true);
     (async () => {
       try {
-        const res = await fetchUser(id);
-        if (!cancelled && res.data) {
-          setUser(res.data);
+        const [userRes, avatarRes] = await Promise.all([
+          fetchUser(id),
+          fetchUserAvatar(id).catch(() => ({ data: null })),
+        ]);
+        if (!cancelled) {
+          if (userRes.data) setUser(userRes.data);
+          setAvatar(avatarRes.data ?? null);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load user');
@@ -829,9 +835,34 @@ function UserDetail() {
                     {avatar.isActive ? 'Yes' : 'No'}
                   </Descriptions.Item>
                 </Descriptions>
-                <Button type="primary" onClick={() => setEditAvatarModalOpen(true)}>
-                  Edit Avatar
-                </Button>
+                <Space>
+                  <Button type="primary" onClick={() => setEditAvatarModalOpen(true)}>
+                    Edit Avatar
+                  </Button>
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: 'Delete Avatar',
+                        content: 'Are you sure you want to delete this user\'s avatar?',
+                        okText: 'Delete',
+                        okType: 'danger',
+                        onOk: async () => {
+                          try {
+                            await deleteUserAvatar(id);
+                            setAvatar(null);
+                            antdMessage.success('Avatar deleted');
+                          } catch (e) {
+                            antdMessage.error(e instanceof Error ? e.message : 'Failed to delete avatar');
+                          }
+                        },
+                      });
+                    }}
+                  >
+                    Delete Avatar
+                  </Button>
+                </Space>
               </Space>
             ) : (
               <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
@@ -1053,11 +1084,18 @@ function UserDetail() {
       <PageHeader
         title={user.displayName || user.userName || user.email || user.id}
         description={user.email ?? undefined}
-        icon={<UserOutlined />}
+        icon={
+          <Avatar
+            src={avatar?.imageUrl}
+            icon={<UserOutlined />}
+            size={48}
+            style={{ flexShrink: 0 }}
+          />
+        }
         backTo="/users"
         backLabel="Back to list"
         actions={
-          <Space>
+          <Space wrap>
             <Button icon={<LogoutOutlined />} onClick={handleForceLogout} loading={saving}>
               Force Logout
             </Button>
