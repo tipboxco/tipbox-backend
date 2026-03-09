@@ -95,6 +95,14 @@ export type AdminBrandCategoryDetailResponse = AdminBrandCategoryListItem & {
   updatedAt: string;
 };
 
+export type AdminBrandCategoryBrandItem = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  isPopular: boolean | null;
+  createdAt: string;
+};
+
 export type CreateBrandCategoryInput = {
   name: string;
   imageUrl?: string | null;
@@ -403,6 +411,12 @@ export async function updateBrandCategory(
 
 export async function deleteBrandCategory(id: string): Promise<ApiResponse<void>> {
   return del<void>(`/admin/brands/categories/${id}`);
+}
+
+export async function fetchBrandCategoryBrands(
+  categoryId: string
+): Promise<ApiResponse<AdminBrandCategoryBrandItem[]>> {
+  return get<AdminBrandCategoryBrandItem[]>(`/admin/brands/categories/${categoryId}/brands`);
 }
 
 /* ========== Brand Surveys ========== */

@@ -445,6 +445,128 @@ router.delete(
   })
 );
 
+/* ========== Collection User Progress ========== */
+
+router.get(
+  '/collections/:id/user-progress',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    const collection = await prisma.badgeCollection.findUnique({ where: { id } });
+    if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
+
+    // Get all badges in this collection
+    const badges = await prisma.badge.findMany({
+      where: { collectionId: id },
+      select: { id: true, name: true, imageUrl: true },
+    });
+
+    const totalBadges = badges.length;
+    const badgeIds = badges.map((b) => b.id);
+
+    if (badgeIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: { total: 0, limit, offset },
+      });
+    }
+
+    // Find all unique users who have at least one badge in this collection
+    const userBadges = await prisma.userBadge.findMany({
+      where: { badgeId: { in: badgeIds } },
+      select: {
+        userId: true,
+        badgeId: true,
+        claimed: true,
+        claimedAt: true,
+      },
+    });
+
+    // Group by user
+    const userMap = new Map<
+      string,
+      { badgeId: string; claimed: boolean; claimedAt: Date | null }[]
+    >();
+    for (const ub of userBadges) {
+      const existing = userMap.get(ub.userId);
+      if (existing) {
+        existing.push({ badgeId: ub.badgeId, claimed: ub.claimed, claimedAt: ub.claimedAt });
+      } else {
+        userMap.set(ub.userId, [
+          { badgeId: ub.badgeId, claimed: ub.claimed, claimedAt: ub.claimedAt },
+        ]);
+      }
+    }
+
+    const uniqueUserIds = Array.from(userMap.keys());
+    const total = uniqueUserIds.length;
+
+    // Sort by earned count descending, then apply pagination
+    const sortedUserIds = uniqueUserIds.sort((a, b) => {
+      const aCount = userMap.get(a)?.length ?? 0;
+      const bCount = userMap.get(b)?.length ?? 0;
+      return bCount - aCount;
+    });
+    const paginatedUserIds = sortedUserIds.slice(offset, offset + limit);
+
+    if (paginatedUserIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: { total, limit, offset },
+      });
+    }
+
+    // Fetch user info
+    const users = await prisma.user.findMany({
+      where: { id: { in: paginatedUserIds } },
+      select: {
+        id: true,
+        email: true,
+        profile: { select: { userName: true, displayName: true } },
+      },
+    });
+
+    const userInfoMap = new Map(users.map((u) => [u.id, u]));
+    const badgeInfoMap = new Map(badges.map((b) => [b.id, b]));
+
+    const data = paginatedUserIds.map((userId) => {
+      const userInfo = userInfoMap.get(userId);
+      const userBadgeList = userMap.get(userId) ?? [];
+      const earnedBadges = userBadgeList.length;
+      const claimed = userBadgeList.filter((ub) => ub.claimed).length;
+      const progressPercent = totalBadges > 0 ? Math.round((earnedBadges / totalBadges) * 100) : 0;
+
+      return {
+        userId,
+        email: userInfo?.email ?? null,
+        userName: userInfo?.profile?.userName ?? null,
+        displayName: userInfo?.profile?.displayName ?? null,
+        earnedBadges,
+        totalBadges,
+        progressPercent,
+        claimed,
+        badges: userBadgeList.map((ub) => {
+          const badgeInfo = badgeInfoMap.get(ub.badgeId);
+          return {
+            badgeId: ub.badgeId,
+            badgeName: badgeInfo?.name ?? '',
+            badgeImageUrl: badgeInfo?.imageUrl ? resolveMediaUrl(badgeInfo.imageUrl, true) : null,
+            claimed: ub.claimed,
+            claimedAt: ub.claimedAt?.toISOString() ?? null,
+          };
+        }),
+      };
+    });
+
+    const pagination: PaginationMeta = { total, limit, offset };
+    return res.json({ success: true, data, pagination });
+  })
+);
+
 router.get(
   '/collections/:id',
   asyncHandler(async (req: Request, res: Response) => {

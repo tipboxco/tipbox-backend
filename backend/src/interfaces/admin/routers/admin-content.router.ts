@@ -1663,7 +1663,7 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { flaggedByUser: { select: { email: true }, include: { profile: { select: { displayName: true } } } } },
+        include: { flaggedByUser: { select: { id: true, email: true, profile: { select: { displayName: true, userName: true } } } } },
       }),
       prisma.manualReviewFlag.count({ where }),
     ]);
@@ -1713,7 +1713,7 @@ router.get(
     const { id } = req.params;
     const flag = await prisma.manualReviewFlag.findUnique({
       where: { id },
-      include: { flaggedByUser: { select: { email: true }, include: { profile: { select: { displayName: true } } } } },
+      include: { flaggedByUser: { select: { id: true, email: true, profile: { select: { displayName: true, userName: true } } } } },
     });
     if (!flag) throw new NotFoundError('Manual review flag bulunamadı');
     const data: AdminManualReviewFlagDetailResponse = {

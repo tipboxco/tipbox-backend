@@ -79,27 +79,30 @@ export type AdminTransactionDetailResponse = AdminTransactionListItem & {
 export type AdminTipsStatsResponse = {
   total: number;
   totalVolume: number;
-  thisMonth: number;
+  volumeThisMonth: number;
+  thisWeek: number;
   avgAmount: number;
   topSenders: {
     userId: string;
     username: string | null;
     totalSent: number;
+    count: number;
   }[];
   topReceivers: {
     userId: string;
     username: string | null;
     totalReceived: number;
+    count: number;
   }[];
 };
 
 export type AdminTipsListItem = {
   id: string;
   fromUserId: string;
-  fromUserEmail: string | null;
+  fromEmail: string | null;
   fromUsername: string | null;
   toUserId: string;
-  toUserEmail: string | null;
+  toEmail: string | null;
   toUsername: string | null;
   amount: number;
   reason: string | null;
@@ -302,6 +305,7 @@ export type TipsQueryParams = {
   minAmount?: number;
   maxAmount?: number;
   reason?: string;
+  search?: string;
   sort?: string;
   order?: 'asc' | 'desc';
 };
@@ -431,6 +435,7 @@ export async function fetchTipsTransfers(
     minAmount: params.minAmount,
     maxAmount: params.maxAmount,
     reason: params.reason,
+    search: params.search,
     sort: params.sort ?? 'createdAt',
     order: params.order ?? 'desc',
   };

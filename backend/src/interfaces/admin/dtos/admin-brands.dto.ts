@@ -61,6 +61,14 @@ export type AdminBrandCategoryDetailResponse = AdminBrandCategoryListItem & {
   updatedAt: string;
 };
 
+export type AdminBrandCategoryBrandItem = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  isPopular: boolean | null;
+  createdAt: string;
+};
+
 /* ========== Brand Surveys ========== */
 
 export type AdminBrandSurveyStatsResponse = {

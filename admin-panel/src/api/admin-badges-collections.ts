@@ -207,6 +207,42 @@ export async function deleteCollectionGoal(collectionId: string, goalId: string)
   return del<{ message: string }>(`${prefix}/collections/${collectionId}/goals/${goalId}`);
 }
 
+/* ========== Collection User Progress ========== */
+
+export type AdminCollectionUserProgressBadge = {
+  badgeId: string;
+  badgeName: string;
+  badgeImageUrl: string | null;
+  claimed: boolean;
+  claimedAt: string | null;
+};
+
+export type AdminCollectionUserProgressItem = {
+  userId: string;
+  email: string | null;
+  userName: string | null;
+  displayName: string | null;
+  earnedBadges: number;
+  totalBadges: number;
+  progressPercent: number;
+  claimed: number;
+  badges: AdminCollectionUserProgressBadge[];
+};
+
+export async function fetchCollectionUserProgress(
+  collectionId: string,
+  params?: { limit?: number; offset?: number }
+) {
+  const query: Record<string, string | number | undefined> = {
+    limit: params?.limit ?? 50,
+    offset: params?.offset ?? 0,
+  };
+  return get<AdminCollectionUserProgressItem[]>(
+    `${prefix}/collections/${collectionId}/user-progress`,
+    query
+  );
+}
+
 /* ========== Badges ========== */
 
 export async function fetchBadgesStats() {

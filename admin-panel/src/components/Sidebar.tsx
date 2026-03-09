@@ -49,7 +49,6 @@ const menuItems: MenuItem[] = [
     label: 'Users',
     children: [
       { key: 'users-list', label: 'User List', path: '/users' },
-      { key: 'users-kyc', label: 'KYC Verification', path: '/users/kyc' },
       { key: 'users-reports', label: 'User Reports', path: '/users/reports' },
       { key: 'users-banned', label: 'Banned Users', path: '/users/banned' },
       { key: 'users-feed-preferences', label: 'Feed Preferences', path: '/users/feed-preferences' },
@@ -81,8 +80,6 @@ const menuItems: MenuItem[] = [
       { key: 'products-groups', label: 'Product Groups', path: '/products/groups' },
       { key: 'products-suggestions', label: 'Product Suggestions', path: '/products/suggestions' },
       { key: 'products-inventories', label: 'User Inventories', path: '/products/inventories' },
-      { key: 'products-comparisons', label: 'Comparisons', path: '/products/comparisons' },
-      { key: 'products-category-management', label: 'Category Management', path: '/products/category-management' },
       { key: 'products-comparison-metrics', label: 'Comparison Metrics', path: '/products/comparison-metrics' },
     ],
   },
@@ -92,7 +89,6 @@ const menuItems: MenuItem[] = [
     label: 'Brands',
     children: [
       { key: 'brands-list', label: 'Brand List', path: '/brands' },
-      { key: 'brands-bridge', label: 'Bridge Program', path: '/brands/bridge' },
       { key: 'brands-surveys', label: 'Brand Surveys', path: '/brands/surveys' },
       { key: 'brands-leaderboards', label: 'Leaderboards', path: '/brands/leaderboards' },
       { key: 'brands-rewards', label: 'Rewards', path: '/brands/rewards' },
@@ -202,6 +198,7 @@ const menuItems: MenuItem[] = [
       { key: 'system-moderation', label: 'Moderation Actions', path: '/system/moderation' },
       { key: 'system-themes', label: 'User Themes', path: '/system/user-themes' },
       { key: 'system-experience-config', label: 'Experience Config', path: '/system/experience-config' },
+      { key: 'system-feed-management', label: 'Feed Management', path: '/system/feed-management' },
     ],
   },
 ];

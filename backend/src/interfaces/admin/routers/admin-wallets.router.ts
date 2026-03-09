@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
@@ -164,7 +165,7 @@ router.get(
  * Get wallet details
  */
 router.get(
-  '/:id',
+  '/:id([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -247,7 +248,7 @@ router.get(
  * Get wallet transaction history
  */
 router.get(
-  '/:id/transactions',
+  '/:id([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/transactions',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
@@ -278,7 +279,7 @@ router.get(
  * Adjust wallet balance (admin tool)
  */
 router.patch(
-  '/:id/adjust',
+  '/:id([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/adjust',
   validateBody(AdminAdjustWalletBalanceSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const adminId = req.user?.id;
@@ -715,18 +716,25 @@ router.get(
       select: { amount: true },
     });
     const totalVolume = allTips.reduce((sum, tip) => sum + tip.amount, 0);
+    const avgAmount = total > 0 ? totalVolume / total : 0;
 
     // Volume this month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const tipsThisMonth = await prisma.tipsTokenTransfer.findMany({
+    const volumeThisMonth = await prisma.tipsTokenTransfer.count({
       where: { createdAt: { gte: startOfMonth } },
-      select: { amount: true },
     });
-    const volumeThisMonth = tipsThisMonth.reduce((sum, tip) => sum + tip.amount, 0);
 
-    // Top tippers
-    const topTippersRaw = await prisma.tipsTokenTransfer.groupBy({
+    // This week
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeek = await prisma.tipsTokenTransfer.count({
+      where: { createdAt: { gte: startOfWeek } },
+    });
+
+    // Top senders
+    const topSendersRaw = await prisma.tipsTokenTransfer.groupBy({
       by: ['fromUserId'],
       _sum: { amount: true },
       _count: { id: true },
@@ -734,8 +742,8 @@ router.get(
       take: 10,
     });
 
-    const topTippers = await Promise.all(
-      topTippersRaw.map(async (tipper) => {
+    const topSenders = await Promise.all(
+      topSendersRaw.map(async (tipper) => {
         const user = await prisma.user.findUnique({
           where: { id: tipper.fromUserId },
           select: { id: true, profile: { select: { userName: true } } },
@@ -777,7 +785,9 @@ router.get(
       total,
       totalVolume,
       volumeThisMonth,
-      topTippers,
+      thisWeek,
+      avgAmount,
+      topSenders,
       topReceivers,
     };
 
@@ -826,8 +836,8 @@ router.get(
     // Search by username
     if (q.search) {
       where.OR = [
-        { fromUser: { profile: { username: { contains: q.search, mode: 'insensitive' } } } },
-        { toUser: { profile: { username: { contains: q.search, mode: 'insensitive' } } } },
+        { fromUser: { profile: { userName: { contains: q.search, mode: 'insensitive' } } } },
+        { toUser: { profile: { userName: { contains: q.search, mode: 'insensitive' } } } },
       ];
     }
 
@@ -872,6 +882,86 @@ router.get(
 
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
+  })
+);
+
+/**
+ * POST /admin/wallets/tips
+ * Create a new tips transfer
+ */
+router.post(
+  '/tips',
+  validateBody(
+    z.object({
+      fromUserId: z.string().uuid(),
+      toUserId: z.string().uuid(),
+      amount: z.number().positive(),
+      reason: z.string().optional().nullable(),
+    })
+  ),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { fromUserId, toUserId, amount, reason } = req.body as {
+      fromUserId: string;
+      toUserId: string;
+      amount: number;
+      reason?: string | null;
+    };
+
+    // Verify both users exist
+    const [fromUser, toUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: fromUserId }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: toUserId }, select: { id: true } }),
+    ]);
+
+    if (!fromUser) throw new NotFoundError('Sender user not found');
+    if (!toUser) throw new NotFoundError('Recipient user not found');
+
+    const tip = await prisma.tipsTokenTransfer.create({
+      data: {
+        fromUserId,
+        toUserId,
+        amount,
+        reason: reason ?? null,
+      },
+      include: {
+        fromUser: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true } },
+          },
+        },
+        toUser: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true } },
+          },
+        },
+      },
+    });
+
+    logger.info('Admin created tips transfer', {
+      tipId: tip.id,
+      fromUserId,
+      toUserId,
+      amount,
+    });
+
+    const data: AdminTipsListItem = {
+      id: tip.id,
+      fromUserId: tip.fromUserId,
+      fromUsername: tip.fromUser.profile?.userName || null,
+      fromEmail: tip.fromUser.email,
+      toUserId: tip.toUserId,
+      toUsername: tip.toUser.profile?.userName || null,
+      toEmail: tip.toUser.email,
+      amount: tip.amount,
+      reason: tip.reason,
+      createdAt: tip.createdAt.toISOString(),
+    };
+
+    return res.status(201).json({ success: true, data });
   })
 );
 
@@ -944,6 +1034,56 @@ router.get(
       avgTipAmount,
       totalVolume,
       totalCount,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/wallets/tips/:id
+ * Get a single tips transfer by ID
+ */
+router.get(
+  '/tips/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const tip = await prisma.tipsTokenTransfer.findUnique({
+      where: { id },
+      include: {
+        fromUser: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true } },
+          },
+        },
+        toUser: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { userName: true } },
+          },
+        },
+      },
+    });
+
+    if (!tip) {
+      throw new NotFoundError('Tips transfer not found');
+    }
+
+    const data: AdminTipsListItem = {
+      id: tip.id,
+      fromUserId: tip.fromUserId,
+      fromUsername: tip.fromUser.profile?.userName || null,
+      fromEmail: tip.fromUser.email,
+      toUserId: tip.toUserId,
+      toUsername: tip.toUser.profile?.userName || null,
+      toEmail: tip.toUser.email,
+      amount: tip.amount,
+      reason: tip.reason,
+      createdAt: tip.createdAt.toISOString(),
     };
 
     return res.json({ success: true, data });

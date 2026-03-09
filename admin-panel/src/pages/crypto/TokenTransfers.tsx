@@ -103,7 +103,7 @@ function TokenTransfers() {
     setDetailModalOpen(true);
     try {
       const res = await fetchTokenTransfer(id);
-      setSelectedTransfer(res.data);
+      setSelectedTransfer(res.data ?? null);
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Failed to load transfer details');
     } finally {
@@ -153,7 +153,7 @@ function TokenTransfers() {
       title: 'Reason',
       dataIndex: 'reason',
       key: 'reason',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -168,11 +168,11 @@ function TokenTransfers() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_QUAD,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
       render: (_, record) => (
         <Space size="small">
-          <ViewActionButton to={`/users/${record.fromUserId}`} title="View from user" />
-          <ViewActionButton to={`/users/${record.toUserId}`} title="View to user" />
+          <ViewActionButton to={`/users/${record.fromUserId}`} label="From" />
+          <ViewActionButton to={`/users/${record.toUserId}`} label="To" />
           <Button
             size="small"
             type="text"
@@ -222,7 +222,7 @@ function TokenTransfers() {
         title="Token Transfers"
         description="View TIPS token transactions"
         icon={<SwapOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -270,7 +270,7 @@ function TokenTransfers() {
               showTotal: (total) => `Total ${total} transfers`,
             }}
             onChange={handleTableChange}
-            scroll={TABLE_SCROLL_CONFIGS.DEFAULT}
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
             locale={{
               emptyText: <Empty description="No token transfers found" />,
             }}

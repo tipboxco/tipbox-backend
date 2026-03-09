@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
   Tabs,
+  Table,
   Button,
   Space,
   Spin,
@@ -12,6 +13,9 @@ import {
   Col,
   Typography,
   Image,
+  Avatar,
+  Progress,
+  Tag,
   Cascader,
   message as antdMessage,
 } from 'antd';
@@ -26,6 +30,7 @@ import {
   TagsOutlined,
   CheckCircleOutlined,
   PauseCircleOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import EditableFormSection from '../../components/form/EditableFormSection';
@@ -43,8 +48,11 @@ import {
   updateCollectionGoal,
   deleteCollectionGoal,
   uploadMedia,
+  fetchCollectionUserProgress,
   type AdminCollectionCategoryMain,
   type AdminCollectionGoalListItem,
+  type AdminCollectionUserProgressItem,
+  type AdminCollectionUserProgressBadge,
 } from '../../api/admin-badges-collections';
 import type {
   AdminCollectionDetailResponse,
@@ -149,6 +157,11 @@ function CollectionDetail() {
           refreshKey={goalsRefreshKey}
         />
       ),
+    },
+    {
+      key: 'user-progress',
+      label: 'User Progress',
+      children: <CollectionUserProgressTab collectionId={id} />,
     },
   ];
 
@@ -870,6 +883,135 @@ function CollectionGoalsTab({
         loading={editLoading}
       />
     </>
+  );
+}
+
+/* ========== User Progress Tab ========== */
+
+function CollectionUserProgressTab({ collectionId }: { collectionId: string }) {
+  const [data, setData] = useState<AdminCollectionUserProgressItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetchCollectionUserProgress(collectionId, {
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      });
+      setData(res.data ?? []);
+      setTotal(res.pagination?.total ?? 0);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [collectionId, page]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const expandedRowRender = (record: AdminCollectionUserProgressItem) => (
+    <Row gutter={[8, 8]} style={{ padding: '8px 0' }}>
+      {record.badges.map((b: AdminCollectionUserProgressBadge) => (
+        <Col key={b.badgeId}>
+          <Space size="small">
+            <Avatar
+              src={b.badgeImageUrl ?? undefined}
+              icon={!b.badgeImageUrl ? <TrophyOutlined /> : undefined}
+              size="small"
+            />
+            <Text style={{ fontSize: 13 }}>{b.badgeName}</Text>
+            {b.claimed ? (
+              <Tag color="green" icon={<CheckCircleOutlined />}>
+                Claimed
+              </Tag>
+            ) : (
+              <Tag color="default">Unclaimed</Tag>
+            )}
+            {b.claimedAt && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {new Date(b.claimedAt).toLocaleDateString('en-US')}
+              </Text>
+            )}
+          </Space>
+        </Col>
+      ))}
+    </Row>
+  );
+
+  const columns = [
+    {
+      title: 'User',
+      key: 'user',
+      render: (_: unknown, record: AdminCollectionUserProgressItem) => (
+        <Space>
+          <UserOutlined />
+          <span>{record.userName ?? record.displayName ?? record.email ?? record.userId}</span>
+        </Space>
+      ),
+    },
+    {
+      title: 'Progress',
+      key: 'progress',
+      width: 220,
+      render: (_: unknown, record: AdminCollectionUserProgressItem) => (
+        <Progress
+          percent={record.progressPercent}
+          size="small"
+          format={() => `${record.earnedBadges}/${record.totalBadges}`}
+        />
+      ),
+    },
+    {
+      title: 'Earned',
+      dataIndex: 'earnedBadges',
+      key: 'earnedBadges',
+      width: 80,
+      align: 'center' as const,
+    },
+    {
+      title: 'Claimed',
+      dataIndex: 'claimed',
+      key: 'claimed',
+      width: 80,
+      align: 'center' as const,
+    },
+  ];
+
+  return (
+    <Card bordered title={`User Progress (${total} users)`}>
+      <Table
+        dataSource={data}
+        columns={columns}
+        rowKey="userId"
+        loading={loading}
+        expandable={{
+          expandedRowRender,
+          rowExpandable: (record: AdminCollectionUserProgressItem) => record.badges.length > 0,
+        }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          onChange: (p: number) => setPage(p),
+          showSizeChanger: false,
+          showTotal: (t: number) => `${t} users total`,
+        }}
+        locale={{
+          emptyText: (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="No users have earned badges in this collection yet."
+            />
+          ),
+        }}
+      />
+    </Card>
   );
 }
 

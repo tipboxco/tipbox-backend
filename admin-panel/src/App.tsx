@@ -12,10 +12,8 @@ import Analytics from './pages/Analytics';
 // User pages
 import UserList from './pages/users/UserList';
 import UserDetail from './pages/users/UserDetail';
-import UserKYC from './pages/users/UserKYC';
 import UserReports from './pages/users/UserReports';
 import UserReportDetail from './pages/users/UserReportDetail';
-import UserKycDetail from './pages/users/UserKycDetail';
 import BannedUsers from './pages/users/BannedUsers';
 
 // Content pages
@@ -29,6 +27,7 @@ import BoostOptions from './pages/content/BoostOptions';
 import ContentCollections from './pages/content/ContentCollections';
 import TopCommunityChoices from './pages/content/TopCommunityChoices';
 import ManualReviewFlags from './pages/content/ManualReviewFlags';
+import FeedManagement from './pages/content/FeedManagement';
 
 // Product pages
 import ProductCatalog from './pages/products/ProductCatalog';
@@ -37,13 +36,10 @@ import ProductCategories from './pages/products/ProductCategories';
 import ProductGroups from './pages/products/ProductGroups';
 import ProductSuggestions from './pages/products/ProductSuggestions';
 import UserInventories from './pages/products/UserInventories';
-import ProductComparisons from './pages/products/ProductComparisons';
-import CategoryManagement from './pages/products/CategoryManagement';
 import ComparisonMetrics from './pages/products/ComparisonMetrics';
 
 // Brand pages
 import BrandList from './pages/brands/BrandList';
-import BridgeProgram from './pages/brands/BridgeProgram';
 import BrandSurveys from './pages/brands/BrandSurveys';
 import BrandLeaderboards from './pages/brands/BrandLeaderboards';
 import BrandRewards from './pages/brands/BrandRewards';
@@ -156,8 +152,6 @@ function App() {
 
           {/* Users — static routes first, users/:id last */}
           <Route path="users" element={<UserList />} />
-          <Route path="users/kyc" element={<UserKYC />} />
-          <Route path="users/kyc/:userId" element={<UserKycDetail />} />
           <Route path="users/reports" element={<UserReports />} />
           <Route path="users/reports/:id" element={<UserReportDetail />} />
           <Route path="users/banned" element={<BannedUsers />} />
@@ -182,14 +176,11 @@ function App() {
           <Route path="products/groups" element={<ProductGroups />} />
           <Route path="products/suggestions" element={<ProductSuggestions />} />
           <Route path="products/inventories" element={<UserInventories />} />
-          <Route path="products/comparisons" element={<ProductComparisons />} />
-          <Route path="products/category-management" element={<CategoryManagement />} />
           <Route path="products/comparison-metrics" element={<ComparisonMetrics />} />
           <Route path="products/:id" element={<ProductDetail />} />
 
           {/* Brands */}
           <Route path="brands" element={<BrandList />} />
-          <Route path="brands/bridge" element={<BridgeProgram />} />
           <Route path="brands/surveys" element={<BrandSurveys />} />
           <Route path="brands/leaderboards" element={<BrandLeaderboards />} />
           <Route path="brands/rewards" element={<BrandRewards />} />
@@ -264,6 +255,7 @@ function App() {
           <Route path="system/moderation" element={<ModerationActions />} />
           <Route path="system/experience-config" element={<ExperienceConfig />} />
           <Route path="system/user-themes" element={<UserThemes />} />
+          <Route path="system/feed-management" element={<FeedManagement />} />
           </Route>
         </Routes>
         </AuthProvider>

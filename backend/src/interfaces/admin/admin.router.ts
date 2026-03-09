@@ -45,6 +45,7 @@ import adminComparisonMetricsRouter from './routers/admin-comparison-metrics.rou
 import adminExpertRouter from './routers/admin-expert.router';
 import adminRewardClaimsRouter from './routers/admin-reward-claims.router';
 import adminBridgeRouter from './routers/admin-bridge.router';
+import adminFeedManagementRouter from './routers/admin-feed-management.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -263,5 +264,6 @@ router.use('/comparison-metrics', authMiddleware, requireAdmin, adminComparisonM
 router.use('/expert-requests', authMiddleware, requireAdmin, adminExpertRouter);
 router.use('/reward-claims', authMiddleware, requireAdmin, adminRewardClaimsRouter);
 router.use('/bridge', authMiddleware, requireAdmin, adminBridgeRouter);
+router.use('/feed-management', authMiddleware, requireAdmin, adminFeedManagementRouter);
 
 export default router;

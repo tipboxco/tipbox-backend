@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -12,6 +12,8 @@ import {
   Form,
   Avatar,
   Popconfirm,
+  Tag,
+  Spin,
   message as antdMessage,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -29,9 +31,11 @@ import {
   createBrandCategory,
   updateBrandCategory,
   deleteBrandCategory,
+  fetchBrandCategoryBrands,
 } from '../../api/admin-brands';
 import type {
   AdminBrandCategoryListItem,
+  AdminBrandCategoryBrandItem,
   CreateBrandCategoryInput,
   UpdateBrandCategoryInput,
 } from '../../api/admin-brands';
@@ -47,6 +51,11 @@ function BrandCategories() {
   const [selectedCategory, setSelectedCategory] = useState<AdminBrandCategoryListItem | null>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+
+  // Expanded row state
+  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
+  const [categoryBrands, setCategoryBrands] = useState<Record<string, AdminBrandCategoryBrandItem[]>>({});
+  const [categoryBrandsLoading, setCategoryBrandsLoading] = useState<Record<string, boolean>>({});
 
   const loadCategories = async () => {
     setLoading(true);
@@ -64,6 +73,29 @@ function BrandCategories() {
     loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  const loadCategoryBrands = useCallback(async (categoryId: string) => {
+    setCategoryBrandsLoading((prev) => ({ ...prev, [categoryId]: true }));
+    try {
+      const res = await fetchBrandCategoryBrands(categoryId);
+      setCategoryBrands((prev) => ({ ...prev, [categoryId]: res.data ?? [] }));
+    } catch {
+      antdMessage.error('Failed to load brands for this category');
+    } finally {
+      setCategoryBrandsLoading((prev) => ({ ...prev, [categoryId]: false }));
+    }
+  }, []);
+
+  const handleExpand = (expanded: boolean, record: AdminBrandCategoryListItem) => {
+    if (expanded) {
+      setExpandedRowKeys((prev) => [...prev, record.id]);
+      if (!categoryBrands[record.id]) {
+        loadCategoryBrands(record.id);
+      }
+    } else {
+      setExpandedRowKeys((prev) => prev.filter((key) => key !== record.id));
+    }
+  };
 
   const handleCreate = async (values: CreateBrandCategoryInput) => {
     try {
@@ -120,6 +152,79 @@ function BrandCategories() {
     setEditModalOpen(true);
   };
 
+  const brandColumns: ColumnsType<AdminBrandCategoryBrandItem> = [
+    {
+      title: 'Logo',
+      dataIndex: 'logoUrl',
+      key: 'logoUrl',
+      width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
+      render: (url: string | null) =>
+        url ? (
+          <Avatar src={url} shape="square" size={32} />
+        ) : (
+          <Avatar icon={<PictureOutlined />} shape="square" size={32} />
+        ),
+    },
+    {
+      title: 'Brand Name',
+      dataIndex: 'name',
+      key: 'name',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
+      ellipsis: true,
+    },
+    {
+      title: 'Popular',
+      dataIndex: 'isPopular',
+      key: 'isPopular',
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
+      render: (isPopular: boolean | null) => (
+        <Tag color={isPopular ? 'green' : 'default'}>
+          {isPopular ? 'Popular' : 'Regular'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
+      ellipsis: true,
+      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
+    },
+  ];
+
+  const expandedRowRender = (record: AdminBrandCategoryListItem) => {
+    const brands = categoryBrands[record.id];
+    const isLoading = categoryBrandsLoading[record.id];
+
+    if (isLoading) {
+      return (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Spin size="small" />
+        </div>
+      );
+    }
+
+    if (!brands || brands.length === 0) {
+      return (
+        <div style={{ padding: 16 }}>
+          <Empty description="No brands in this category" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
+      );
+    }
+
+    return (
+      <Table
+        columns={brandColumns}
+        dataSource={brands}
+        rowKey="id"
+        pagination={false}
+        size="small"
+        scroll={TABLE_SCROLL_CONFIGS.AUTO}
+      />
+    );
+  };
+
   const columns: ColumnsType<AdminBrandCategoryListItem> = [
     {
       title: 'Name',
@@ -133,7 +238,7 @@ function BrandCategories() {
       dataIndex: 'imageUrl',
       key: 'imageUrl',
       width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
-      render: (url: string | null, record) =>
+      render: (url: string | null) =>
         url ? (
           <Avatar src={url} shape="square" size={40} />
         ) : (
@@ -247,6 +352,12 @@ function BrandCategories() {
             rowKey="id"
             pagination={false}
             scroll={TABLE_SCROLL_CONFIGS.AUTO}
+            expandable={{
+              expandedRowKeys,
+              onExpand: handleExpand,
+              expandedRowRender,
+              rowExpandable: (record) => record.brandCount > 0,
+            }}
             locale={{
               emptyText: <Empty description="No brand categories found" />,
             }}

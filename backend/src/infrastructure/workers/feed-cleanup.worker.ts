@@ -1,8 +1,12 @@
 import { Worker, Job } from 'bullmq';
 import { FeedCleanupService } from '../../application/feed/feed-cleanup.service';
+import { CacheService } from '../cache/cache.service';
 import logger from '../logger/logger';
 import RedisConfigManager from '../config/redis.config';
 import QueueProvider from '../queue/queue.provider';
+
+/** Redis key for the cleanup enabled flag */
+export const FEED_CLEANUP_ENABLED_KEY = 'feed:cleanup:enabled';
 
 export interface FeedCleanupJobData {
   type: 'low-score-cleanup' | 'user-optimization';
@@ -70,6 +74,20 @@ export class FeedCleanupWorker {
 
   private async processJob(job: Job<FeedCleanupJobData>): Promise<unknown> {
     const { type, userId } = job.data;
+
+    // Check if cleanup is disabled via admin toggle (only for scheduled jobs, not manual)
+    if (job.name === 'daily-cleanup') {
+      try {
+        const cacheService = CacheService.getInstance();
+        const enabled = await cacheService.get<string>(FEED_CLEANUP_ENABLED_KEY);
+        if (enabled === 'false') {
+          logger.info({ message: 'Feed cleanup is disabled via admin toggle, skipping scheduled job' });
+          return { skipped: true, reason: 'disabled_by_admin' };
+        }
+      } catch {
+        // If Redis is down, continue with cleanup (fail-open)
+      }
+    }
 
     try {
       switch (type) {

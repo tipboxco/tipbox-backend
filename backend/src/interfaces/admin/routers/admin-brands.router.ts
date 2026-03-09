@@ -30,6 +30,7 @@ import type {
   AdminBrandDetailResponse,
   AdminBrandCategoryListItem,
   AdminBrandCategoryDetailResponse,
+  AdminBrandCategoryBrandItem,
   AdminBrandSurveyStatsResponse,
   AdminBrandSurveyListItem,
   AdminBrandSurveyDetailResponse,
@@ -574,6 +575,44 @@ router.get(
         };
       })
     );
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/brands/categories/:id/brands
+ * List brands in a category
+ */
+router.get(
+  '/categories/:id/brands',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const existing = await prisma.brandCategory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    const brands = await prisma.brand.findMany({
+      where: { categoryId: id },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        isPopular: true,
+        createdAt: true,
+      },
+    });
+
+    const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
+      id: b.id,
+      name: b.name,
+      logoUrl: b.logoUrl,
+      isPopular: b.isPopular,
+      createdAt: b.createdAt.toISOString(),
+    }));
 
     return res.json({ success: true, data });
   })

@@ -194,7 +194,9 @@ export type AdminTipsStatsResponse = {
   total: number;
   totalVolume: number;
   volumeThisMonth: number;
-  topTippers: {
+  thisWeek: number;
+  avgAmount: number;
+  topSenders: {
     userId: string;
     username: string | null;
     totalSent: number;

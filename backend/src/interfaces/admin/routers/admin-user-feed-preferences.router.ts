@@ -103,7 +103,7 @@ router.get(
               email: true,
               profile: {
                 select: {
-                  username: true,
+                  userName: true,
                   displayName: true,
                 },
               },
@@ -117,7 +117,7 @@ router.get(
     const formattedPreferences = preferences.map((pref) => ({
       id: pref.id,
       userId: pref.userId,
-      username: pref.user?.profile?.username ?? null,
+      username: pref.user?.profile?.userName ?? null,
       userEmail: pref.user?.email ?? null,
       preferredCategories: pref.preferredCategories,
       preferredContentTypes: pref.preferredContentTypes,
@@ -157,7 +157,7 @@ router.get(
             status: true,
             profile: {
               select: {
-                username: true,
+                userName: true,
                 displayName: true,
                 avatarUrl: true,
               },
@@ -178,7 +178,7 @@ router.get(
         id: preference.user.id,
         email: preference.user.email,
         status: preference.user.status,
-        username: preference.user.profile?.username ?? null,
+        username: preference.user.profile?.userName ?? null,
         displayName: preference.user.profile?.displayName ?? null,
         avatarUrl: preference.user.profile?.avatarUrl ?? null,
       },
