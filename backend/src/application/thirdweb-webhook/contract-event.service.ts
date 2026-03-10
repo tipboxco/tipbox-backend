@@ -457,55 +457,91 @@ export class ContractEventService {
         const isFeeTransfer = await this.isFeeRecipientAddress(transferEvent.to);
 
         if (isFeeTransfer) {
-          // Aynı txHash ile zaten FEE kaydı var mı kontrol et (duplicate engelle)
-          const existingFee = await prisma.transaction.findFirst({
+          // Alıcının walletId'sini bul: aynı txHash ile TIP_RECEIVE transaction'ı ara
+          const receiveTx = await prisma.transaction.findFirst({
             where: {
-              walletId: fromWallet.id,
-              actionType: 'FEE' as unknown as TransactionActionType,
               txHash: event.transactionHash,
+              actionType: 'TIP_RECEIVE' as unknown as TransactionActionType,
             },
-            select: { id: true },
+            select: { walletId: true },
           });
 
-          if (!existingFee) {
-            const feeTx = await prisma.transaction.create({
-              data: {
-                walletId: fromWallet.id,
-                actionType: 'FEE' as unknown as TransactionActionType,
-                status: 'confirmed',
-                amount: amount,
-                fromAddress: transferEvent.from,
-                toAddress: transferEvent.to,
-                txHash: event.transactionHash,
-                provider: 'thirdweb',
-                confirmedAt: new Date(),
-                metadata: {
-                  source: 'contract_event_v1',
-                  chainId: event.chainId,
-                  contractAddress: event.contractAddress,
-                  blockNumber: event.blockNumber,
-                  tokenType: 'ERC20',
-                  description: 'Hizmet bedeli (Tipbox platform fee)',
-                },
-              },
-            });
-            transactionId = feeTx.id;
+          // TIP_RECEIVE bulunamazsa, TIP_SEND metadata'sından recipientUserId ile dene
+          let receiverWalletId: string | null = receiveTx?.walletId ?? null;
 
-            logger.info({
-              walletId,
-              transactionId,
-              feeAmount: amount,
-              feeRecipient: transferEvent.to,
+          if (!receiverWalletId) {
+            const sendTx = await prisma.transaction.findFirst({
+              where: {
+                txHash: event.transactionHash,
+                actionType: 'TIP_SEND' as unknown as TransactionActionType,
+              },
+              select: { metadata: true },
+            });
+            const meta = sendTx?.metadata as Record<string, unknown> | null;
+            const recipientUserId = meta?.recipientUserId as string | undefined;
+            if (recipientUserId) {
+              const receiverWallet = await this.walletRepo.findPreferredForReceivingByUserId(recipientUserId);
+              receiverWalletId = receiverWallet?.id ?? null;
+            }
+          }
+
+          if (!receiverWalletId) {
+            logger.warn({
               txHash: event.transactionHash,
-              message: 'FEE transaction created from contract event (tip fee to feeRecipient)',
+              message: 'FEE transfer detected but receiver wallet not found; skipping FEE transaction',
             });
           } else {
-            transactionId = existingFee.id;
-            logger.debug({
-              walletId,
-              txHash: event.transactionHash,
-              message: 'FEE transaction already exists for this txHash, skipping',
+            // Aynı txHash ile zaten FEE kaydı var mı kontrol et (duplicate engelle)
+            const existingFee = await prisma.transaction.findFirst({
+              where: {
+                walletId: receiverWalletId,
+                actionType: 'FEE' as unknown as TransactionActionType,
+                txHash: event.transactionHash,
+              },
+              select: { id: true },
             });
+
+            if (!existingFee) {
+              const feeTx = await prisma.transaction.create({
+                data: {
+                  walletId: receiverWalletId,
+                  actionType: 'FEE' as unknown as TransactionActionType,
+                  status: 'confirmed',
+                  amount: amount,
+                  fromAddress: transferEvent.from,
+                  toAddress: transferEvent.to,
+                  txHash: event.transactionHash,
+                  provider: 'thirdweb',
+                  confirmedAt: new Date(),
+                  metadata: {
+                    source: 'contract_event_v1',
+                    chainId: event.chainId,
+                    contractAddress: event.contractAddress,
+                    blockNumber: event.blockNumber,
+                    tokenType: 'ERC20',
+                    description: 'Hizmet bedeli (Tipbox platform fee)',
+                  },
+                },
+              });
+              transactionId = feeTx.id;
+              walletId = receiverWalletId;
+
+              logger.info({
+                walletId: receiverWalletId,
+                transactionId,
+                feeAmount: amount,
+                feeRecipient: transferEvent.to,
+                txHash: event.transactionHash,
+                message: 'FEE transaction created on receiver wallet from contract event',
+              });
+            } else {
+              transactionId = existingFee.id;
+              logger.debug({
+                walletId: receiverWalletId,
+                txHash: event.transactionHash,
+                message: 'FEE transaction already exists for this txHash, skipping',
+              });
+            }
           }
         } else {
           // Normal WITHDRAW akışı
