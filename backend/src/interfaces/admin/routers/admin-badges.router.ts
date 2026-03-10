@@ -938,23 +938,37 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { category: { select: { id: true, name: true } }, collection: { select: { id: true, name: true } } },
+        include: {
+          category: { select: { id: true, name: true } },
+          collection: { select: { id: true, name: true } },
+          eventBadges: {
+            take: 1,
+            include: { event: { select: { id: true, title: true, imageUrl: true } } },
+          },
+        },
       }),
       prisma.badge.count({ where }),
     ]);
-    const data: AdminBadgeListItem[] = badges.map((b) => ({
-      id: b.id,
-      name: b.name,
-      description: b.description,
-      imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
-      type: b.type,
-      rarity: b.rarity,
-      categoryId: b.categoryId,
-      categoryName: b.category?.name ?? null,
-      collectionId: b.collectionId,
-      collectionName: b.collection?.name ?? null,
-      createdAt: b.createdAt.toISOString(),
-    }));
+    const data: AdminBadgeListItem[] = badges.map((b) => {
+      const firstEventBadge = b.eventBadges?.[0];
+      const event = firstEventBadge?.event;
+      return {
+        id: b.id,
+        name: b.name,
+        description: b.description,
+        imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
+        type: b.type,
+        rarity: b.rarity,
+        categoryId: b.categoryId,
+        categoryName: b.category?.name ?? null,
+        collectionId: b.collectionId,
+        collectionName: b.collection?.name ?? null,
+        createdAt: b.createdAt.toISOString(),
+        eventId: event?.id ?? null,
+        eventTitle: event?.title ?? null,
+        eventImageUrl: event?.imageUrl ? resolveMediaUrl(event.imageUrl, true) : null,
+      };
+    });
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
   })

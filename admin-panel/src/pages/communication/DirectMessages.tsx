@@ -111,32 +111,24 @@ function DirectMessages() {
   const columns: ColumnsType<AdminDMThreadListItem> = [
     {
       title: 'User 1',
-      dataIndex: 'user1Username',
-      key: 'user1Username',
+      dataIndex: 'userOneUsername',
+      key: 'userOneUsername',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
-      ellipsis: true,
-      render: (text, record) => text ?? record.user1Email ?? '—',
-    },
-    {
-      title: 'User 2',
-      dataIndex: 'user2Username',
-      key: 'user2Username',
-      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
-      ellipsis: true,
-      render: (text, record) => text ?? record.user2Email ?? '—',
-    },
-    {
-      title: 'Last Message',
-      dataIndex: 'lastMessage',
-      key: 'lastMessage',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
-      title: 'Unread',
-      dataIndex: 'unreadCount',
-      key: 'unreadCount',
+      title: 'User 2',
+      dataIndex: 'userTwoUsername',
+      key: 'userTwoUsername',
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
+      ellipsis: true,
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Messages',
+      dataIndex: 'messageCount',
+      key: 'messageCount',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       render: (count) => count ?? 0,
@@ -151,9 +143,9 @@ function DirectMessages() {
         active ? <Tag color="green">Active</Tag> : <Tag color="gray">Inactive</Tag>,
     },
     {
-      title: 'Updated',
-      dataIndex: 'updatedAt',
-      key: 'updatedAt',
+      title: 'Last Message',
+      dataIndex: 'lastMessageAt',
+      key: 'lastMessageAt',
       width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
@@ -198,8 +190,8 @@ function DirectMessages() {
           icon: <MessageOutlined />,
         },
         {
-          label: 'Unread',
-          value: stats.unreadMessages,
+          label: 'This Month',
+          value: stats.messagesThisMonth,
           icon: <MessageOutlined />,
         },
       ]
@@ -287,10 +279,10 @@ function DirectMessages() {
             <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="User 1">
-                  {selectedThread.user1Username ?? selectedThread.user1Email ?? '—'}
+                  {selectedThread.userOne?.username ?? selectedThread.userOne?.email ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="User 2">
-                  {selectedThread.user2Username ?? selectedThread.user2Email ?? '—'}
+                  {selectedThread.userTwo?.username ?? selectedThread.userTwo?.email ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Status">
                   {selectedThread.isActive ? (
@@ -310,24 +302,24 @@ function DirectMessages() {
                 </Descriptions.Item>
               </Descriptions>
 
-              {selectedThread.messages && selectedThread.messages.length > 0 && (
+              {selectedThread.recentMessages && selectedThread.recentMessages.length > 0 && (
                 <Card title="Messages" size="small">
                   <List
-                    dataSource={selectedThread.messages}
+                    dataSource={selectedThread.recentMessages}
                     renderItem={(msg) => (
                       <List.Item>
                         <List.Item.Meta
                           title={
                             <Space>
-                              <span>{msg.senderUsername ?? msg.senderEmail ?? 'Unknown'}</span>
+                              <span>{msg.senderUsername ?? 'Unknown'}</span>
                               {msg.isRead && <Tag color="green">Read</Tag>}
                             </Space>
                           }
                           description={
                             <Space orientation="vertical" size="small" style={{ width: '100%' }}>
-                              <div>{msg.content}</div>
+                              <div>{msg.message}</div>
                               <div style={{ fontSize: '12px', color: '#888' }}>
-                                {new Date(msg.createdAt).toLocaleString('en-US')}
+                                {new Date(msg.sentAt).toLocaleString('en-US')}
                               </div>
                             </Space>
                           }

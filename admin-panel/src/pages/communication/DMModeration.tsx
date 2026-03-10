@@ -159,14 +159,14 @@ function DMModeration() {
       key: 'user1',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
-      render: (_, record) => record.user1Username || record.user1Email || record.user1Id,
+      render: (_, record) => record.userOneUsername || record.userOneId,
     },
     {
       title: 'User 2',
       key: 'user2',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
-      render: (_, record) => record.user2Username || record.user2Email || record.user2Id,
+      render: (_, record) => record.userTwoUsername || record.userTwoId,
     },
     {
       title: 'Messages',
@@ -225,8 +225,8 @@ function DMModeration() {
               onClick={() =>
                 handleDeactivateThread(
                   record.id,
-                  record.user1Username || record.user1Email || 'User 1',
-                  record.user2Username || record.user2Email || 'User 2'
+                  record.userOneUsername || 'User 1',
+                  record.userTwoUsername || 'User 2'
                 )
               }
             />

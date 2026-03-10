@@ -35,7 +35,7 @@ interface FormValues {
   rarity: string;
   isTransferable: boolean;
   currentOwnerId?: string | null;
-  attributes: { traitType: string; value: string }[];
+  attributes: { key: string; value: string }[];
 }
 
 function NFTCreateModal({ open, onClose, onSuccess }: NFTCreateModalProps) {
@@ -111,7 +111,7 @@ function NFTCreateModal({ open, onClose, onSuccess }: NFTCreateModalProps) {
 
       // Filter out empty attributes
       const validAttributes = (values.attributes || []).filter(
-        (attr) => attr.traitType?.trim() && attr.value?.trim()
+        (attr) => attr.key?.trim() && attr.value?.trim()
       );
 
       // Prepare payload
@@ -306,7 +306,7 @@ function NFTCreateModal({ open, onClose, onSuccess }: NFTCreateModalProps) {
                       <Col span={12}>
                         <Form.Item
                           {...restField}
-                          name={[name, 'traitType']}
+                          name={[name, 'key']}
                           rules={[{ required: true, message: 'Trait type required' }]}
                           style={{ marginBottom: 0 }}
                         >

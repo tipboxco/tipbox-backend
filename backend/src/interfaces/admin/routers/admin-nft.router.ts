@@ -274,7 +274,7 @@ router.get(
         attributes: {
           select: {
             id: true,
-            traitType: true,
+            key: true,
             value: true,
           },
         },
@@ -332,7 +332,7 @@ router.get(
       updatedAt: nft.updatedAt.toISOString(),
       attributes: nft.attributes.map((attr) => ({
         id: attr.id,
-        traitType: attr.traitType,
+        key: attr.key,
         value: attr.value,
       })),
       currentOwner: nft.currentOwner
@@ -396,7 +396,7 @@ router.post(
         await tx.nFTAttribute.createMany({
           data: body.attributes.map((attr) => ({
             nftId: newNFT.id,
-            traitType: attr.traitType,
+            key: attr.key,
             value: attr.value,
           })),
         });

@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import {
   fetchBadgeCategories,
   createBadge,
-  fetchCollection,
   fetchActionTypes,
   createCollectionGoal,
   uploadBadgeImage,
 } from '../../api/admin-badges-collections';
-import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../types/admin';
+import { fetchEvents, addEventBadge } from '../../api/admin-events';
+import type {
+  AdminBadgeCategoryListItem,
+  AdminActionTypeListItem,
+  AdminEventListItem,
+} from '../../types/admin';
 import { CreatableFormDrawer } from '../../components/form';
 import type { FieldConfig } from '../../components/form';
 
@@ -35,10 +39,12 @@ function CreateBadgeModal({
   const navigate = useNavigate();
   const [categories, setCategories] = useState<AdminBadgeCategoryListItem[]>([]);
   const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
-  const [collectionCategoryId, setCollectionCategoryId] = useState<string | null>(null);
+  const [events, setEvents] = useState<AdminEventListItem[]>([]);
+  const [eventCategoryId, setEventCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const inCollection = !!isCollectionContext(badgeType, collectionId);
+  const isEvent = badgeType === 'EVENT';
 
   // Load required data when modal opens
   useEffect(() => {
@@ -48,27 +54,43 @@ function CreateBadgeModal({
       setLoading(true);
       try {
         // Always load categories and action types
-        const [categoriesRes, actionTypesRes] = await Promise.all([
+        const promises: Promise<unknown>[] = [
           fetchBadgeCategories(),
           fetchActionTypes(),
-        ]);
+        ];
+
+        // Load events for EVENT type
+        if (isEvent) {
+          promises.push(fetchEvents({ limit: 100, sort: 'createdAt', order: 'desc' }));
+        }
+
+        const results = await Promise.all(promises);
+        const categoriesRes = results[0] as Awaited<ReturnType<typeof fetchBadgeCategories>>;
+        const actionTypesRes = results[1] as Awaited<ReturnType<typeof fetchActionTypes>>;
 
         if (!cancelled) {
           if (categoriesRes.data) {
             setCategories(categoriesRes.data);
+            // Find "Event" category for auto-selection
+            const eventCat = categoriesRes.data.find(
+              (c) => c.name.toLowerCase() === 'event',
+            );
+            if (eventCat) {
+              setEventCategoryId(eventCat.id);
+            }
           }
           if (actionTypesRes.data) {
             setActionTypes(actionTypesRes.data);
           }
-        }
 
-        // Load collection info if in collection context to get its categoryId
-        if (inCollection && collectionId) {
-          const collectionRes = await fetchCollection(collectionId);
-          if (!cancelled && collectionRes.data?.categoryId) {
-            setCollectionCategoryId(collectionRes.data.categoryId);
+          if (isEvent && results[2]) {
+            const eventsRes = results[2] as Awaited<ReturnType<typeof fetchEvents>>;
+            if (eventsRes.data) {
+              setEvents(eventsRes.data);
+            }
           }
         }
+
       } catch (err) {
         console.error('Failed to load data:', err);
       } finally {
@@ -81,13 +103,14 @@ function CreateBadgeModal({
     return () => {
       cancelled = true;
     };
-  }, [inCollection, collectionId]);
+  }, [inCollection, collectionId, isEvent]);
 
   // Badge fields in logical order:
   // 1. Basic info (name, rarity, category)
-  // 2. Visual (image)
-  // 3. Description
-  // 4. Activation rules (if collection context)
+  // 2. Event selector (for EVENT type)
+  // 3. Visual (image)
+  // 4. Description
+  // 5. Activation rules (if collection context)
   const badgeFields: FieldConfig[] = [
     // 1. Basic Information
     {
@@ -110,14 +133,38 @@ function CreateBadgeModal({
       ],
       placeholder: 'Select rarity level',
     },
-    {
-      name: 'categoryId',
-      label: 'Badge Category',
-      type: 'select',
-      required: true,
-      options: categories.map((c) => ({ label: c.name, value: c.id })),
-      placeholder: 'Select category',
-    },
+
+    // Category: hidden for EVENT (auto-set), shown for others
+    ...(isEvent
+      ? []
+      : [
+          {
+            name: 'categoryId',
+            label: 'Badge Category',
+            type: 'select' as const,
+            required: true,
+            options: categories.map((c) => ({ label: c.name, value: c.id })),
+            placeholder: 'Select category',
+          },
+        ]),
+
+    // Event selector (only for EVENT type)
+    ...(isEvent
+      ? [
+          {
+            name: 'eventId',
+            label: 'Select Event',
+            type: 'select' as const,
+            required: true,
+            showSearch: true,
+            options: events.map((e) => ({
+              label: `${e.title} (${e.status})`,
+              value: e.id,
+            })),
+            placeholder: 'Search and select an event...',
+          },
+        ]
+      : []),
 
     // 2. Visual
     {
@@ -138,7 +185,7 @@ function CreateBadgeModal({
             return response.data.url;
           } catch (error) {
             throw new Error(
-              error instanceof Error ? error.message : 'Failed to upload image'
+              error instanceof Error ? error.message : 'Failed to upload image',
             );
           }
         },
@@ -175,7 +222,7 @@ function CreateBadgeModal({
       placeholder: 'e.g., 10',
       rules: [
         {
-          validator: async (_rule, value: unknown) => {
+          validator: async (_rule: unknown, value: unknown) => {
             const numValue = typeof value === 'number' ? value : Number(value);
             if (value != null && (!numValue || numValue < 1)) {
               throw new Error('Target value must be at least 1');
@@ -200,8 +247,14 @@ function CreateBadgeModal({
 
   const handleSubmit = async (values: Record<string, unknown>) => {
     try {
-      // Determine categoryId: use form value (collection categoryId override removed)
-      const effectiveCategoryId = values.categoryId as string;
+      // For EVENT type, use auto-detected Event category; otherwise use form value
+      const effectiveCategoryId = isEvent
+        ? eventCategoryId ?? (values.categoryId as string)
+        : (values.categoryId as string);
+
+      if (!effectiveCategoryId) {
+        throw new Error('Badge category not found. Please ensure an "Event" badge category exists.');
+      }
 
       // Create badge
       const badgeRes = await createBadge({
@@ -213,6 +266,14 @@ function CreateBadgeModal({
         categoryId: effectiveCategoryId,
         collectionId: badgeType === 'COLLECTION' && collectionId ? collectionId : null,
       });
+
+      // If EVENT type, link badge to the selected event
+      if (isEvent && badgeRes.data?.id && values.eventId) {
+        await addEventBadge(values.eventId as string, {
+          badgeId: badgeRes.data.id,
+          rank: 1,
+        });
+      }
 
       // If in collection context AND actionTypeId is provided, create collection goal
       if (inCollection && collectionId && badgeRes.data?.id && values.actionTypeId) {

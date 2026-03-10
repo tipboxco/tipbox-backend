@@ -189,7 +189,7 @@ export type AdminTransactionDetailResponse = AdminTransactionListItem & {
 
 export type AdminRewardStatsResponse = {
   total: number;
-  distributed: number;
+  claimed: number;
   pending: number;
   byType: Record<string, number>;
   totalValue: number;

@@ -159,7 +159,7 @@ export type AdminNFTDetailResponse = AdminNFTListItem & {
   updatedAt: string;
   attributes: {
     id: string;
-    traitType: string;
+    key: string;
     value: string;
   }[];
   currentOwner: {
@@ -194,7 +194,7 @@ export type CreateNFTInput = {
   isTransferable?: boolean;
   currentOwnerId?: string | null;
   attributes?: {
-    traitType: string;
+    key: string;
     value: string;
   }[];
 };

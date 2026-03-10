@@ -128,8 +128,8 @@ function DMThreadView({ open, threadId, onClose }: DMThreadViewProps) {
 Direct Message Thread Export
 =============================
 
-User 1: ${thread.user1Username || thread.user1Email || thread.user1Id}
-User 2: ${thread.user2Username || thread.user2Email || thread.user2Id}
+User 1: ${thread.userOne?.username || thread.userOne?.email || thread.userOneId}
+User 2: ${thread.userTwo?.username || thread.userTwo?.email || thread.userTwoId}
 Thread ID: ${thread.id}
 Status: ${thread.isActive ? 'Active' : 'Inactive'}
 Created: ${new Date(thread.createdAt).toLocaleString()}
@@ -141,7 +141,7 @@ Messages:
 ${thread.recentMessages
   .map(
     (msg, i) =>
-      `[${i + 1}] ${new Date(msg.createdAt).toLocaleString()}
+      `[${i + 1}] ${new Date(msg.sentAt).toLocaleString()}
 From: ${msg.senderUsername || 'Unknown'}
 Message: ${msg.message}
 `
@@ -205,8 +205,8 @@ Exported on: ${new Date().toLocaleString()}
               <Space direction="vertical" size="small">
                 <Text>
                   <strong>Participants:</strong>{' '}
-                  {thread.user1Username || thread.user1Email || thread.user1Id} ↔️{' '}
-                  {thread.user2Username || thread.user2Email || thread.user2Id}
+                  {thread.userOne?.username || thread.userOne?.email || thread.userOneId} ↔️{' '}
+                  {thread.userTwo?.username || thread.userTwo?.email || thread.userTwoId}
                 </Text>
                 <Text>
                   <strong>Status:</strong>{' '}
@@ -306,7 +306,7 @@ Exported on: ${new Date().toLocaleString()}
                       <Space>
                         <Text strong>{msg.senderUsername || 'Unknown User'}</Text>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {new Date(msg.createdAt).toLocaleString()}
+                          {new Date(msg.sentAt).toLocaleString()}
                         </Text>
                       </Space>
                     }

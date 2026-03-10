@@ -308,6 +308,15 @@ export default function CreatableFormDrawer({
             placeholder={field.placeholder ?? `Select ${field.label.toLowerCase()}`}
             options={field.options}
             mode={field.mode}
+            showSearch={field.showSearch}
+            filterOption={
+              field.showSearch
+                ? (input, option) =>
+                    String(option?.label ?? '')
+                      .toLowerCase()
+                      .includes(input.toLowerCase())
+                : undefined
+            }
             allowClear
             onChange={(value) => {
               if (onFieldChange) {

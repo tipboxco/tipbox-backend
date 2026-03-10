@@ -28,7 +28,7 @@ export const AdminCreateNFTSchema = z.object({
   attributes: z
     .array(
       z.object({
-        traitType: z.string().min(1).max(100),
+        key: z.string().min(1).max(100),
         value: z.string().min(1).max(200),
       })
     )

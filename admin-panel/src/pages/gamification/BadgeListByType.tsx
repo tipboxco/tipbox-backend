@@ -9,9 +9,10 @@ import {
   Empty,
   Alert,
   Image,
+  Avatar,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { TrophyOutlined, SearchOutlined } from '@ant-design/icons';
+import { TrophyOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
@@ -82,6 +83,8 @@ function BadgeListByType({
     };
   }, [badgeType, pagination.offset, search, rarity, sort, order]);
 
+  const isEventType = badgeType === 'EVENT';
+
   const columns: ColumnsType<AdminBadgeListItem> = [
     {
       title: 'Image',
@@ -122,6 +125,31 @@ function BadgeListByType({
       ellipsis: true,
       render: (name) => name ?? '—',
     },
+    // Event column (only for EVENT type badges)
+    ...(isEventType
+      ? [
+          {
+            title: 'Event',
+            key: 'event',
+            width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
+            ellipsis: true,
+            render: (_: unknown, record: AdminBadgeListItem) =>
+              record.eventTitle ? (
+                <Space size="small">
+                  <Avatar
+                    src={record.eventImageUrl}
+                    icon={!record.eventImageUrl ? <CalendarOutlined /> : undefined}
+                    size="small"
+                    shape="square"
+                  />
+                  <span>{record.eventTitle}</span>
+                </Space>
+              ) : (
+                <span style={{ color: '#999' }}>—</span>
+              ),
+          },
+        ]
+      : []),
     {
       title: 'Rarity',
       dataIndex: 'rarity',
@@ -129,26 +157,34 @@ function BadgeListByType({
       width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       ellipsis: true,
     },
-    {
-      title: 'Category',
-      key: 'category',
-      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
-      ellipsis: true,
-      render: (_, record) => record.categoryName ?? record.categoryId,
-    },
+    // Category column (hide for EVENT type since it's always "Event")
+    ...(!isEventType
+      ? [
+          {
+            title: 'Category',
+            key: 'category',
+            width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
+            ellipsis: true,
+            render: (_: unknown, record: AdminBadgeListItem) =>
+              record.categoryName ?? record.categoryId,
+          },
+        ]
+      : []),
     {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
-      render: (date) => new Date(date).toLocaleString('en-US'),
+      render: (date: string) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
       width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
-      render: (_, record) => <ViewActionButton to={`${listPath}/${record.id}`} />,
+      render: (_: unknown, record: AdminBadgeListItem) => (
+        <ViewActionButton to={`${listPath}/${record.id}`} />
+      ),
     },
   ];
 

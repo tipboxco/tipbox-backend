@@ -49,31 +49,37 @@ export type AdminDirectMessageStatsResponse = {
   totalThreads: number;
   totalMessages: number;
   activeThreads: number;
-  messagesThisWeek: number;
+  supportThreads: number;
+  messagesThisMonth: number;
 };
 
 export type AdminDMThreadListItem = {
   id: string;
-  user1Id: string;
-  user1Email: string | null;
-  user1Username: string | null;
-  user2Id: string;
-  user2Email: string | null;
-  user2Username: string | null;
+  userOneId: string;
+  userOneUsername: string | null;
+  userTwoId: string;
+  userTwoUsername: string | null;
   isActive: boolean;
+  isSupportThread: boolean;
   messageCount: number;
   lastMessageAt: string | null;
+  startedAt: string;
   createdAt: string;
 };
 
 export type AdminDMThreadDetailResponse = AdminDMThreadListItem & {
   updatedAt: string;
+  unreadCountUserOne: number;
+  unreadCountUserTwo: number;
+  userOne: { id: string; email: string; username: string | null };
+  userTwo: { id: string; email: string; username: string | null };
   recentMessages: {
     id: string;
     senderId: string;
     senderUsername: string | null;
     message: string;
-    createdAt: string;
+    sentAt: string;
+    isRead: boolean;
   }[];
 };
 
@@ -270,7 +276,7 @@ export async function resendNotification(
 /* ========== Direct Messages ========== */
 
 export async function fetchDMStats(): Promise<ApiResponse<AdminDirectMessageStatsResponse>> {
-  return get<AdminDirectMessageStatsResponse>('/admin/messaging/direct-messages/stats');
+  return get<AdminDirectMessageStatsResponse>('/admin/messaging/stats');
 }
 
 export async function fetchDMThreads(
@@ -284,19 +290,19 @@ export async function fetchDMThreads(
     sort: params.sort ?? 'lastMessageAt',
     order: params.order ?? 'desc',
   };
-  return get<AdminDMThreadListItem[]>('/admin/messaging/direct-messages/threads', query);
+  return get<AdminDMThreadListItem[]>('/admin/messaging/threads', query);
 }
 
 export async function fetchDMThread(
   id: string
 ): Promise<ApiResponse<AdminDMThreadDetailResponse>> {
-  return get<AdminDMThreadDetailResponse>(`/admin/messaging/direct-messages/threads/${id}`);
+  return get<AdminDMThreadDetailResponse>(`/admin/messaging/threads/${id}`);
 }
 
 export async function deactivateDMThread(
   id: string
 ): Promise<ApiResponse<{ message: string }>> {
-  return post<{ message: string }>(`/admin/messaging/direct-messages/threads/${id}/deactivate`, {});
+  return post<{ message: string }>(`/admin/messaging/threads/${id}/deactivate`, {});
 }
 
 export async function fetchDMMessages(
@@ -311,20 +317,20 @@ export async function fetchDMMessages(
     sort: params.sort ?? 'createdAt',
     order: params.order ?? 'desc',
   };
-  return get<AdminDMMessageListItem[]>('/admin/messaging/direct-messages/messages', query);
+  return get<AdminDMMessageListItem[]>('/admin/messaging/messages', query);
 }
 
 export async function flagDMMessage(
   id: string,
   reason: string
 ): Promise<ApiResponse<{ message: string }>> {
-  return post<{ message: string }>(`/admin/messaging/direct-messages/messages/${id}/flag`, {
+  return post<{ message: string }>(`/admin/messaging/messages/${id}/flag`, {
     reason,
   });
 }
 
 export async function deleteDMMessage(id: string): Promise<ApiResponse<void>> {
-  return del<void>(`/admin/messaging/direct-messages/messages/${id}`);
+  return del<void>(`/admin/messaging/messages/${id}`);
 }
 
 /* ========== Support Requests ========== */

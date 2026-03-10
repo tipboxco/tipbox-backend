@@ -1026,10 +1026,10 @@ router.post(
 router.get(
   '/rewards/stats',
   asyncHandler(async (_req: Request, res: Response) => {
-    const [total, distributed, pending] = await Promise.all([
+    const [total, claimed, pending] = await Promise.all([
       prisma.rewardClaim.count(),
       prisma.rewardClaim.count({
-        where: { status: 'DISTRIBUTED' },
+        where: { status: 'CLAIMED' },
       }),
       prisma.rewardClaim.count({
         where: { status: 'PENDING' },
@@ -1038,7 +1038,7 @@ router.get(
 
     const data = {
       total,
-      distributed,
+      claimed,
       pending,
     };
 

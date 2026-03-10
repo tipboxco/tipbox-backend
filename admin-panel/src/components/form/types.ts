@@ -21,6 +21,8 @@ export interface FieldConfig {
   options?: Array<{ label: string; value: string }>;
   /** Select mode: 'multiple' for multi-select, 'tags' for free-text tags */
   mode?: 'multiple' | 'tags';
+  /** Enable search in select dropdown */
+  showSearch?: boolean;
   /** Whether this field can be edited (false = read-only) */
   editable?: boolean;
   /** Custom render function for view mode */

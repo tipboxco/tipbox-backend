@@ -74,6 +74,9 @@ export type AdminBadgeListItem = {
   collectionId: string | null;
   collectionName?: string | null;
   createdAt: string;
+  eventId?: string | null;
+  eventTitle?: string | null;
+  eventImageUrl?: string | null;
 };
 
 export type AdminBadgeDetailResponse = AdminBadgeListItem & {

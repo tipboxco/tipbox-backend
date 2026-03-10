@@ -32,7 +32,7 @@ export type AdminNFTDetailResponse = AdminNFTListItem & {
   updatedAt: string;
   attributes: {
     id: string;
-    traitType: string;
+    key: string;
     value: string;
   }[];
   currentOwner: {

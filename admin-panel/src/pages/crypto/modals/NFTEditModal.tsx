@@ -36,7 +36,7 @@ interface FormValues {
   type: string;
   rarity: string;
   isTransferable: boolean;
-  attributes: { traitType: string; value: string }[];
+  attributes: { key: string; value: string }[];
 }
 
 function NFTEditModal({ open, nftId, onClose, onSuccess }: NFTEditModalProps) {
@@ -66,7 +66,7 @@ function NFTEditModal({ open, nftId, onClose, onSuccess }: NFTEditModalProps) {
 
           // Convert attributes from backend format to form format
           const formattedAttributes = (data.attributes || []).map((attr) => ({
-            traitType: attr.traitType,
+            key: attr.key,
             value: attr.value,
           }));
 
@@ -327,7 +327,7 @@ function NFTEditModal({ open, nftId, onClose, onSuccess }: NFTEditModalProps) {
                 {nftData.attributes.map((attr, index) => (
                   <Row key={index} gutter={8} style={{ marginBottom: index < nftData.attributes.length - 1 ? 8 : 0 }}>
                     <Col span={12}>
-                      <strong>{attr.traitType}:</strong>
+                      <strong>{attr.key}:</strong>
                     </Col>
                     <Col span={12}>
                       {attr.value}

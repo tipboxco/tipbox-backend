@@ -24,7 +24,6 @@ import TrendingPosts from './pages/content/TrendingPosts';
 import TagsCategories from './pages/content/TagsCategories';
 import FeedHighlights from './pages/content/FeedHighlights';
 import BoostOptions from './pages/content/BoostOptions';
-import ContentCollections from './pages/content/ContentCollections';
 import TopCommunityChoices from './pages/content/TopCommunityChoices';
 import ManualReviewFlags from './pages/content/ManualReviewFlags';
 import FeedManagement from './pages/content/FeedManagement';
@@ -65,43 +64,40 @@ import EventBadges from './pages/events/EventBadges';
 import EventRewards from './pages/events/EventRewards';
 import EventAnalytics from './pages/events/EventAnalytics';
 
-// Commerce pages
+// Billing & Rewards pages
 import Transactions from './pages/commerce/Transactions';
-import Rewards from './pages/commerce/Rewards';
-import Subscriptions from './pages/commerce/Subscriptions';
 import Invoices from './pages/commerce/Invoices';
+import Subscriptions from './pages/commerce/Subscriptions';
+import SubscriptionPlans from './pages/billing/SubscriptionPlans';
+import Rewards from './pages/commerce/Rewards';
 import RewardClaims from './pages/commerce/RewardClaims';
 
-// Crypto pages
+// Web3 pages
 import Wallets from './pages/crypto/Wallets';
 import NFTs from './pages/crypto/NFTs';
 import NFTMarketplace from './pages/crypto/NFTMarketplace';
 import TokenTransfers from './pages/crypto/TokenTransfers';
 import TipsManagement from './pages/crypto/TipsManagement';
 
-// Communication pages
+// Messaging & Support pages
 import Notifications from './pages/communication/Notifications';
 import DirectMessages from './pages/communication/DirectMessages';
-import DMModeration from './pages/communication/DMModeration';
 import SupportRequests from './pages/communication/SupportRequests';
+import DMSupportSessions from './pages/support/DMSupportSessions';
 import ExpertRequests from './pages/communication/ExpertRequests';
+
+// Analytics & AI pages
+import AiExperienceSplits from './pages/analytics/AiExperienceSplits';
+import AiPrompts from './pages/analytics/AiPrompts';
 
 // Moderation pages
 import ModerationUserReports from './pages/moderation/UserReports';
 import ModerationUserReportDetail from './pages/moderation/UserReportDetail';
-
-// Billing pages
-import SubscriptionPlans from './pages/billing/SubscriptionPlans';
-
-// Support pages
-import DMSupportSessions from './pages/support/DMSupportSessions';
+import DMModeration from './pages/communication/DMModeration';
+import ModerationActions from './pages/system/ModerationActions';
 
 // Marketing pages
 import MarketplaceBanners from './pages/marketing/MarketplaceBanners';
-
-// Analytics pages (additional)
-import AiExperienceSplits from './pages/analytics/AiExperienceSplits';
-import AiPrompts from './pages/analytics/AiPrompts';
 
 // User pages (additional)
 import UserFeedPreferences from './pages/users/UserFeedPreferences';
@@ -109,7 +105,6 @@ import UserFeedPreferences from './pages/users/UserFeedPreferences';
 // System pages
 import AdminLogs from './pages/system/AdminLogs';
 import SystemSettings from './pages/system/SystemSettings';
-import ModerationActions from './pages/system/ModerationActions';
 import ExperienceConfig from './pages/system/ExperienceConfig';
 import UserThemes from './pages/system/UserThemes';
 
@@ -166,7 +161,6 @@ function App() {
           <Route path="content/feed-highlights" element={<FeedHighlights />} />
           <Route path="content/tags" element={<TagsCategories />} />
           <Route path="content/boost-options" element={<BoostOptions />} />
-          <Route path="content/collections" element={<ContentCollections />} />
           <Route path="content/top-community-choices" element={<TopCommunityChoices />} />
           <Route path="content/manual-review-flags" element={<ManualReviewFlags />} />
 
@@ -210,28 +204,29 @@ function App() {
           <Route path="events/analytics" element={<EventAnalytics />} />
           <Route path="events/:id" element={<EventDetail />} />
 
-          {/* Commerce */}
-          <Route path="commerce/transactions" element={<Transactions />} />
-          <Route path="commerce/rewards" element={<Rewards />} />
-          <Route path="commerce/subscriptions" element={<Subscriptions />} />
-          <Route path="commerce/invoices" element={<Invoices />} />
-          <Route path="commerce/reward-claims" element={<RewardClaims />} />
+          {/* Billing & Rewards */}
+          <Route path="billing/transactions" element={<Transactions />} />
+          <Route path="billing/invoices" element={<Invoices />} />
+          <Route path="billing/subscriptions" element={<Subscriptions />} />
+          <Route path="billing/subscription-plans" element={<SubscriptionPlans />} />
+          <Route path="billing/rewards" element={<Rewards />} />
+          <Route path="billing/reward-claims" element={<RewardClaims />} />
 
-          {/* Crypto */}
-          <Route path="crypto/wallets" element={<Wallets />} />
-          <Route path="crypto/nfts" element={<NFTs />} />
-          <Route path="crypto/marketplace" element={<NFTMarketplace />} />
-          <Route path="crypto/transfers" element={<TokenTransfers />} />
-          <Route path="crypto/tips" element={<TipsManagement />} />
+          {/* Web3 */}
+          <Route path="web3/wallets" element={<Wallets />} />
+          <Route path="web3/nfts" element={<NFTs />} />
+          <Route path="web3/marketplace" element={<NFTMarketplace />} />
+          <Route path="web3/transfers" element={<TokenTransfers />} />
+          <Route path="web3/tips" element={<TipsManagement />} />
 
-          {/* Communication */}
-          <Route path="communication/notifications" element={<Notifications />} />
-          <Route path="communication/messages" element={<DirectMessages />} />
-          <Route path="communication/moderation" element={<DMModeration />} />
-          <Route path="communication/support" element={<SupportRequests />} />
-          <Route path="communication/experts" element={<ExpertRequests />} />
+          {/* Messaging & Support */}
+          <Route path="messaging/notifications" element={<Notifications />} />
+          <Route path="messaging/messages" element={<DirectMessages />} />
+          <Route path="messaging/support" element={<SupportRequests />} />
+          <Route path="messaging/dm-sessions" element={<DMSupportSessions />} />
+          <Route path="messaging/experts" element={<ExpertRequests />} />
 
-          {/* Analytics */}
+          {/* Analytics & AI */}
           <Route path="analytics" element={<Analytics />} />
           <Route path="analytics/ai-experience-splits" element={<AiExperienceSplits />} />
           <Route path="analytics/ai-prompts" element={<AiPrompts />} />
@@ -239,12 +234,8 @@ function App() {
           {/* Moderation */}
           <Route path="moderation/user-reports" element={<ModerationUserReports />} />
           <Route path="moderation/user-reports/:id" element={<ModerationUserReportDetail />} />
-
-          {/* Billing */}
-          <Route path="billing/subscription-plans" element={<SubscriptionPlans />} />
-
-          {/* Support */}
-          <Route path="support/dm-sessions" element={<DMSupportSessions />} />
+          <Route path="moderation/dm-moderation" element={<DMModeration />} />
+          <Route path="moderation/actions" element={<ModerationActions />} />
 
           {/* Marketing */}
           <Route path="marketing/marketplace-banners" element={<MarketplaceBanners />} />
@@ -252,9 +243,8 @@ function App() {
           {/* System */}
           <Route path="system/logs" element={<AdminLogs />} />
           <Route path="system/settings" element={<SystemSettings />} />
-          <Route path="system/moderation" element={<ModerationActions />} />
-          <Route path="system/experience-config" element={<ExperienceConfig />} />
           <Route path="system/user-themes" element={<UserThemes />} />
+          <Route path="system/experience-config" element={<ExperienceConfig />} />
           <Route path="system/feed-management" element={<FeedManagement />} />
           </Route>
         </Routes>

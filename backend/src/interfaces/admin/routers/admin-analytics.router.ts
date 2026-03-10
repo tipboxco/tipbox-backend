@@ -543,7 +543,7 @@ router.get(
             userName: true,
           },
         },
-        nftTransactionsBuyer: {
+        nftTransactionsReceived: {
           where: {
             transactionType: 'SALE',
           },
@@ -551,7 +551,7 @@ router.get(
             price: true,
           },
         },
-        subscriptions: {
+        userSubscriptions: {
           where: {
             status: 'ACTIVE',
           },
@@ -568,8 +568,8 @@ router.get(
 
     const topRevenueUsers = topRevenueUsersRaw
       .map((user) => {
-        const nftSpent = user.nftTransactionsBuyer.reduce((sum, tx) => sum + tx.price, 0);
-        const subscriptionSpent = user.subscriptions.reduce(
+        const nftSpent = user.nftTransactionsReceived.reduce((sum, tx) => sum + tx.price, 0);
+        const subscriptionSpent = user.userSubscriptions.reduce(
           (sum, sub) => sum + sub.plan.price,
           0
         );
