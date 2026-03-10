@@ -94,15 +94,25 @@ export class TransactionService {
     }
 
     // Alıcı: recipientUserId = kullanıcı id (UUID) veya public adres (0x...). Adres bizim tabloda olmayabilir.
-    const toWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.toUserId);
+    let toWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.toUserId);
     let toAddress: string;
     let receiveTransactionId: string | undefined;
 
     if (toWallet) {
       toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
     } else if (isEthereumAddress(request.toUserId)) {
-      toAddress = normalizeEthereumAddress(request.toUserId);
-      // Doğrudan wallet adresine gönderim = WITHDRAW (tip transfer değil)
+      // Wallet adresi verilmiş; DB'de kayıtlı bir smartAccountAddress mi kontrol et
+      const walletByAddress = await this.walletRepo.findByAddressForTracking(
+        normalizeEthereumAddress(request.toUserId)
+      );
+      if (walletByAddress) {
+        // Adres bizim sistemde kayıtlı → TIP_SEND olarak gönder (tipbox contract)
+        toWallet = walletByAddress;
+        toAddress = walletByAddress.smartAccountAddress ?? walletByAddress.publicAddress;
+      } else {
+        // Adres kayıtlı değil → WITHDRAW (ERC20 direct transfer)
+        toAddress = normalizeEthereumAddress(request.toUserId);
+      }
     } else {
       throw new NotFoundError('Recipient wallet not found');
     }
@@ -129,7 +139,7 @@ export class TransactionService {
       toAddress,
       metadata: {
         reason: request.reason || null,
-        recipientUserId: toWallet ? request.toUserId : null,
+        recipientUserId: toWallet ? toWallet.userId : null,
         recipientAddress: toWallet ? null : toAddress,
         source: 'thirdweb_sdk',
       },
@@ -154,7 +164,7 @@ export class TransactionService {
       receiveTransactionId = receiveTransaction.id;
       await this.transactionRepo.updateMetadata(sendTransaction.id, {
         reason: request.reason || null,
-        recipientUserId: request.toUserId,
+        recipientUserId: toWallet.userId,
         source: 'thirdweb_sdk',
         receiveTransactionId: receiveTransaction.id,
       });
