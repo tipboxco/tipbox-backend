@@ -1048,6 +1048,15 @@ router.post(
   '/support-requests/:requestId/accept',
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
+
+    // DEBUG: Log full JWT payload to diagnose user ID extraction
+    logger.info(`[DEBUG] Accept support request - JWT payload:`, {
+      fullPayload: userPayload,
+      id: userPayload?.id,
+      userId: userPayload?.userId,
+      sub: userPayload?.sub,
+    });
+
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!expertUserId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
