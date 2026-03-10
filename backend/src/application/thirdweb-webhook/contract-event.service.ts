@@ -31,10 +31,14 @@ import {
   DecodedLogValue
 } from '../../interfaces/thirdweb-webhook/contract-event.dto';
 import { WalletService } from '../wallet/wallet.service';
+import { getThirdwebSdkService } from '../wallet/thirdweb-sdk/thirdweb-sdk.service';
 import logger from '../../infrastructure/logger/logger';
 
 // Token decimals configuration
 const TOKEN_DECIMALS = parseInt(process.env.TIPS_TOKEN_DECIMALS || '18', 10);
+
+// feeRecipient adresi cache (contract'tan bir kez okunur)
+let cachedFeeRecipient: string | null = null;
 
 // ============================================================================
 // SERVICE
@@ -445,57 +449,114 @@ export class ContractEventService {
         });
       }
 
-      // WITHDRAW: TipBox → External
+      // WITHDRAW veya FEE: TipBox → External
       else if (fromWallet && !toWallet && !transferEvent.isBurn) {
         walletId = fromWallet.id;
-        
-        const pendingTx = await prisma.transaction.findFirst({
-          where: {
-            walletId: fromWallet.id,
-            status: 'pending',
-            actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true }
-        });
 
-        if (pendingTx) {
-          transactionId = pendingTx.id;
-          await this.transactionService.confirmTransaction(pendingTx.id, event.transactionHash);
-        } else {
-          // WITHDRAW transaction oluştur (doğrudan Prisma)
-          const withdrawTx = await prisma.transaction.create({
-            data: {
+        // feeRecipient adresine yapılan transfer → FEE olarak kaydet
+        const isFeeTransfer = await this.isFeeRecipientAddress(transferEvent.to);
+
+        if (isFeeTransfer) {
+          // Aynı txHash ile zaten FEE kaydı var mı kontrol et (duplicate engelle)
+          const existingFee = await prisma.transaction.findFirst({
+            where: {
               walletId: fromWallet.id,
-              actionType: 'WITHDRAW' as unknown as TransactionActionType,
-              status: 'confirmed',
-              amount: amount,
-              fromAddress: transferEvent.from,
-              toAddress: transferEvent.to,
+              actionType: 'FEE' as unknown as TransactionActionType,
               txHash: event.transactionHash,
-              provider: 'external',
-              confirmedAt: new Date(),
-              metadata: {
-                source: 'contract_event_v1',
-                chainId: event.chainId,
-                contractAddress: event.contractAddress,
-                blockNumber: event.blockNumber,
-                tokenType: 'ERC20'
-              }
-            }
+            },
+            select: { id: true },
           });
-          transactionId = withdrawTx.id;
 
-          await this.walletService.updateBalance(fromWallet.id, -amount, {
-            reason: `Withdraw to ${transferEvent.to} (tx: ${event.transactionHash})`
+          if (!existingFee) {
+            const feeTx = await prisma.transaction.create({
+              data: {
+                walletId: fromWallet.id,
+                actionType: 'FEE' as unknown as TransactionActionType,
+                status: 'confirmed',
+                amount: amount,
+                fromAddress: transferEvent.from,
+                toAddress: transferEvent.to,
+                txHash: event.transactionHash,
+                provider: 'thirdweb',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'contract_event_v1',
+                  chainId: event.chainId,
+                  contractAddress: event.contractAddress,
+                  blockNumber: event.blockNumber,
+                  tokenType: 'ERC20',
+                  description: 'Hizmet bedeli (Tipbox platform fee)',
+                },
+              },
+            });
+            transactionId = feeTx.id;
+
+            logger.info({
+              walletId,
+              transactionId,
+              feeAmount: amount,
+              feeRecipient: transferEvent.to,
+              txHash: event.transactionHash,
+              message: 'FEE transaction created from contract event (tip fee to feeRecipient)',
+            });
+          } else {
+            transactionId = existingFee.id;
+            logger.debug({
+              walletId,
+              txHash: event.transactionHash,
+              message: 'FEE transaction already exists for this txHash, skipping',
+            });
+          }
+        } else {
+          // Normal WITHDRAW akışı
+          const pendingTx = await prisma.transaction.findFirst({
+            where: {
+              walletId: fromWallet.id,
+              status: 'pending',
+              actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+
+          if (pendingTx) {
+            transactionId = pendingTx.id;
+            await this.transactionService.confirmTransaction(pendingTx.id, event.transactionHash);
+          } else {
+            // WITHDRAW transaction oluştur (doğrudan Prisma)
+            const withdrawTx = await prisma.transaction.create({
+              data: {
+                walletId: fromWallet.id,
+                actionType: 'WITHDRAW' as unknown as TransactionActionType,
+                status: 'confirmed',
+                amount: amount,
+                fromAddress: transferEvent.from,
+                toAddress: transferEvent.to,
+                txHash: event.transactionHash,
+                provider: 'external',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'contract_event_v1',
+                  chainId: event.chainId,
+                  contractAddress: event.contractAddress,
+                  blockNumber: event.blockNumber,
+                  tokenType: 'ERC20'
+                }
+              }
+            });
+            transactionId = withdrawTx.id;
+
+            await this.walletService.updateBalance(fromWallet.id, -amount, {
+              reason: `Withdraw to ${transferEvent.to} (tx: ${event.transactionHash})`
+            });
+          }
+
+          logger.info({
+            walletId, transactionId, amount: -amount,
+            to: transferEvent.to,
+            message: 'ERC20 Withdraw detected (v1.events)'
           });
         }
-
-        logger.info({
-          walletId, transactionId, amount: -amount,
-          to: transferEvent.to,
-          message: 'ERC20 Withdraw detected (v1.events)'
-        });
       }
 
       // MINT
@@ -629,8 +690,40 @@ export class ContractEventService {
   }
 
   /**
+   * Tipbox contract'tan feeRecipient adresini okur ve cache'ler.
+   * Transfer event'inin fee mi yoksa normal withdraw mı olduğunu belirler.
+   */
+  private async isFeeRecipientAddress(address: string): Promise<boolean> {
+    if (!address) return false;
+
+    // Cache'ten kontrol
+    if (cachedFeeRecipient !== null) {
+      return address.toLowerCase() === cachedFeeRecipient.toLowerCase();
+    }
+
+    // Contract'tan oku
+    try {
+      const sdk = getThirdwebSdkService();
+      if (!sdk.isConfigured()) return false;
+
+      const feeRecipientRaw = await sdk.getFeeRecipient();
+      if (feeRecipientRaw) {
+        cachedFeeRecipient = feeRecipientRaw.toLowerCase();
+        return address.toLowerCase() === cachedFeeRecipient;
+      }
+    } catch (err) {
+      logger.warn({
+        error: err instanceof Error ? err.message : String(err),
+        message: 'Failed to read feeRecipient from contract',
+      });
+    }
+
+    return false;
+  }
+
+  /**
    * Event Log işleme (Transfer, Mint, Approval vb.)
-   * 
+   *
    * NOT: Sadece sistemde tanımlı wallet'larla ilgili event'ler işlenir.
    * Tanımsız adresler arasındaki transferler atlanır.
    */

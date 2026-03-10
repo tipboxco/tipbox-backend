@@ -475,6 +475,44 @@ export class ThirdwebSdkService {
   }
 
   // ==========================================================================
+  // FEE HELPERS
+  // ==========================================================================
+
+  /**
+   * Tipbox contract'tan fee yüzdesini okur.
+   * Contract'taki feePercentage değeri 100 tabanlı tam sayıdır (ör. 25 = %25).
+   * @returns Fee yüzdesi (0-100 arası). Okunamazsa 0 döner.
+   */
+  async getFeePercentage(): Promise<number> {
+    const feeRaw = await this.core.readContractSafe<bigint>(
+      {
+        contract: this.core.getTipboxContract(),
+        method: "feePercentage",
+        params: [],
+      },
+      0n
+    );
+    return Number(feeRaw);
+  }
+
+  /**
+   * Tipbox contract'tan feeRecipient adresini okur.
+   * Bu adrese yapılan transferler platform fee olarak işaretlenir.
+   * @returns feeRecipient adresi veya okunamazsa null
+   */
+  async getFeeRecipient(): Promise<string | null> {
+    const addr = await this.core.readContractSafe<string>(
+      {
+        contract: this.core.getTipboxContract(),
+        method: "feeRecipient",
+        params: [],
+      },
+      ""
+    );
+    return addr || null;
+  }
+
+  // ==========================================================================
   // CONFIG HELPERS
   // ==========================================================================
 

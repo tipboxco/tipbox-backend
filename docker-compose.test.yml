@@ -24,14 +24,16 @@ services:
     # PostgreSQL tuning
     command: >
       postgres
-        -c shared_buffers=128MB
-        -c effective_cache_size=256MB
-        -c work_mem=4MB
-        -c maintenance_work_mem=64MB
-        -c max_connections=50
+        -c shared_buffers=256MB
+        -c effective_cache_size=1GB
+        -c work_mem=16MB
+        -c maintenance_work_mem=256MB
+        -c max_connections=100
         -c checkpoint_completion_target=0.9
-        -c wal_buffers=4MB
+        -c wal_buffers=16MB
         -c random_page_cost=1.1
+        -c lock_timeout=30000
+        -c statement_timeout=120000
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tipbox_user} -d ${POSTGRES_DB:-tipbox_test}"]
       interval: 10s
