@@ -1,0 +1,28 @@
+{
+  "name": "hf-product-updater",
+  "version": "1.0.0",
+  "description": "Hugging Face Amazon Products dataset updater - brand-based product management",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "download": "tsx src/download-dataset.ts",
+    "query": "tsx src/query.ts",
+    "remote": "tsx src/remote-query.ts",
+    "mcauley": "tsx src/mcauley-remote.ts",
+    "add-products": "tsx src/add-products.ts",
+    "list-brands": "tsx src/list-brands.ts"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "csv-stringify": "^6.5.0",
+    "dotenv": "^16.4.0",
+    "duckdb": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

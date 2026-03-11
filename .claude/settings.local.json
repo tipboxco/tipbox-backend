@@ -53,7 +53,12 @@
       "Bash(git add backend/src/interfaces/auth/auth.router.ts backend/src/interfaces/auth/auth.schemas.ts backend/src/interfaces/auth/auth.middleware.ts backend/src/interfaces/app.ts)",
       "Bash(git add backend/src/application/brand/brand.service.ts backend/prisma/seed.ts backend/scripts/update-brand-logos.ts catalog-service/src/api/admin/seed/brands/route.ts)",
       "Bash(git add backend/src/application/post/post.service.ts)",
-      "Bash(ls -d d:/tipbox-app/tipbox-backend/*/)"
+      "Bash(ls -d d:/tipbox-app/tipbox-backend/*/)",
+      "Bash(npx tsx:*)",
+      "Bash(curl -s \"https://datasets-server.huggingface.co/search?dataset=milistu/AMAZON-Products-2023&config=default&split=train&query=Nike&limit=3\")",
+      "Bash(curl -s \"https://datasets-server.huggingface.co/filter?dataset=milistu/AMAZON-Products-2023&config=default&split=train&where=store%3D%27Nike%27&limit=3&select=parent_asin,title,store,price,average_rating\")",
+      "Bash(curl -s \"https://datasets-server.huggingface.co/filter?dataset=milistu/AMAZON-Products-2023&config=default&split=train&where=store=''''Nike''''&limit=3&select=parent_asin,title,store,price,average_rating\")",
+      "Bash(curl -s \"https://datasets-server.huggingface.co/search?dataset=milistu/AMAZON-Products-2023&config=default&split=train&query=Nike&limit=5\")"
     ],
     "defaultMode": "bypassPermissions"
   }

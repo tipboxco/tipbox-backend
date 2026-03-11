@@ -1,0 +1,4 @@
+parent_asin,title,description,main_category,categories,store,average_rating,rating_number,price,features,image,date_first_available,filename
+,Nike Air Max 270 React,Comfortable running shoes with React foam,Clothing Shoes & Jewelry,"[""Shoes"",""Running""]",Nike,4.5,1250,149.99,"[""React foam cushioning"",""Air Max unit""]",https://example.com/nike-270.jpg,2024-01-15,
+,Nike Dri-FIT T-Shirt,Moisture-wicking training t-shirt,Clothing Shoes & Jewelry,"[""Clothing"",""Athletic""]",Nike,4.3,890,34.99,"[""Dri-FIT technology"",""Lightweight""]",https://example.com/nike-tshirt.jpg,2024-02-01,
+,Samsung Galaxy S24 Ultra,Flagship smartphone with AI features,Electronics,"[""Cell Phones"",""Smartphones""]",Samsung,4.7,5600,1199.99,"[""AI-powered camera"",""S Pen included""]",https://example.com/s24ultra.jpg,2024-01-17,
