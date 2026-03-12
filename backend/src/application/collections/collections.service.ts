@@ -77,11 +77,13 @@ export class CollectionsService {
       mainCategoryId?: string;
       subCategoryId?: string;
       productGroupId?: string;
+      status?: 'all' | 'completed' | 'in_progress' | 'not_started';
       cursor?: string;
       limit: number;
     },
   ): Promise<CollectionsListResponse> {
     const prisma = getPrisma();
+    const statusFilter = params.status && params.status !== 'all' ? params.status : null;
 
     // Build where clause
     const where: Record<string, unknown> = {};
@@ -103,11 +105,14 @@ export class CollectionsService {
       where.categoryId = params.subCategoryId ?? params.mainCategoryId;
     }
 
+    // When status filter is active, we need to fetch more items to account for post-filter
+    const fetchLimit = statusFilter ? params.limit * 3 : params.limit;
+
     const [collections, total] = await Promise.all([
       prisma.badgeCollection.findMany({
         where,
         ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
-        take: params.limit,
+        take: fetchLimit + 1,
         orderBy: { createdAt: 'desc' },
         include: {
           category: { select: { id: true, name: true, handle: true } },
@@ -136,7 +141,7 @@ export class CollectionsService {
       userAchievements.map((ua) => [ua.goalId, ua.progress]),
     );
 
-    const items: CollectionListItem[] = collections.map((c) => {
+    let items: CollectionListItem[] = collections.map((c) => {
       const totalProgress = c.achievementGoals.reduce(
         (sum, g) => sum + g.pointsRequired,
         0,
@@ -162,16 +167,34 @@ export class CollectionsService {
       };
     });
 
-    const lastItem = collections[collections.length - 1];
-    const hasMore = collections.length === params.limit;
+    // Apply status filter if specified
+    if (statusFilter) {
+      items = items.filter((item) => {
+        if (statusFilter === 'completed') {
+          return item.totalProgress > 0 && item.currentProgress >= item.totalProgress;
+        }
+        if (statusFilter === 'in_progress') {
+          return item.currentProgress > 0 && item.currentProgress < item.totalProgress;
+        }
+        if (statusFilter === 'not_started') {
+          return item.currentProgress === 0;
+        }
+        return true;
+      });
+    }
+
+    // Apply pagination limit after status filtering
+    const hasMore = items.length > params.limit;
+    const paginatedItems = items.slice(0, params.limit);
+    const lastItem = paginatedItems[paginatedItems.length - 1];
 
     return {
-      collections: items,
+      collections: paginatedItems,
       pagination: {
         cursor: hasMore && lastItem ? lastItem.id : null,
         hasMore,
         limit: params.limit,
-        total,
+        total: statusFilter ? paginatedItems.length : total,
       },
     };
   }

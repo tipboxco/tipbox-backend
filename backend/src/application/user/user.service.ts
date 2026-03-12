@@ -5224,4 +5224,97 @@ export class UserService {
 
     return { success: true, badgeIds };
   }
-} 
+
+  /**
+   * Belirtilen kullanıcının envanterini listele (public endpoint).
+   */
+  async getUserInventory(
+    userId: string,
+    options?: { cursor?: string; limit?: number },
+  ): Promise<{
+    items: Array<{
+      id: string;
+      productId: string;
+      brand: { name: string; model: string; specs: string };
+      image: string | null;
+      tags: string[];
+    }>;
+    pagination: { cursor: string | null; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    // Kullanıcının var olup olmadığını kontrol et
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) {
+      return { items: [], pagination: { cursor: null, hasMore: false, limit } };
+    }
+
+    const inventories = await this.prisma.inventory.findMany({
+      where: { userId, hasOwned: true },
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: {
+          include: {
+            brand: true,
+          },
+        },
+        media: true,
+      },
+    });
+
+    const hasMore = inventories.length > limit;
+    const resultInventories = hasMore ? inventories.slice(0, limit) : inventories;
+
+    const items = resultInventories.map((inv) => {
+      const product = inv.product;
+      const mediaList = (inv as unknown as { media: Array<{ mediaUrl: string | null }> }).media || [];
+      let image: string | null = null;
+      if (mediaList.length > 0 && mediaList[0].mediaUrl) {
+        const mediaUrl = mediaList[0].mediaUrl;
+        if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+          image = mediaUrl;
+        } else {
+          image = resolveMediaUrl(mediaUrl);
+        }
+      }
+
+      const tags: string[] = [];
+      const daysSinceCreated = Math.floor(
+        (Date.now() - inv.createdAt.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (daysSinceCreated <= 7) {
+        tags.push('Recent');
+      }
+      tags.push('Owned');
+
+      return {
+        id: inv.id,
+        productId: inv.productId,
+        brand: {
+          name: product?.brand?.name || 'Unknown',
+          model: product?.name || '',
+          specs: product?.description || '',
+        },
+        image,
+        tags,
+      };
+    });
+
+    const lastItem = resultInventories[resultInventories.length - 1];
+
+    return {
+      items,
+      pagination: {
+        cursor: hasMore && lastItem ? lastItem.id : null,
+        hasMore,
+        limit,
+      },
+    };
+  }
+}

@@ -3330,6 +3330,85 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
 
 
 
+// ===== USER INVENTORY ENDPOINT =====
+
+/**
+ * @openapi
+ * /api/users/{id}/inventory:
+ *   get:
+ *     summary: Kullanıcının envanterini listele
+ *     description: |
+ *       Belirtilen kullanıcının sahip olduğu ürünlerin listesini getirir.
+ *       Herkes başka bir kullanıcının envanterini görebilir (public endpoint).
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (UUID)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Kullanıcının inventory listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       productId:
+ *                         type: string
+ *                       brand:
+ *                         type: object
+ *                         properties:
+ *                           name: { type: string }
+ *                           model: { type: string }
+ *                           specs: { type: string }
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                       tags:
+ *                         type: array
+ *                         items: { type: string }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor: { type: string, nullable: true }
+ *                     hasMore: { type: boolean }
+ *                     limit: { type: integer }
+ *       404:
+ *         description: Kullanıcı bulunamadı
+ */
+router.get('/:id/inventory', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const result = await userService.getUserInventory(id, { cursor, limit });
+  return res.json(result);
+}));
+
 // ===== SETTINGS ENDPOINTS =====
 
 /**

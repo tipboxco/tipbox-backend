@@ -6,6 +6,7 @@ export const CollectionsListQuerySchema = z.object({
   mainCategoryId: z.string().optional(),
   subCategoryId: z.string().optional(),
   productGroupId: z.string().optional(),
+  status: z.enum(['all', 'completed', 'in_progress', 'not_started']).optional(),
   cursor: z.string().optional(),
   limit: z
     .string()

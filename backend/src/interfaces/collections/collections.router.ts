@@ -58,6 +58,13 @@ router.use(authMiddleware);
  *           type: string
  *         description: Bottom sheet ürün grubu filtresi (Medusa category ID) - ileride eklenecek
  *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [all, completed, in_progress, not_started]
+ *           default: all
+ *         description: "Collection durum filtresi. completed = kullanıcının tamamladığı collection'lar"
+ *       - in: query
  *         name: cursor
  *         schema:
  *           type: string
@@ -156,6 +163,7 @@ router.get(
       mainCategoryId: query.mainCategoryId,
       subCategoryId: query.subCategoryId,
       productGroupId: query.productGroupId,
+      status: query.status,
       cursor: query.cursor,
       limit: query.limit,
     });
