@@ -7,6 +7,9 @@ export default defineLink(
     linkable: ProductModule.linkable.product,
     isList: false, // Her ürün yalnızca bir brand ile ilişkilendirilebilir
   },
-  BrandModule.linkable.brand
+  {
+    linkable: BrandModule.linkable.brand,
+    isList: true, // Bir brand birden fazla ürüne sahip olabilir
+  }
 )
 
