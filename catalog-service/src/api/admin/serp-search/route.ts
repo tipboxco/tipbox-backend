@@ -36,15 +36,20 @@ type ImportRequestBody = {
   products: SerpResult[]
 }
 
+type ImportResultItem =
+  | { title: string; product_id: string; success: true; skipped?: false }
+  | { title: string; product_id: string; success: true; skipped: true; reason: string }
+  | { title: string; success: false; error: string }
+
 /** Benzersiz handle üret: title → lowercase-slug + timestamp + random */
 function generateHandle(title: string): string {
   const slug = title
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
     .trim()
     .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 50)
+    .slice(0, 40)
+    .replace(/-+$/g, "") // trailing hyphen kaldır
   const rand = Math.random().toString(36).slice(2, 8)
   return `${slug}-${Date.now().toString(36)}-${rand}`
 }
@@ -224,20 +229,37 @@ export const POST = async (req: MedusaRequest<ImportRequestBody>, res: MedusaRes
 
   const productService = req.scope.resolve(Modules.PRODUCT)
   const remoteLink = req.scope.resolve(ContainerRegistrationKeys.REMOTE_LINK)
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
-  const results: Array<{ title: string; product_id?: string; success: boolean; error?: string }> =
-    []
+  // Duplicate kontrolü: link'i olan ürünlerin external_id'lerini topla
+  const incomingLinks = products.map((p) => p.link).filter((l): l is string => !!l)
+
+  const existingProducts =
+    incomingLinks.length > 0
+      ? await productService.listProducts({ external_id: incomingLinks }, { select: ["id", "external_id", "title"] })
+      : []
+
+  const existingExternalIds = new Set(
+    existingProducts.map((p) => p.external_id).filter((id): id is string => !!id)
+  )
+
+  const results: ImportResultItem[] = []
 
   for (const item of products) {
+    // Link varsa duplicate kontrolü yap
+    if (item.link && existingExternalIds.has(item.link)) {
+      const existing = existingProducts.find((p) => p.external_id === item.link)!
+      results.push({ title: item.title, product_id: existing.id, success: true, skipped: true, reason: "Bu ürün zaten import edilmiş" })
+      continue
+    }
+
     try {
-      // Yeni ürün oluştur (benzersiz handle ile)
       const created = await productService.createProducts([
         {
           title: item.title,
           handle: generateHandle(item.title),
           status: "draft" as const,
           thumbnail: item.image ?? undefined,
+          external_id: item.link ?? undefined,
           metadata: {
             serp_price: item.price ?? null,
             serp_link: item.link ?? null,
@@ -250,22 +272,6 @@ export const POST = async (req: MedusaRequest<ImportRequestBody>, res: MedusaRes
 
       const newProduct = created[0]
 
-      // Mevcut brand link'ini kontrol et ve varsa kaldır (güvenli pattern)
-      const { data: productData } = await query.graph({
-        entity: "product",
-        fields: ["id", "brand.id"],
-        filters: { id: newProduct.id },
-      })
-
-      const existingBrand = productData[0]?.brand as Record<string, unknown> | undefined | null
-      if (existingBrand?.id) {
-        await remoteLink.dismiss({
-          [Modules.PRODUCT]: { product_id: newProduct.id },
-          brand: { brand_id: existingBrand.id as string },
-        })
-      }
-
-      // Brand ile link oluştur
       await remoteLink.create({
         [Modules.PRODUCT]: { product_id: newProduct.id },
         brand: { brand_id },
@@ -279,14 +285,16 @@ export const POST = async (req: MedusaRequest<ImportRequestBody>, res: MedusaRes
     }
   }
 
-  const successCount = results.filter((r) => r.success).length
+  const createdCount = results.filter((r) => r.success && !("skipped" in r && r.skipped)).length
+  const skippedCount = results.filter((r) => "skipped" in r && r.skipped).length
   const failCount = results.filter((r) => !r.success).length
 
   return res.json({
     success: failCount === 0,
     brand_id,
     total: products.length,
-    successful: successCount,
+    created: createdCount,
+    skipped: skippedCount,
     failed: failCount,
     results,
   })
