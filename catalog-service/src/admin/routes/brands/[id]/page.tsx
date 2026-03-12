@@ -34,6 +34,7 @@ import {
   ChevronRightMini,
 } from "@medusajs/icons"
 import { ProductPickerModal } from "../../../components/product-picker"
+import { SerpSearchDrawer } from "../../../components/serp-search"
 import { EmptyState } from "../../../components/empty-state"
 import { Modal, ModalBody, ModalFooter } from "../../../components/modal"
 
@@ -89,6 +90,9 @@ const BrandDetailPage = () => {
 
   // Product picker modal state
   const [pickerModalOpen, setPickerModalOpen] = useState(false)
+
+  // SERP search modal state
+  const [serpModalOpen, setSerpModalOpen] = useState(false)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -426,9 +430,14 @@ const BrandDetailPage = () => {
             <Heading level="h2" className="text-ui-fg-base">Ürünler</Heading>
             <Text size="small" className="text-ui-fg-subtle mt-1">Bu markaya ait ürünleri yönetin</Text>
           </div>
-          <Button variant="secondary" size="small" onClick={() => setPickerModalOpen(true)}>
-            <PlusMini />Ürün Ekle
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="small" onClick={() => setSerpModalOpen(true)}>
+              <MagnifyingGlass />SERP ile Ara
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => setPickerModalOpen(true)}>
+              <PlusMini />Ürün Ekle
+            </Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 px-6 py-4">
@@ -704,6 +713,16 @@ const BrandDetailPage = () => {
           </div>
         </ModalFooter>
       </Modal>
+
+      {/* SERP Search Drawer */}
+      <SerpSearchDrawer
+        open={serpModalOpen}
+        onOpenChange={setSerpModalOpen}
+        brandId={id!}
+        onImportSuccess={() => fetchBrand(currentPage, itemsPerPage)}
+        title="SERP ile Ürün Ara"
+        description="Google Shopping sonuçlarını markaya aktarın"
+      />
 
       {/* Product Picker Modal */}
       <ProductPickerModal

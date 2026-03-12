@@ -27,13 +27,13 @@ export const GET = async (
   // Toplam count için hafif sorgu (sadece product.id)
   const { data: brandsForCount } = await query.graph({
     entity: "brand",
-    fields: ["id", "product.id"],
+    fields: ["id", "products.id"],
     filters: { id: brandId },
   })
 
   const brandForCount = brandsForCount[0]
-  const allProductIds = brandForCount?.product
-    ? (Array.isArray(brandForCount.product) ? brandForCount.product : [brandForCount.product])
+  const allProductIds = brandForCount?.products
+    ? (Array.isArray(brandForCount.products) ? brandForCount.products : [brandForCount.products])
     : []
   const totalCount = allProductIds.length
 

@@ -14,7 +14,6 @@ import crypto from 'crypto';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
-import { TransactionPrismaRepository } from '../../infrastructure/repositories/transaction-prisma.repository';
 import { ContractEventLogPrismaRepository } from '../../infrastructure/repositories/contract-event-log-prisma.repository';
 import { TransactionService } from '../transaction/transaction.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -59,7 +58,6 @@ export class AlchemyWebhookService {
   private signingKey: string;
   private readonly walletRepo = new WalletPrismaRepository();
   private readonly profileRepo = new ProfilePrismaRepository();
-  private readonly transactionRepo = new TransactionPrismaRepository();
   private readonly eventLogRepo = new ContractEventLogPrismaRepository();
   private readonly transactionService = new TransactionService();
   private readonly walletService = new WalletService();
@@ -178,49 +176,64 @@ export class AlchemyWebhookService {
       const prisma = getPrisma();
 
       // DEPOSIT: EOA → smart wallet (bizim wallet)
+      // Alchemy sadece DEPOSIT'ten sorumludur; TIP_RECEIVE thirdweb webhook tarafından yönetilir.
       if (toWallet && !fromWallet && !isMint) {
-        const pendingTx = await prisma.transaction.findFirst({
+        // txHash ile var olan DEPOSIT transaction kontrolü (duplicate engelle)
+        const existingByHash = await prisma.transaction.findFirst({
           where: {
             walletId: toWallet.id,
-            status: TransactionStatus.PENDING,
-            actionType: { in: [TransactionActionType.TIP_RECEIVE, TransactionActionType.DEPOSIT as string as PrismaTransactionActionType] },
+            txHash: transfer.transactionHash,
+            actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
           },
-          orderBy: { createdAt: 'desc' },
           select: { id: true },
         });
 
         let depositTransactionId: string;
-        if (pendingTx) {
-          await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
-          depositTransactionId = pendingTx.id;
+        if (existingByHash) {
+          depositTransactionId = existingByHash.id;
         } else {
-          const depositTx = await prisma.transaction.create({
-            data: {
+          const pendingTx = await prisma.transaction.findFirst({
+            where: {
               walletId: toWallet.id,
+              status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
               actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
-              status: TransactionStatus.CONFIRMED,
-              amount,
-              fromAddress: transfer.from,
-              toAddress: transfer.to,
-              txHash: transfer.transactionHash,
-              provider: 'external',
-              confirmedAt: new Date(),
-              metadata: {
-                source: 'alchemy_webhook',
-                chainId,
-                contractAddress: transfer.contractAddress,
-                blockNumber: block.number ?? undefined,
-                tokenType: 'ERC20',
-              },
             },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
           });
-          depositTransactionId = depositTx.id;
-          await this.walletService.updateBalance(toWallet.id, amount, {
-            reason: `Deposit from ${transfer.from} (tx: ${transfer.transactionHash})`,
-          });
+
+          if (pendingTx) {
+            await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
+            depositTransactionId = pendingTx.id;
+          } else {
+            const depositTx = await prisma.transaction.create({
+              data: {
+                walletId: toWallet.id,
+                actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
+                status: TransactionStatus.CONFIRMED,
+                amount,
+                fromAddress: transfer.from,
+                toAddress: transfer.to,
+                txHash: transfer.transactionHash,
+                provider: 'external',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'alchemy_webhook',
+                  chainId,
+                  contractAddress: transfer.contractAddress,
+                  blockNumber: block.number ?? undefined,
+                  tokenType: 'ERC20',
+                },
+              },
+            });
+            depositTransactionId = depositTx.id;
+            await this.walletService.updateBalance(toWallet.id, amount, {
+              reason: `Deposit from ${transfer.from} (tx: ${transfer.transactionHash})`,
+            });
+          }
         }
 
-        // To wallet sahibine deposit bildirimi: fromAddress (UI), gönderen sistemdeyse avatar + senderUsername
+        // Deposit bildirimi (gönderen sistemdeyse avatar + username)
         const fromWalletForAvatar = await this.walletRepo.findByAddressForTracking(transfer.from);
         const fromProfile = fromWalletForAvatar
           ? await this.profileRepo.findByUserId(fromWalletForAvatar.userId)
@@ -259,44 +272,58 @@ export class AlchemyWebhookService {
       }
 
       // WITHDRAW: smart wallet → EOA
+      // Alchemy sadece WITHDRAW'dan sorumludur; TIP_SEND thirdweb webhook tarafından yönetilir.
       if (fromWallet && !toWallet && !isBurn) {
-        const pendingTx = await prisma.transaction.findFirst({
+        // txHash ile var olan WITHDRAW transaction kontrolü (duplicate engelle)
+        const existingByHash = await prisma.transaction.findFirst({
           where: {
             walletId: fromWallet.id,
-            status: TransactionStatus.PENDING,
-            actionType: { in: [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW as string as PrismaTransactionActionType] },
+            txHash: transfer.transactionHash,
+            actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
           },
-          orderBy: { createdAt: 'desc' },
           select: { id: true },
         });
 
-        if (pendingTx) {
-          await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
-        } else {
-          await prisma.transaction.create({
-            data: {
+        if (!existingByHash) {
+          const pendingTx = await prisma.transaction.findFirst({
+            where: {
               walletId: fromWallet.id,
+              status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
               actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
-              status: TransactionStatus.CONFIRMED,
-              amount,
-              fromAddress: transfer.from,
-              toAddress: transfer.to,
-              txHash: transfer.transactionHash,
-              provider: 'external',
-              confirmedAt: new Date(),
-              metadata: {
-                source: 'alchemy_webhook',
-                chainId,
-                contractAddress: transfer.contractAddress,
-                blockNumber: block.number ?? undefined,
-                tokenType: 'ERC20',
-              },
             },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
           });
-          await this.walletService.updateBalance(fromWallet.id, -amount, {
-            reason: `Withdraw to ${transfer.to} (tx: ${transfer.transactionHash})`,
-          });
+
+          if (pendingTx) {
+            await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
+          } else {
+            await prisma.transaction.create({
+              data: {
+                walletId: fromWallet.id,
+                actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
+                status: TransactionStatus.CONFIRMED,
+                amount,
+                fromAddress: transfer.from,
+                toAddress: transfer.to,
+                txHash: transfer.transactionHash,
+                provider: 'external',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'alchemy_webhook',
+                  chainId,
+                  contractAddress: transfer.contractAddress,
+                  blockNumber: block.number ?? undefined,
+                  tokenType: 'ERC20',
+                },
+              },
+            });
+            await this.walletService.updateBalance(fromWallet.id, -amount, {
+              reason: `Withdraw to ${transfer.to} (tx: ${transfer.transactionHash})`,
+            });
+          }
         }
+
         await this.upsertEventLog(transfer, block, blockTimestamp, fromWallet.id, chainId);
         processed++;
         logger.info({
@@ -311,19 +338,15 @@ export class AlchemyWebhookService {
       }
 
       // İç transfer (tip): her iki taraf da bizim wallet
+      // Thirdweb webhook sorumludur; Alchemy sadece event log kaydı bırakır, transaction'a dokunmaz.
       if (fromWallet && toWallet) {
-        const byTxHash = await this.transactionRepo.findByTxHash(transfer.transactionHash);
-        const toConfirm = byTxHash.filter(
-          (tx) => tx.status === TransactionStatus.PENDING || tx.status === TransactionStatus.CREATED
-        );
-        for (const tx of toConfirm) {
-          await this.transactionService.confirmTransaction(tx.id, transfer.transactionHash);
-        }
         await this.upsertEventLog(transfer, block, blockTimestamp, undefined, chainId);
         processed++;
         logger.info({
           txHash: transfer.transactionHash,
-          message: 'Alchemy: internal transfer (tip) confirmed by txHash',
+          from: transfer.from,
+          to: transfer.to,
+          message: 'Alchemy: internal transfer (tip) logged only — thirdweb webhook handles transactions',
         });
         continue;
       }
