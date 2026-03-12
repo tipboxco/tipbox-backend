@@ -3538,6 +3538,7 @@ export class BrandService {
         } else if (website) {
           resolvedImage = `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}`;
         }
+        resolvedImage=`${resolvedImage}&token=${process.env.LOGO_DEV_API_TOKEN}`;
 
         // Image URL validation: null, boş string veya geçersiz URL kontrolü
         const validImage = resolvedImage && 
