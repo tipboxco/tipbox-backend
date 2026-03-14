@@ -4,14 +4,13 @@ set -e
 echo "🔨 Building Docker images..."
 cd "$PROJECT_DIR" || exit 1
 
-# Disk %85'in üzerindeyse build öncesi temizlik yap
+# Disk %75'in üzerindeyse build öncesi temizlik yap
 DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 echo "💾 Current disk usage: ${DISK_USAGE}%"
-if [ "$DISK_USAGE" -gt 85 ]; then
-  echo "⚠️  Disk usage above 85%, cleaning up before build..."
+if [ "$DISK_USAGE" -gt 75 ]; then
+  echo "⚠️  Disk usage above 75%, cleaning up before build..."
+  docker builder prune -af
   docker image prune -af
-  docker builder prune -f --keep-storage=1gb
-  docker container prune -f
   echo "💾 Disk usage after cleanup: $(df / | tail -1 | awk '{print $5}')"
 fi
 
