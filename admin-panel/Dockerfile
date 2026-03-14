@@ -5,7 +5,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # Package files
-COPY package.json ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 
 # Dependencies
 RUN pnpm install
