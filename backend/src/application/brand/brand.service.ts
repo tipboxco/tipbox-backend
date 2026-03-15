@@ -501,7 +501,7 @@ export class BrandService {
       const items = (hasMore ? brands.slice(0, limit) : brands).map((brand) => ({
         brandId: brand.id,
         name: brand.name,
-        image: `${brand.imageUrl}&token=${process.env.LOGO_DEV_API_TOKEN}`,
+        image: brand.imageUrl?.replace(/token=[^&]*/, `token=${process.env.LOGO_DEV_API_TOKEN}`) ?? null,
       }));
 
       return {
@@ -3538,7 +3538,11 @@ export class BrandService {
         } else if (website) {
           resolvedImage = `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}`;
         }
-        resolvedImage=`${resolvedImage}&token=${process.env.LOGO_DEV_API_TOKEN}`;
+        if (resolvedImage) {
+          resolvedImage = resolvedImage.includes('token=')
+            ? resolvedImage.replace(/token=[^&]*/, `token=${process.env.LOGO_DEV_API_TOKEN}`)
+            : `${resolvedImage}${resolvedImage.includes('?') ? '&' : '?'}token=${process.env.LOGO_DEV_API_TOKEN}`;
+        }
 
         // Image URL validation: null, boş string veya geçersiz URL kontrolü
         const validImage = resolvedImage && 
