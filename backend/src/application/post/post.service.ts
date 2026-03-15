@@ -1497,21 +1497,29 @@ export class PostService {
             experiencePurposeId: request.selectedPurposeId ?? undefined,
           },
         });
-        // Post görsellerini envanter kaydına da ekle (ürün envanterde görseli ile görünsün)
-        if (request.images && request.images.length > 0) {
-          await this.prisma.inventoryMedia.createMany({
-            data: request.images.map((mediaUrl) => ({
-              inventoryId: inventory.id,
-              mediaUrl,
-            })),
+        // Ürünün kendi görselini envanter kaydına ekle (post görselleri değil, ürün görseli)
+        const existingMedia = await this.prisma.inventoryMedia.findFirst({
+          where: { inventoryId: inventory.id },
+        });
+        if (!existingMedia) {
+          const product = await this.prisma.product.findUnique({
+            where: { id: contextIds.productId },
+            select: { imageUrl: true },
           });
+          if (product?.imageUrl) {
+            await this.prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl: product.imageUrl,
+              },
+            });
+          }
         }
         logger.info({
           message: 'Inventory upserted for experience post (I owned)',
           userId,
           productId: contextIds.productId,
           inventoryId: inventory.id,
-          mediaCount: request.images?.length ?? 0,
         });
       }
 

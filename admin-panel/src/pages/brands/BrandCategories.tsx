@@ -11,10 +11,9 @@ import {
   Modal,
   Form,
   Avatar,
-  Popconfirm,
   Tag,
   Spin,
-  message as antdMessage,
+  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -59,6 +58,7 @@ function BrandCategories() {
 
   const loadCategories = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetchBrandCategories({ search: search || undefined });
       setCategories(res.data ?? []);
@@ -80,7 +80,7 @@ function BrandCategories() {
       const res = await fetchBrandCategoryBrands(categoryId);
       setCategoryBrands((prev) => ({ ...prev, [categoryId]: res.data ?? [] }));
     } catch {
-      antdMessage.error('Failed to load brands for this category');
+      message.error('Failed to load brands for this category');
     } finally {
       setCategoryBrandsLoading((prev) => ({ ...prev, [categoryId]: false }));
     }
@@ -104,12 +104,12 @@ function BrandCategories() {
         imageUrl: values.imageUrl?.trim() || null,
         categoryId: values.categoryId?.trim() || null,
       });
-      antdMessage.success('Brand category created successfully');
+      message.success('Brand category created successfully');
       setCreateModalOpen(false);
       createForm.resetFields();
       loadCategories();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to create brand category');
+      message.error(e instanceof Error ? e.message : 'Failed to create brand category');
     }
   };
 
@@ -122,24 +122,35 @@ function BrandCategories() {
         imageUrl: values.imageUrl?.trim() || null,
         categoryId: values.categoryId?.trim() || null,
       });
-      antdMessage.success('Brand category updated successfully');
+      message.success('Brand category updated successfully');
       setEditModalOpen(false);
       editForm.resetFields();
       setSelectedCategory(null);
       loadCategories();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to update brand category');
+      message.error(e instanceof Error ? e.message : 'Failed to update brand category');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteBrandCategory(id);
-      antdMessage.success('Brand category deleted successfully');
-      loadCategories();
-    } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to delete brand category');
-    }
+  const handleDelete = (record: AdminBrandCategoryListItem) => {
+    Modal.confirm({
+      title: 'Delete Brand Category',
+      content:
+        record.brandCount > 0
+          ? `"${record.name}" has ${record.brandCount} brand(s) associated. Brands must be reassigned before deletion. Are you sure you want to proceed?`
+          : `Are you sure you want to delete "${record.name}"?`,
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await deleteBrandCategory(record.id);
+          message.success('Brand category deleted successfully');
+          loadCategories();
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to delete brand category');
+        }
+      },
+    });
   };
 
   const openEditModal = (category: AdminBrandCategoryListItem) => {
@@ -282,25 +293,14 @@ function BrandCategories() {
             onClick={() => openEditModal(record)}
             title="Edit category"
           />
-          <Popconfirm
-            title="Delete Brand Category"
-            description={
-              record.brandCount > 0
-                ? `This category has ${record.brandCount} brand(s) associated. Are you sure you want to delete it?`
-                : 'Are you sure you want to delete this category?'
-            }
-            onConfirm={() => handleDelete(record.id)}
-            okText="Delete"
-            okType="danger"
-          >
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              title="Delete category"
-            />
-          </Popconfirm>
+          <Button
+            size="small"
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDelete(record)}
+            title="Delete category"
+          />
         </Space>
       ),
     },
@@ -316,7 +316,7 @@ function BrandCategories() {
 
       {error && (
         <Alert
-          message="Error"
+          title="Error"
           description={error}
           type="error"
           closable
@@ -325,7 +325,7 @@ function BrandCategories() {
         />
       )}
 
-      <Card>
+      <Card variant="outlined">
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Input

@@ -265,6 +265,217 @@ router.get(
   })
 );
 
+// ==================== Brand Categories ====================
+
+/**
+ * GET /admin/brands/categories
+ * List brand categories
+ */
+router.get(
+  '/categories',
+  validateQuery(AdminBrandCategoriesQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = req.query as unknown as {
+      search?: string;
+    };
+
+    const categories = await prisma.brandCategory.findMany({
+      where: q.search
+        ? { name: { contains: q.search, mode: 'insensitive' as const } }
+        : undefined,
+      orderBy: { name: 'asc' as const },
+      include: {
+        category: { select: { name: true } },
+        _count: { select: { brands: true } },
+      },
+    });
+
+    const data: AdminBrandCategoryListItem[] = categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      imageUrl: cat.imageUrl,
+      categoryId: cat.categoryId,
+      categoryName: cat.category?.name ?? null,
+      brandCount: cat._count.brands,
+      createdAt: cat.createdAt.toISOString(),
+    }));
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/brands/categories/:id/brands
+ * List brands in a category
+ */
+router.get(
+  '/categories/:id/brands',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const existing = await prisma.brandCategory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    const brands = await prisma.brand.findMany({
+      where: { categoryId: id },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        isPopular: true,
+        createdAt: true,
+      },
+    });
+
+    const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
+      id: b.id,
+      name: b.name,
+      logoUrl: b.logoUrl,
+      isPopular: b.isPopular,
+      createdAt: b.createdAt.toISOString(),
+    }));
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * POST /admin/brands/categories
+ * Create brand category
+ */
+router.post(
+  '/categories',
+  validateBody(AdminCreateBrandCategorySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const body = req.body as AdminCreateBrandCategoryInput;
+
+    const category = await prisma.brandCategory.create({
+      data: {
+        name: body.name,
+        imageUrl: body.imageUrl ?? null,
+        categoryId: body.categoryId ?? null,
+      },
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_CREATE',
+        description: `categoryId: ${category.id}, name: ${category.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category created', { categoryId: category.id, adminId });
+
+    return res.status(201).json({ success: true, data: category });
+  })
+);
+
+/**
+ * PATCH /admin/brands/categories/:id
+ * Update brand category
+ */
+router.patch(
+  '/categories/:id',
+  validateBody(AdminUpdateBrandCategorySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+    const body = req.body as AdminUpdateBrandCategoryInput;
+
+    const existing = await prisma.brandCategory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+
+    const category = await prisma.brandCategory.update({
+      where: { id },
+      data: body,
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_UPDATE',
+        description: `categoryId: ${category.id}, name: ${category.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category updated', { categoryId: category.id, adminId });
+
+    return res.json({ success: true, data: category });
+  })
+);
+
+/**
+ * DELETE /admin/brands/categories/:id
+ * Delete brand category
+ */
+router.delete(
+  '/categories/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+
+    const existing = await prisma.brandCategory.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { brands: true } },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    if (existing._count.brands > 0) {
+      throw new ValidationError(
+        `Cannot delete brand category with ${existing._count.brands} brands. Reassign brands first.`
+      );
+    }
+
+    await prisma.brandCategory.delete({ where: { id } });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_DELETE',
+        description: `categoryId: ${id}, name: ${existing.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category deleted', { categoryId: id, adminId });
+
+    return res.json({ success: true, message: 'Brand category deleted' });
+  })
+);
+
+// ==================== Brand Detail & CRUD ====================
+
 /**
  * GET /admin/brands/:id
  * Get brand details
@@ -522,231 +733,6 @@ router.delete(
     logger.info('Brand deleted', { brandId: id, adminId });
 
     return res.json({ success: true, message: 'Brand deleted' });
-  })
-);
-
-// ==================== Brand Categories ====================
-
-/**
- * GET /admin/brands/categories
- * List brand categories
- */
-router.get(
-  '/categories',
-  validateQuery(AdminBrandCategoriesQuerySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const q = req.query as unknown as {
-      search?: string;
-    };
-
-    const where: Record<string, unknown> = {};
-    if (q.search) {
-      where.name = { contains: q.search, mode: 'insensitive' };
-    }
-
-    const categories = await prisma.brandCategory.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      include: {
-        _count: { select: { brands: true } },
-      },
-    });
-
-    const data: AdminBrandCategoryListItem[] = await Promise.all(
-      categories.map(async (cat) => {
-        let categoryName: string | null = null;
-
-        if (cat.categoryId) {
-          const category = await prisma.category.findUnique({
-            where: { id: cat.categoryId },
-            select: { name: true },
-          });
-          categoryName = category?.name || null;
-        }
-
-        return {
-          id: cat.id,
-          name: cat.name,
-          imageUrl: cat.imageUrl,
-          categoryId: cat.categoryId,
-          categoryName,
-          brandCount: cat._count.brands,
-          createdAt: cat.createdAt.toISOString(),
-        };
-      })
-    );
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * GET /admin/brands/categories/:id/brands
- * List brands in a category
- */
-router.get(
-  '/categories/:id/brands',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const existing = await prisma.brandCategory.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    const brands = await prisma.brand.findMany({
-      where: { categoryId: id },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        logoUrl: true,
-        isPopular: true,
-        createdAt: true,
-      },
-    });
-
-    const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
-      id: b.id,
-      name: b.name,
-      logoUrl: b.logoUrl,
-      isPopular: b.isPopular,
-      createdAt: b.createdAt.toISOString(),
-    }));
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * POST /admin/brands/categories
- * Create brand category
- */
-router.post(
-  '/categories',
-  validateBody(AdminCreateBrandCategorySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const body = req.body as AdminCreateBrandCategoryInput;
-
-    const category = await prisma.brandCategory.create({
-      data: {
-        name: body.name,
-        imageUrl: body.imageUrl ?? null,
-        categoryId: body.categoryId ?? null,
-      },
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_CREATE',
-        description: `categoryId: ${category.id}, name: ${category.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category created', { categoryId: category.id, adminId });
-
-    return res.status(201).json({ success: true, data: category });
-  })
-);
-
-/**
- * PATCH /admin/brands/categories/:id
- * Update brand category
- */
-router.patch(
-  '/categories/:id',
-  validateBody(AdminUpdateBrandCategorySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-    const body = req.body as AdminUpdateBrandCategoryInput;
-
-    const existing = await prisma.brandCategory.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    // Clean up old image from S3 if being replaced
-    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
-      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
-    }
-
-    const category = await prisma.brandCategory.update({
-      where: { id },
-      data: body,
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_UPDATE',
-        description: `categoryId: ${category.id}, name: ${category.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category updated', { categoryId: category.id, adminId });
-
-    return res.json({ success: true, data: category });
-  })
-);
-
-/**
- * DELETE /admin/brands/categories/:id
- * Delete brand category
- */
-router.delete(
-  '/categories/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-
-    const existing = await prisma.brandCategory.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { brands: true } },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    if (existing._count.brands > 0) {
-      throw new ValidationError(
-        `Cannot delete brand category with ${existing._count.brands} brands. Reassign brands first.`
-      );
-    }
-
-    await prisma.brandCategory.delete({ where: { id } });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_DELETE',
-        description: `categoryId: ${id}, name: ${existing.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category deleted', { categoryId: id, adminId });
-
-    return res.json({ success: true, message: 'Brand category deleted' });
   })
 );
 
