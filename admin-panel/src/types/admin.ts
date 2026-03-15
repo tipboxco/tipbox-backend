@@ -381,6 +381,16 @@ export type AdminBadgeOwnerListItem = {
 
 /* ========== Admin Content ========== */
 
+export type AdminPostSearchItem = {
+  id: string;
+  title: string;
+  bodyExcerpt: string;
+  type: string;
+  userDisplayName: string | null;
+  userName: string | null;
+  avatarUrl: string | null;
+};
+
 export type AdminContentPostsStatsResponse = {
   total: number;
   byType: Record<string, number>;
@@ -467,7 +477,10 @@ export type AdminFeedHighlightListItem = {
   highlightedAt: string;
   createdAt: string;
   postTitle: string | null;
+  postType: string | null;
+  bodyExcerpt: string | null;
   userDisplayName: string | null;
+  avatarUrl: string | null;
 };
 
 export type AdminTrendingPostListItem = {
@@ -477,8 +490,14 @@ export type AdminTrendingPostListItem = {
   trendPeriod: string;
   calculatedAt: string;
   createdAt: string;
+  expiresAt: string;
+  daysRemaining: number;
+  isExpired: boolean;
   postTitle: string | null;
+  postType: string | null;
+  bodyExcerpt: string | null;
   userDisplayName: string | null;
+  avatarUrl: string | null;
 };
 
 export type AdminTopCommunityChoiceListItem = {

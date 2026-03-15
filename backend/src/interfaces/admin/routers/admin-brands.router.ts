@@ -306,29 +306,42 @@ router.get(
 
 /**
  * GET /admin/brands/categories/:id/brands
- * List brands in a category
+ * List brands in a category (with pagination & search)
  */
 router.get(
   '/categories/:id/brands',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const offset = Number(req.query.offset) || 0;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     const existing = await prisma.brandCategory.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundError('Brand category not found');
     }
 
-    const brands = await prisma.brand.findMany({
-      where: { categoryId: id },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        logoUrl: true,
-        isPopular: true,
-        createdAt: true,
-      },
-    });
+    const where: Record<string, unknown> = { categoryId: id };
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
+
+    const [brands, total] = await Promise.all([
+      prisma.brand.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+          isPopular: true,
+          createdAt: true,
+        },
+      }),
+      prisma.brand.count({ where }),
+    ]);
 
     const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
       id: b.id,
@@ -338,7 +351,8 @@ router.get(
       createdAt: b.createdAt.toISOString(),
     }));
 
-    return res.json({ success: true, data });
+    const pagination: PaginationMeta = { total, limit, offset };
+    return res.json({ success: true, data, pagination });
   })
 );
 

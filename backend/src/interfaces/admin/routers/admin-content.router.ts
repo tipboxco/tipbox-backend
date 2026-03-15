@@ -57,6 +57,17 @@ import type { PaginationMeta } from '../dtos/admin-common.dto';
 const router = Router();
 const prisma = getPrisma();
 
+const TRENDING_TTL_DAYS = 7;
+
+function computeTrendingExpiry(calculatedAt: Date): { expiresAt: string; daysRemaining: number; isExpired: boolean } {
+  const expiresAt = new Date(calculatedAt);
+  expiresAt.setDate(expiresAt.getDate() + TRENDING_TTL_DAYS);
+  const now = new Date();
+  const diffMs = expiresAt.getTime() - now.getTime();
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  return { expiresAt: expiresAt.toISOString(), daysRemaining, isExpired: diffMs <= 0 };
+}
+
 /**
  * Content Router - Handles all content moderation & management endpoints
  * Routes are mounted at /admin/content
@@ -95,6 +106,90 @@ router.get(
     const data: AdminContentPostsStatsResponse = { total, byType, boostedCount, withEventCount };
     return res.json({ success: true, data });
   })
+);
+
+/**
+ * @openapi
+ * /api/admin/content/posts/search:
+ *   get:
+ *     summary: Lightweight post search for autocomplete (returns id, title excerpt, author avatar & name)
+ *     tags: [Admin - Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema: { type: string, minLength: 3 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Search results
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+router.get(
+  '/posts/search',
+  validateQuery(
+    z.object({
+      q: z.string().min(3).max(200),
+      limit: z.coerce.number().int().min(1).max(30).default(10),
+    }),
+  ),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { q, limit } = req.query as { q: string; limit: number };
+    const posts = await prisma.contentPost.findMany({
+      where: {
+        OR: [
+          { title: { contains: q, mode: 'insensitive' as const } },
+          { body: { contains: q, mode: 'insensitive' as const } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        body: true,
+        type: true,
+        user: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                displayName: true,
+                userName: true,
+              },
+            },
+            avatars: {
+              where: { isActive: true },
+              select: { imageUrl: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    const data = posts.map((p) => {
+      const bodyExcerpt = p.body.length > 80 ? p.body.slice(0, 80) + '...' : p.body;
+      const activeAvatar = p.user.avatars?.[0];
+      const avatarUrl = activeAvatar ? resolveMediaUrl(activeAvatar.imageUrl, true) : null;
+      return {
+        id: p.id,
+        title: p.title.length > 60 ? p.title.slice(0, 60) + '...' : p.title,
+        bodyExcerpt,
+        type: p.type,
+        userDisplayName: p.user.profile?.displayName ?? null,
+        userName: p.user.profile?.userName ?? null,
+        avatarUrl,
+      };
+    });
+    return res.json({ success: true, data });
+  }),
 );
 
 /**
@@ -981,19 +1076,36 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+        include: {
+          post: {
+            include: {
+              user: {
+                include: {
+                  profile: { select: { displayName: true } },
+                  avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
       }),
       prisma.feedHighlight.count({ where }),
     ]);
-    const data: AdminFeedHighlightListItem[] = rows.map((r) => ({
-      id: r.id,
-      postId: r.postId,
-      reason: r.reason,
-      highlightedAt: r.highlightedAt.toISOString(),
-      createdAt: r.createdAt.toISOString(),
-      postTitle: r.post?.title ?? null,
-      userDisplayName: r.post?.user?.profile?.displayName ?? null,
-    }));
+    const data: AdminFeedHighlightListItem[] = rows.map((r) => {
+      const activeAvatar = r.post?.user?.avatars?.[0];
+      return {
+        id: r.id,
+        postId: r.postId,
+        reason: r.reason,
+        highlightedAt: r.highlightedAt.toISOString(),
+        createdAt: r.createdAt.toISOString(),
+        postTitle: r.post?.title ?? null,
+        postType: r.post?.type ?? null,
+        bodyExcerpt: r.post?.body ? (r.post.body.length > 100 ? r.post.body.slice(0, 100) + '...' : r.post.body) : null,
+        userDisplayName: r.post?.user?.profile?.displayName ?? null,
+        avatarUrl: activeAvatar ? resolveMediaUrl(activeAvatar.imageUrl, true) : null,
+      };
+    });
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
   })
@@ -1038,11 +1150,12 @@ router.post(
     const id = generateIdForModel('FeedHighlight');
     const created = await prisma.feedHighlight.create({
       data: { id, postId: body.postId, reason: body.reason as 'MOST_LIKED' | 'STAFF_PICK' | 'BOOSTED' },
-      include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+      include: { post: { include: { user: { include: { profile: { select: { displayName: true } }, avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 } } } } } },
     });
     await prisma.adminLog.create({
       data: { adminId, action: 'FEED_HIGHLIGHT_CREATE', description: `postId: ${body.postId}, reason: ${body.reason}`, entityType: 'feed_highlight', entityId: 0 },
     });
+    const createdAvatar = created.post?.user?.avatars?.[0];
     const data: AdminFeedHighlightListItem = {
       id: created.id,
       postId: created.postId,
@@ -1050,7 +1163,10 @@ router.post(
       highlightedAt: created.highlightedAt.toISOString(),
       createdAt: created.createdAt.toISOString(),
       postTitle: created.post?.title ?? null,
+      postType: created.post?.type ?? null,
+      bodyExcerpt: created.post?.body ? (created.post.body.length > 100 ? created.post.body.slice(0, 100) + '...' : created.post.body) : null,
       userDisplayName: created.post?.user?.profile?.displayName ?? null,
+      avatarUrl: createdAvatar ? resolveMediaUrl(createdAvatar.imageUrl, true) : null,
     };
     return res.status(201).json({ success: true, data });
   })
@@ -1092,11 +1208,12 @@ router.patch(
     const updated = await prisma.feedHighlight.update({
       where: { id },
       data: body.reason ? { reason: body.reason as 'MOST_LIKED' | 'STAFF_PICK' | 'BOOSTED' } : undefined,
-      include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+      include: { post: { include: { user: { include: { profile: { select: { displayName: true } }, avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 } } } } } },
     });
     await prisma.adminLog.create({
       data: { adminId, action: 'FEED_HIGHLIGHT_UPDATE', description: `id: ${id}`, entityType: 'feed_highlight', entityId: 0 },
     });
+    const updatedAvatar = updated.post?.user?.avatars?.[0];
     const data: AdminFeedHighlightListItem = {
       id: updated.id,
       postId: updated.postId,
@@ -1104,7 +1221,10 @@ router.patch(
       highlightedAt: updated.highlightedAt.toISOString(),
       createdAt: updated.createdAt.toISOString(),
       postTitle: updated.post?.title ?? null,
+      postType: updated.post?.type ?? null,
+      bodyExcerpt: updated.post?.body ? (updated.post.body.length > 100 ? updated.post.body.slice(0, 100) + '...' : updated.post.body) : null,
       userDisplayName: updated.post?.user?.profile?.displayName ?? null,
+      avatarUrl: updatedAvatar ? resolveMediaUrl(updatedAvatar.imageUrl, true) : null,
     };
     return res.json({ success: true, data });
   })
@@ -1230,20 +1350,39 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+        include: {
+          post: {
+            include: {
+              user: {
+                include: {
+                  profile: { select: { displayName: true } },
+                  avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
       }),
       prisma.trendingPost.count({ where }),
     ]);
-    const data: AdminTrendingPostListItem[] = rows.map((r) => ({
-      id: r.id,
-      postId: r.postId,
-      score: r.score,
-      trendPeriod: r.trendPeriod,
-      calculatedAt: r.calculatedAt.toISOString(),
-      createdAt: r.createdAt.toISOString(),
-      postTitle: r.post?.title ?? null,
-      userDisplayName: r.post?.user?.profile?.displayName ?? null,
-    }));
+    const data: AdminTrendingPostListItem[] = rows.map((r) => {
+      const avatar = r.post?.user?.avatars?.[0];
+      const expiry = computeTrendingExpiry(r.calculatedAt);
+      return {
+        id: r.id,
+        postId: r.postId,
+        score: r.score,
+        trendPeriod: r.trendPeriod,
+        calculatedAt: r.calculatedAt.toISOString(),
+        createdAt: r.createdAt.toISOString(),
+        ...expiry,
+        postTitle: r.post?.title ?? null,
+        postType: r.post?.type ?? null,
+        bodyExcerpt: r.post?.body ? (r.post.body.length > 100 ? r.post.body.slice(0, 100) + '...' : r.post.body) : null,
+        userDisplayName: r.post?.user?.profile?.displayName ?? null,
+        avatarUrl: avatar ? resolveMediaUrl(avatar.imageUrl, true) : null,
+      };
+    });
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
   })
@@ -1294,11 +1433,13 @@ router.post(
         trendPeriod: body.trendPeriod as 'DAILY' | 'WEEKLY',
         score: body.score ?? 0,
       },
-      include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+      include: { post: { include: { user: { include: { profile: { select: { displayName: true } }, avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 } } } } } },
     });
     await prisma.adminLog.create({
       data: { adminId, action: 'TRENDING_POST_CREATE', description: `postId: ${body.postId}, period: ${body.trendPeriod}`, entityType: 'trending_post', entityId: 0 },
     });
+    const createdTrendAvatar = created.post?.user?.avatars?.[0];
+    const createdExpiry = computeTrendingExpiry(created.calculatedAt);
     const data: AdminTrendingPostListItem = {
       id: created.id,
       postId: created.postId,
@@ -1306,8 +1447,12 @@ router.post(
       trendPeriod: created.trendPeriod,
       calculatedAt: created.calculatedAt.toISOString(),
       createdAt: created.createdAt.toISOString(),
+      ...createdExpiry,
       postTitle: created.post?.title ?? null,
+      postType: created.post?.type ?? null,
+      bodyExcerpt: created.post?.body ? (created.post.body.length > 100 ? created.post.body.slice(0, 100) + '...' : created.post.body) : null,
       userDisplayName: created.post?.user?.profile?.displayName ?? null,
+      avatarUrl: createdTrendAvatar ? resolveMediaUrl(createdTrendAvatar.imageUrl, true) : null,
     };
     return res.status(201).json({ success: true, data });
   })
@@ -1343,20 +1488,23 @@ router.patch(
     const adminId = req.user?.id;
     if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { id } = req.params;
-    const body = req.body as { score?: number; trendPeriod?: string };
+    const body = req.body as { score?: number; trendPeriod?: string; refresh?: boolean };
     const existing = await prisma.trendingPost.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Trending post bulunamadı');
     const updateData: Record<string, unknown> = {};
     if (body.score !== undefined) updateData.score = body.score;
     if (body.trendPeriod !== undefined) updateData.trendPeriod = body.trendPeriod;
+    if (body.refresh) updateData.calculatedAt = new Date();
     const updated = await prisma.trendingPost.update({
       where: { id },
       data: updateData,
-      include: { post: { include: { user: { include: { profile: { select: { displayName: true } } } } } } },
+      include: { post: { include: { user: { include: { profile: { select: { displayName: true } }, avatars: { where: { isActive: true }, select: { imageUrl: true }, take: 1 } } } } } },
     });
     await prisma.adminLog.create({
       data: { adminId, action: 'TRENDING_POST_UPDATE', description: `id: ${id}`, entityType: 'trending_post', entityId: 0 },
     });
+    const updatedTrendAvatar = updated.post?.user?.avatars?.[0];
+    const updatedExpiry = computeTrendingExpiry(updated.calculatedAt);
     const data: AdminTrendingPostListItem = {
       id: updated.id,
       postId: updated.postId,
@@ -1364,8 +1512,12 @@ router.patch(
       trendPeriod: updated.trendPeriod,
       calculatedAt: updated.calculatedAt.toISOString(),
       createdAt: updated.createdAt.toISOString(),
+      ...updatedExpiry,
       postTitle: updated.post?.title ?? null,
+      postType: updated.post?.type ?? null,
+      bodyExcerpt: updated.post?.body ? (updated.post.body.length > 100 ? updated.post.body.slice(0, 100) + '...' : updated.post.body) : null,
       userDisplayName: updated.post?.user?.profile?.displayName ?? null,
+      avatarUrl: updatedTrendAvatar ? resolveMediaUrl(updatedTrendAvatar.imageUrl, true) : null,
     };
     return res.json({ success: true, data });
   })

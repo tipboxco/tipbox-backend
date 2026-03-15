@@ -88,7 +88,10 @@ export type AdminFeedHighlightListItem = {
   highlightedAt: string;
   createdAt: string;
   postTitle: string | null;
+  postType: string | null;
+  bodyExcerpt: string | null;
   userDisplayName: string | null;
+  avatarUrl: string | null;
 };
 
 export type AdminFeedHighlightStatsResponse = {
@@ -103,8 +106,14 @@ export type AdminTrendingPostListItem = {
   trendPeriod: string;
   calculatedAt: string;
   createdAt: string;
+  expiresAt: string;
+  daysRemaining: number;
+  isExpired: boolean;
   postTitle: string | null;
+  postType: string | null;
+  bodyExcerpt: string | null;
   userDisplayName: string | null;
+  avatarUrl: string | null;
 };
 
 export type AdminTrendingPostStatsResponse = {

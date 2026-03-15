@@ -1,5 +1,6 @@
 import { get, post, patch, del } from './client';
 import type {
+  AdminPostSearchItem,
   AdminContentPostsStatsResponse,
   AdminContentPostListItem,
   AdminContentPostDetailResponse,
@@ -18,6 +19,10 @@ const prefix = '/admin';
 
 export async function fetchContentPostsStats() {
   return get<AdminContentPostsStatsResponse>(`${prefix}/content/posts/stats`);
+}
+
+export async function searchPosts(q: string, limit = 10) {
+  return get<AdminPostSearchItem[]>(`${prefix}/content/posts/search`, { q, limit });
 }
 
 export async function fetchContentPosts(params: {
@@ -178,8 +183,12 @@ export async function createTrending(body: { postId: string; trendPeriod: string
   return post<AdminTrendingPostListItem>(`${prefix}/content/trending`, body);
 }
 
-export async function updateTrending(id: string, body: { score?: number; trendPeriod?: string }) {
+export async function updateTrending(id: string, body: { score?: number; trendPeriod?: string; refresh?: boolean }) {
   return patch<AdminTrendingPostListItem>(`${prefix}/content/trending/${id}`, body);
+}
+
+export async function refreshTrending(id: string) {
+  return patch<AdminTrendingPostListItem>(`${prefix}/content/trending/${id}`, { refresh: true });
 }
 
 export async function deleteTrending(id: string) {

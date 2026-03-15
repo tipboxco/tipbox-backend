@@ -12,7 +12,6 @@ import {
   Form,
   Avatar,
   Tag,
-  Spin,
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -40,6 +39,8 @@ import type {
 } from '../../api/admin-brands';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
+const BRANDS_PAGE_SIZE = 20;
+
 function BrandCategories() {
   const [categories, setCategories] = useState<AdminBrandCategoryListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,10 +52,16 @@ function BrandCategories() {
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  // Expanded row state
-  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
-  const [categoryBrands, setCategoryBrands] = useState<Record<string, AdminBrandCategoryBrandItem[]>>({});
-  const [categoryBrandsLoading, setCategoryBrandsLoading] = useState<Record<string, boolean>>({});
+  // Brands modal state
+  const [brandsModalOpen, setBrandsModalOpen] = useState(false);
+  const [brandsModalCategory, setBrandsModalCategory] = useState<AdminBrandCategoryListItem | null>(
+    null
+  );
+  const [brands, setBrands] = useState<AdminBrandCategoryBrandItem[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [brandsTotal, setBrandsTotal] = useState(0);
+  const [brandsPage, setBrandsPage] = useState(1);
+  const [brandsSearch, setBrandsSearch] = useState('');
 
   const loadCategories = async () => {
     setLoading(true);
@@ -74,26 +81,46 @@ function BrandCategories() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const loadCategoryBrands = useCallback(async (categoryId: string) => {
-    setCategoryBrandsLoading((prev) => ({ ...prev, [categoryId]: true }));
-    try {
-      const res = await fetchBrandCategoryBrands(categoryId);
-      setCategoryBrands((prev) => ({ ...prev, [categoryId]: res.data ?? [] }));
-    } catch {
-      message.error('Failed to load brands for this category');
-    } finally {
-      setCategoryBrandsLoading((prev) => ({ ...prev, [categoryId]: false }));
-    }
-  }, []);
-
-  const handleExpand = (expanded: boolean, record: AdminBrandCategoryListItem) => {
-    if (expanded) {
-      setExpandedRowKeys((prev) => [...prev, record.id]);
-      if (!categoryBrands[record.id]) {
-        loadCategoryBrands(record.id);
+  const loadBrands = useCallback(
+    async (categoryId: string, page: number, searchTerm: string) => {
+      setBrandsLoading(true);
+      try {
+        const res = await fetchBrandCategoryBrands(categoryId, {
+          limit: BRANDS_PAGE_SIZE,
+          offset: (page - 1) * BRANDS_PAGE_SIZE,
+          search: searchTerm || undefined,
+        });
+        setBrands(res.data ?? []);
+        setBrandsTotal(res.pagination?.total ?? 0);
+      } catch {
+        message.error('Failed to load brands');
+      } finally {
+        setBrandsLoading(false);
       }
-    } else {
-      setExpandedRowKeys((prev) => prev.filter((key) => key !== record.id));
+    },
+    []
+  );
+
+  const openBrandsModal = (category: AdminBrandCategoryListItem) => {
+    setBrandsModalCategory(category);
+    setBrandsModalOpen(true);
+    setBrandsPage(1);
+    setBrandsSearch('');
+    loadBrands(category.id, 1, '');
+  };
+
+  const handleBrandsPageChange = (page: number) => {
+    setBrandsPage(page);
+    if (brandsModalCategory) {
+      loadBrands(brandsModalCategory.id, page, brandsSearch);
+    }
+  };
+
+  const handleBrandsSearch = (value: string) => {
+    setBrandsSearch(value);
+    setBrandsPage(1);
+    if (brandsModalCategory) {
+      loadBrands(brandsModalCategory.id, 1, value);
     }
   };
 
@@ -189,9 +216,7 @@ function BrandCategories() {
       key: 'isPopular',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       render: (isPopular: boolean | null) => (
-        <Tag color={isPopular ? 'green' : 'default'}>
-          {isPopular ? 'Popular' : 'Regular'}
-        </Tag>
+        <Tag color={isPopular ? 'green' : 'default'}>{isPopular ? 'Popular' : 'Regular'}</Tag>
       ),
     },
     {
@@ -200,41 +225,9 @@ function BrandCategories() {
       key: 'createdAt',
       width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
-      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
+      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '\u2014'),
     },
   ];
-
-  const expandedRowRender = (record: AdminBrandCategoryListItem) => {
-    const brands = categoryBrands[record.id];
-    const isLoading = categoryBrandsLoading[record.id];
-
-    if (isLoading) {
-      return (
-        <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin size="small" />
-        </div>
-      );
-    }
-
-    if (!brands || brands.length === 0) {
-      return (
-        <div style={{ padding: 16 }}>
-          <Empty description="No brands in this category" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        </div>
-      );
-    }
-
-    return (
-      <Table
-        columns={brandColumns}
-        dataSource={brands}
-        rowKey="id"
-        pagination={false}
-        size="small"
-        scroll={TABLE_SCROLL_CONFIGS.AUTO}
-      />
-    );
-  };
 
   const columns: ColumnsType<AdminBrandCategoryListItem> = [
     {
@@ -262,7 +255,7 @@ function BrandCategories() {
       key: 'categoryName',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
-      render: (text: string | null) => text ?? '—',
+      render: (text: string | null) => text ?? '\u2014',
     },
     {
       title: 'Brand Count',
@@ -271,6 +264,14 @@ function BrandCategories() {
       width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
       align: 'right',
       sorter: (a, b) => a.brandCount - b.brandCount,
+      render: (count: number, record) =>
+        count > 0 ? (
+          <Button type="link" size="small" onClick={() => openBrandsModal(record)}>
+            {count}
+          </Button>
+        ) : (
+          count
+        ),
     },
     {
       title: 'Created',
@@ -278,7 +279,7 @@ function BrandCategories() {
       key: 'createdAt',
       width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
-      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
+      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '\u2014'),
     },
     {
       title: '',
@@ -352,18 +353,54 @@ function BrandCategories() {
             rowKey="id"
             pagination={false}
             scroll={TABLE_SCROLL_CONFIGS.AUTO}
-            expandable={{
-              expandedRowKeys,
-              onExpand: handleExpand,
-              expandedRowRender,
-              rowExpandable: (record) => record.brandCount > 0,
-            }}
             locale={{
               emptyText: <Empty description="No brand categories found" />,
             }}
           />
         </Space>
       </Card>
+
+      {/* Brands in Category Modal */}
+      <Modal
+        title={`Brands in "${brandsModalCategory?.name ?? ''}"`}
+        open={brandsModalOpen}
+        onCancel={() => {
+          setBrandsModalOpen(false);
+          setBrandsModalCategory(null);
+          setBrands([]);
+        }}
+        footer={null}
+        width={700}
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Input
+            placeholder="Search brands..."
+            prefix={<SearchOutlined />}
+            value={brandsSearch}
+            onChange={(e) => handleBrandsSearch(e.target.value)}
+            allowClear
+          />
+          <Table
+            columns={brandColumns}
+            dataSource={brands}
+            rowKey="id"
+            loading={brandsLoading}
+            size="small"
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
+            pagination={{
+              current: brandsPage,
+              pageSize: BRANDS_PAGE_SIZE,
+              total: brandsTotal,
+              onChange: handleBrandsPageChange,
+              showSizeChanger: false,
+              showTotal: (total) => `${total} brands`,
+            }}
+            locale={{
+              emptyText: <Empty description="No brands found" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
+          />
+        </Space>
+      </Modal>
 
       {/* Create Brand Category Modal */}
       <Modal
@@ -393,7 +430,16 @@ function BrandCategories() {
                 {() => {
                   const url = createForm.getFieldValue('imageUrl');
                   return url ? (
-                    <img src={url} alt="Preview" style={{ maxWidth: '100%', maxHeight: 80, borderRadius: 4, objectFit: 'cover' }} />
+                    <img
+                      src={url}
+                      alt="Preview"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: 80,
+                        borderRadius: 4,
+                        objectFit: 'cover',
+                      }}
+                    />
                   ) : null;
                 }}
               </Form.Item>
@@ -434,7 +480,16 @@ function BrandCategories() {
                 {() => {
                   const url = editForm.getFieldValue('imageUrl');
                   return url ? (
-                    <img src={url} alt="Preview" style={{ maxWidth: '100%', maxHeight: 80, borderRadius: 4, objectFit: 'cover' }} />
+                    <img
+                      src={url}
+                      alt="Preview"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: 80,
+                        borderRadius: 4,
+                        objectFit: 'cover',
+                      }}
+                    />
                   ) : null;
                 }}
               </Form.Item>

@@ -414,9 +414,17 @@ export async function deleteBrandCategory(id: string): Promise<ApiResponse<void>
 }
 
 export async function fetchBrandCategoryBrands(
-  categoryId: string
+  categoryId: string,
+  params?: { limit?: number; offset?: number; search?: string }
 ): Promise<ApiResponse<AdminBrandCategoryBrandItem[]>> {
-  return get<AdminBrandCategoryBrandItem[]>(`/admin/brands/categories/${categoryId}/brands`);
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.offset) query.set('offset', String(params.offset));
+  if (params?.search) query.set('search', params.search);
+  const qs = query.toString();
+  return get<AdminBrandCategoryBrandItem[]>(
+    `/admin/brands/categories/${categoryId}/brands${qs ? `?${qs}` : ''}`
+  );
 }
 
 /* ========== Brand Surveys ========== */
