@@ -40,6 +40,7 @@ import ComparisonMetrics from './pages/products/ComparisonMetrics';
 // Brand pages
 import BrandList from './pages/brands/BrandList';
 import BrandSurveys from './pages/brands/BrandSurveys';
+import BrandSurveyDetail from './pages/brands/BrandSurveyDetail';
 import BrandLeaderboards from './pages/brands/BrandLeaderboards';
 import BrandRewards from './pages/brands/BrandRewards';
 import BrandCategories from './pages/brands/BrandCategories';
@@ -176,6 +177,7 @@ function App() {
           {/* Brands */}
           <Route path="brands" element={<BrandList />} />
           <Route path="brands/surveys" element={<BrandSurveys />} />
+          <Route path="brands/surveys/:id" element={<BrandSurveyDetail />} />
           <Route path="brands/leaderboards" element={<BrandLeaderboards />} />
           <Route path="brands/rewards" element={<BrandRewards />} />
           <Route path="brands/categories" element={<BrandCategories />} />

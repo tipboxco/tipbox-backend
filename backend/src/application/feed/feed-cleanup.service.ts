@@ -1,5 +1,6 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 export interface CleanupStats {
   deletedCount: number;
@@ -100,7 +101,7 @@ export class FeedCleanupService {
     const affectedUsers = new Set<string>();
 
     const users = await this.prisma.user.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', ...NOT_SYSTEM_USER },
       select: { id: true },
     });
 

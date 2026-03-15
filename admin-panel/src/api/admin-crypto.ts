@@ -556,7 +556,7 @@ export async function fetchNFTMarketListings(
     sort: params.sort ?? 'listedAt',
     order: params.order ?? 'desc',
   };
-  return get<AdminNFTMarketListingListItem[]>('/admin/nft/marketplace', query);
+  return get<AdminNFTMarketListingListItem[]>('/admin/nft/marketplace/listings', query);
 }
 
 export async function fetchNFTMarketListing(
@@ -569,7 +569,7 @@ export async function moderateNFTListing(
   id: string,
   data: ModerateListingInput
 ): Promise<ApiResponse<{ message: string }>> {
-  return patch<{ message: string }>(`/admin/nft/marketplace/${id}/moderate`, data);
+  return patch<{ message: string }>(`/admin/nft/marketplace/listings/${id}`, data);
 }
 
 // ==================== Aliases for Backward Compatibility ====================
@@ -584,7 +584,7 @@ export const fetchMarketplaceListings = fetchNFTMarketListings;
 export const fetchMarketplaceListing = fetchNFTMarketListing;
 
 export async function delistNFT(listingId: string): Promise<ApiResponse<void>> {
-  return patch<void>(`/admin/nft/marketplace/${listingId}/moderate`, {
+  return patch<void>(`/admin/nft/marketplace/listings/${listingId}`, {
     status: 'CANCELLED',
     reason: 'Delisted by admin',
   });

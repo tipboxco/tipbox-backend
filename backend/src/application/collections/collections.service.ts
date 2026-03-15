@@ -10,54 +10,11 @@ import type {
   CollectionBadge,
   CollectionBadgeStatus,
   CollectionDetailResponse,
-  CollectionBackgroundGradient,
+  CompletedCollectionItem,
+  CompletedCollectionsResponse,
+  UserCollectionProgressItem,
+  UserCollectionProgressResponse,
 } from '../../interfaces/collections/collections.dto';
-
-/**
- * Deterministic gradient generation from a string ID.
- * Produces consistent colors per collection without requiring DB storage.
- */
-function generateGradientFromId(id: string): CollectionBackgroundGradient {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
-  }
-
-  const h1 = Math.abs(hash % 360);
-  const h2 = (h1 + 45) % 360;
-  const h3 = (h1 + 90) % 360;
-
-  return {
-    colors: [hslToHex(h1, 65, 50), hslToHex(h2, 60, 45), hslToHex(h3, 70, 40)],
-    start: { x: 0, y: 0 },
-    end: { x: 1, y: 1 },
-  };
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sNorm = s / 100;
-  const lNorm = l / 100;
-  const a = sNorm * Math.min(lNorm, 1 - lNorm);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = lNorm - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function isValidGradient(val: unknown): val is CollectionBackgroundGradient {
-  if (!val || typeof val !== 'object') return false;
-  const obj = val as Record<string, unknown>;
-  return (
-    Array.isArray(obj.colors) &&
-    obj.colors.length >= 2 &&
-    typeof obj.start === 'object' &&
-    typeof obj.end === 'object'
-  );
-}
 
 export class CollectionsService {
   private cache: CacheService;
@@ -151,18 +108,13 @@ export class CollectionsService {
         return sum + Math.min(p, g.pointsRequired);
       }, 0);
 
-      const rawGradient = (c as Record<string, unknown>).backgroundGradient;
-      const gradient = isValidGradient(rawGradient)
-        ? rawGradient
-        : generateGradientFromId(c.id);
-
       return {
         id: c.id,
         title: c.name,
         description: c.shortDescription ?? c.longDescription ?? '',
         currentProgress,
         totalProgress,
-        backgroundGradient: gradient,
+        coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
         category: c.category?.handle ?? null,
       };
     });
@@ -231,6 +183,272 @@ export class CollectionsService {
     await this.cache.set(cacheKey, result, CACHE_TTL.VERY_LONG);
 
     return result;
+  }
+
+  /**
+   * EP-05: Get collections where user has any progress (in_progress + completed).
+   * Used on profile pages to show only collections the user has engaged with.
+   */
+  async getUserCollectionProgress(
+    targetUserId: string,
+    params: { cursor?: string; limit: number },
+  ): Promise<UserCollectionProgressResponse> {
+    const prisma = getPrisma();
+
+    // Step 1: Get all achievement goals with user progress
+    const goalsWithProgress = await prisma.achievementGoal.findMany({
+      select: {
+        id: true,
+        collectionId: true,
+        pointsRequired: true,
+        userAchievements: {
+          where: { userId: targetUserId },
+          select: { progress: true },
+        },
+      },
+    });
+
+    // Step 2: Group by collection, keep only those with progress > 0
+    const collectionProgress = new Map<
+      string,
+      { total: number; current: number }
+    >();
+
+    for (const goal of goalsWithProgress) {
+      const entry = collectionProgress.get(goal.collectionId) ?? {
+        total: 0,
+        current: 0,
+      };
+
+      entry.total += goal.pointsRequired;
+      const ua = goal.userAchievements[0];
+      if (ua) {
+        entry.current += Math.min(ua.progress, goal.pointsRequired);
+      }
+
+      collectionProgress.set(goal.collectionId, entry);
+    }
+
+    // Filter: only collections where user has any progress
+    const activeCollectionIds: string[] = [];
+    const progressData = new Map<string, { current: number; total: number }>();
+
+    for (const [collectionId, progress] of collectionProgress) {
+      if (progress.total > 0 && progress.current > 0) {
+        activeCollectionIds.push(collectionId);
+        progressData.set(collectionId, progress);
+      }
+    }
+
+    const total = activeCollectionIds.length;
+
+    if (total === 0) {
+      return {
+        collections: [],
+        pagination: { cursor: null, hasMore: false, limit: params.limit, total: 0 },
+      };
+    }
+
+    // Step 3: Fetch collection details with cursor pagination
+    const collections = await prisma.badgeCollection.findMany({
+      where: { id: { in: activeCollectionIds } },
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      take: params.limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: { select: { handle: true } },
+        _count: { select: { badges: true } },
+      },
+    });
+
+    // Step 4: Get earned badge count for user
+    const collectionIds = collections.slice(0, params.limit).map((c) => c.id);
+    const earnedBadges =
+      collectionIds.length > 0
+        ? await prisma.userBadge.findMany({
+            where: {
+              userId: targetUserId,
+              badge: { collectionId: { in: collectionIds } },
+            },
+            select: { badge: { select: { collectionId: true } } },
+          })
+        : [];
+
+    const earnedByCollection = new Map<string, number>();
+    for (const ub of earnedBadges) {
+      if (ub.badge.collectionId) {
+        earnedByCollection.set(
+          ub.badge.collectionId,
+          (earnedByCollection.get(ub.badge.collectionId) ?? 0) + 1,
+        );
+      }
+    }
+
+    const hasMore = collections.length > params.limit;
+    const paginatedCollections = collections.slice(0, params.limit);
+    const lastItem = paginatedCollections[paginatedCollections.length - 1];
+
+    const items: UserCollectionProgressItem[] = paginatedCollections.map((c) => {
+      const pd = progressData.get(c.id) ?? { current: 0, total: 0 };
+      const isCompleted = pd.total > 0 && pd.current >= pd.total;
+
+      return {
+        id: c.id,
+        title: c.name,
+        description: c.shortDescription ?? c.longDescription ?? '',
+        currentProgress: pd.current,
+        totalProgress: pd.total,
+        coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
+        category: c.category?.handle ?? null,
+        status: isCompleted ? 'completed' : 'in_progress',
+        totalBadges: c._count.badges,
+        earnedBadges: earnedByCollection.get(c.id) ?? 0,
+      };
+    });
+
+    return {
+      collections: items,
+      pagination: {
+        cursor: hasMore && lastItem ? lastItem.id : null,
+        hasMore,
+        limit: params.limit,
+        total,
+      },
+    };
+  }
+
+  /**
+   * EP-04: Get user's completed collections.
+   * More efficient than listCollections with status=completed because it queries
+   * from the UserAchievement side instead of fetching all collections and filtering.
+   */
+  async getCompletedCollections(
+    targetUserId: string,
+    params: { cursor?: string; limit: number },
+  ): Promise<CompletedCollectionsResponse> {
+    const prisma = getPrisma();
+
+    // Step 1: Get all achievement goals grouped by collection, with user progress
+    const goalsWithProgress = await prisma.achievementGoal.findMany({
+      select: {
+        id: true,
+        collectionId: true,
+        pointsRequired: true,
+        userAchievements: {
+          where: { userId: targetUserId },
+          select: { progress: true, completedAt: true },
+        },
+      },
+    });
+
+    // Step 2: Group by collection and determine which are completed
+    const collectionProgress = new Map<
+      string,
+      { total: number; current: number; latestCompletedAt: Date | null }
+    >();
+
+    for (const goal of goalsWithProgress) {
+      const entry = collectionProgress.get(goal.collectionId) ?? {
+        total: 0,
+        current: 0,
+        latestCompletedAt: null,
+      };
+
+      entry.total += goal.pointsRequired;
+      const ua = goal.userAchievements[0];
+      if (ua) {
+        entry.current += Math.min(ua.progress, goal.pointsRequired);
+        if (ua.completedAt && (!entry.latestCompletedAt || ua.completedAt > entry.latestCompletedAt)) {
+          entry.latestCompletedAt = ua.completedAt;
+        }
+      }
+
+      collectionProgress.set(goal.collectionId, entry);
+    }
+
+    // Filter to only completed collections (current >= total && total > 0)
+    const completedCollectionIds: string[] = [];
+    const completionData = new Map<string, { completedAt: Date | null }>();
+
+    for (const [collectionId, progress] of collectionProgress) {
+      if (progress.total > 0 && progress.current >= progress.total) {
+        completedCollectionIds.push(collectionId);
+        completionData.set(collectionId, { completedAt: progress.latestCompletedAt });
+      }
+    }
+
+    const total = completedCollectionIds.length;
+
+    if (total === 0) {
+      return {
+        collections: [],
+        pagination: { cursor: null, hasMore: false, limit: params.limit, total: 0 },
+      };
+    }
+
+    // Step 3: Fetch collection details with cursor pagination
+    const collections = await prisma.badgeCollection.findMany({
+      where: { id: { in: completedCollectionIds } },
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      take: params.limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: { select: { handle: true } },
+        badges: { select: { id: true } },
+        _count: { select: { badges: true } },
+      },
+    });
+
+    // Step 4: Get earned badge count for user in these collections
+    const collectionIds = collections.slice(0, params.limit).map((c) => c.id);
+    const earnedBadges =
+      collectionIds.length > 0
+        ? await prisma.userBadge.findMany({
+            where: {
+              userId: targetUserId,
+              badge: { collectionId: { in: collectionIds } },
+            },
+            select: { badge: { select: { collectionId: true } } },
+          })
+        : [];
+
+    const earnedByCollection = new Map<string, number>();
+    for (const ub of earnedBadges) {
+      if (ub.badge.collectionId) {
+        earnedByCollection.set(
+          ub.badge.collectionId,
+          (earnedByCollection.get(ub.badge.collectionId) ?? 0) + 1,
+        );
+      }
+    }
+
+    const hasMore = collections.length > params.limit;
+    const paginatedCollections = collections.slice(0, params.limit);
+    const lastItem = paginatedCollections[paginatedCollections.length - 1];
+
+    const items: CompletedCollectionItem[] = paginatedCollections.map((c) => {
+      const cd = completionData.get(c.id);
+      return {
+        id: c.id,
+        title: c.name,
+        description: c.shortDescription ?? c.longDescription ?? '',
+        coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
+        category: c.category?.handle ?? null,
+        completedAt: cd?.completedAt?.toISOString() ?? null,
+        totalBadges: c._count.badges,
+        earnedBadges: earnedByCollection.get(c.id) ?? 0,
+      };
+    });
+
+    return {
+      collections: items,
+      pagination: {
+        cursor: hasMore && lastItem ? lastItem.id : null,
+        hasMore,
+        limit: params.limit,
+        total,
+      },
+    };
   }
 
   /**
@@ -357,11 +575,6 @@ export class CollectionsService {
       0,
     );
 
-    const rawGradient = (collection as Record<string, unknown>).backgroundGradient;
-    const gradient = isValidGradient(rawGradient)
-      ? rawGradient
-      : generateGradientFromId(collection.id);
-
     return {
       collection: {
         id: collection.id,
@@ -369,7 +582,7 @@ export class CollectionsService {
         description: collection.longDescription ?? collection.shortDescription ?? '',
         currentProgress: collectionCurrentProgress,
         totalProgress: collectionTotalProgress,
-        backgroundGradient: gradient,
+        coverImage: collection.bannerUrl ? resolveMediaUrl(collection.bannerUrl) : null,
         category: collection.category?.handle ?? null,
       },
       badges,

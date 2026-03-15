@@ -104,6 +104,7 @@ export type AdminBrandSurveyDetailResponse = AdminBrandSurveyListItem & {
     id: string;
     questionText: string;
     type: string;
+    options: Array<{ id: string; text: string }> | null;
     answerCount: number;
   }[];
 };

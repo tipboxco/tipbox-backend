@@ -33,6 +33,7 @@ import { AchievementProgressService } from '../gamification/achievement-progress
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 import type { UserReportCategory } from '../../domain/user/user-report-category.enum';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 type CosmeticSummary = {
   id: string;
@@ -4806,6 +4807,7 @@ export class UserService {
         notIn: excludedUserIds,
         ...(cursor ? { lt: cursor } : {}),
       },
+      user: { ...NOT_SYSTEM_USER },
       displayName: {
         not: null,
       },

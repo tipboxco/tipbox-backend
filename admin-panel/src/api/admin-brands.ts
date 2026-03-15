@@ -146,6 +146,7 @@ export type AdminBrandSurveyDetailResponse = AdminBrandSurveyListItem & {
     id: string;
     questionText: string;
     type: string;
+    options: Array<{ id: string; text: string }> | null;
     answerCount: number;
   }[];
 };
@@ -186,7 +187,14 @@ export type CreateBrandSurveyInput = {
   questions: {
     questionText: string;
     type: string;
+    options?: Array<{ id: string; text: string }> | null;
   }[];
+};
+
+export type AddSurveyQuestionInput = {
+  questionText: string;
+  type: string;
+  options?: Array<{ id: string; text: string }> | null;
 };
 
 export type UpdateBrandSurveyInput = {
@@ -459,12 +467,12 @@ export async function fetchBrandSurvey(
 export async function fetchBrandSurveyResponses(
   id: string,
   params: BrandSurveyResponsesQueryParams = {}
-): Promise<ApiResponse<AdminBrandSurveyResponseListItem[]>> {
+): Promise<ApiResponse<AdminBrandSurveyResponsesResponse>> {
   const query = {
     limit: params.limit ?? 50,
     offset: params.offset ?? 0,
   };
-  return get<AdminBrandSurveyResponseListItem[]>(`/admin/brands/surveys/${id}/responses`, query);
+  return get<AdminBrandSurveyResponsesResponse>(`/admin/brands/surveys/${id}/responses`, query);
 }
 
 export async function createBrandSurvey(
@@ -486,6 +494,23 @@ export async function deleteBrandSurvey(id: string): Promise<ApiResponse<void>> 
 
 export async function closeBrandSurvey(id: string): Promise<ApiResponse<void>> {
   return patch<void>(`/admin/brands/surveys/${id}/close`, {});
+}
+
+export async function addSurveyQuestion(
+  surveyId: string,
+  data: AddSurveyQuestionInput
+): Promise<ApiResponse<{ id: string; questionText: string; type: string; options: Array<{ id: string; text: string }> | null }>> {
+  return post<{ id: string; questionText: string; type: string; options: Array<{ id: string; text: string }> | null }>(
+    `/admin/brands/surveys/${surveyId}/questions`,
+    data
+  );
+}
+
+export async function deleteSurveyQuestion(
+  surveyId: string,
+  questionId: string
+): Promise<ApiResponse<void>> {
+  return del<void>(`/admin/brands/surveys/${surveyId}/questions/${questionId}`);
 }
 
 /* ========== Bridge Program ========== */

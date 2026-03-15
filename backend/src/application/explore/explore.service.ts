@@ -28,6 +28,7 @@ import { PostService } from '../post/post.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { BrandService } from '../brand/brand.service';
 import { getPostCounts } from '../../infrastructure/repositories/prisma-types.helper';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 /** Lightweight shape used by explore mapping helpers (product relation with optional group). */
 interface ExploreProductLike {
@@ -176,14 +177,15 @@ export class ExploreService {
           gte: sevenDaysAgo,
         },
         trendPeriod: 'DAILY',
-        ...(search && {
-          post: {
+        post: {
+          user: { ...NOT_SYSTEM_USER },
+          ...(search && {
             OR: [
               { title: { contains: search, mode: 'insensitive' } },
               { body: { contains: search, mode: 'insensitive' } },
             ],
-          },
-        }),
+          }),
+        },
       },
       include: {
         post: {
@@ -472,7 +474,10 @@ export class ExploreService {
     const eventItems: EventResponse[] = await Promise.all(
       resultEvents.map(async (event) => {
         const participantData = await this.prisma.eventStats.findMany({
-          where: { eventId: event.id },
+          where: {
+            eventId: event.id,
+            user: { ...NOT_SYSTEM_USER },
+          },
           include: {
             user: {
               include: {

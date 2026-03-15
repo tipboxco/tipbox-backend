@@ -33,6 +33,7 @@ import { BadgeEligibilityService } from '../gamification/badge-eligibility.servi
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 /** Prisma Event with product relation */
 type EventWithProduct = Prisma.EventGetPayload<{
@@ -1039,7 +1040,10 @@ export class EventService {
 
     // Leaderboard için en yüksek skora sahip kullanıcıları çek
     const stats = await this.eventStatsDelegate.findMany({
-      where: { eventId: event.id },
+      where: {
+        eventId: event.id,
+        user: { ...NOT_SYSTEM_USER },
+      },
       include: {
         user: {
           include: {
@@ -1147,7 +1151,10 @@ export class EventService {
    */
   private async getEventParticipants(eventId: string, limit: number = 2): Promise<EventParticipant[]> {
     const stats = await this.eventStatsDelegate.findMany({
-      where: { eventId },
+      where: {
+        eventId,
+        user: { ...NOT_SYSTEM_USER },
+      },
       include: {
         user: {
           include: {
@@ -1515,9 +1522,9 @@ export class EventService {
 
       // Leaderboard'u al (ilk 10 kullanıcı)
       const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, 10);
-      
-      const leaderboard: LeaderboardEntry[] = await Promise.all(
-        leaderboardData.map(async (entry, index) => {
+
+      const leaderboardEntries = await Promise.all(
+        leaderboardData.map(async (entry) => {
           const user = await this.prisma.user.findUnique({
             where: { id: entry.userId },
             include: {
@@ -1529,16 +1536,21 @@ export class EventService {
             },
           });
 
+          if (!user || user.isSystemUser) return null;
+
           return {
-            rank: index + 1,
             userId: entry.userId,
-            userName: user?.profile?.displayName || user?.email || 'Unknown',
-            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            userName: user.profile?.displayName || user.email || 'Unknown',
+            avatar: resolveMediaUrl(user.avatars?.[0]?.imageUrl || null, true),
             postsCount: entry.postsCount,
             likesReceived: entry.likesReceivedCount,
           };
         })
       );
+
+      const leaderboard: LeaderboardEntry[] = leaderboardEntries
+        .filter((e): e is NonNullable<typeof e> => e !== null)
+        .map((e, index) => ({ ...e, rank: index + 1 }));
 
       return {
         userId,
@@ -1562,9 +1574,9 @@ export class EventService {
   async getEventLeaderboard(eventId: string, limit: number = 50): Promise<EventLeaderboard> {
     try {
       const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, limit);
-      
-      const items: LeaderboardEntry[] = await Promise.all(
-        leaderboardData.map(async (entry, index) => {
+
+      const entries = await Promise.all(
+        leaderboardData.map(async (entry) => {
           const user = await this.prisma.user.findUnique({
             where: { id: entry.userId },
             include: {
@@ -1576,16 +1588,21 @@ export class EventService {
             },
           });
 
+          if (!user || user.isSystemUser) return null;
+
           return {
-            rank: index + 1,
             userId: entry.userId,
-            userName: user?.profile?.displayName || user?.email || 'Unknown',
-            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            userName: user.profile?.displayName || user.email || 'Unknown',
+            avatar: resolveMediaUrl(user.avatars?.[0]?.imageUrl || null, true),
             postsCount: entry.postsCount,
             likesReceived: entry.likesReceivedCount,
           };
         })
       );
+
+      const items: LeaderboardEntry[] = entries
+        .filter((e): e is NonNullable<typeof e> => e !== null)
+        .map((e, index) => ({ ...e, rank: index + 1 }));
 
       return {
         eventId,

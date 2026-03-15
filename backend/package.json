@@ -121,6 +121,7 @@
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.1.0",
+    "expo-server-sdk": "^6.1.0",
     "express": "^4.21.2",
     "express-async-errors": "^3.1.1",
     "express-openid-connect": "^2.9.1",

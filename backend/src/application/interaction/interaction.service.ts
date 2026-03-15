@@ -731,9 +731,13 @@ export class InteractionService {
 
       const commentsWithData = await Promise.all(
         comments.map(async (comment) => {
-          const [user, replies] = await Promise.all([
+          const [user, replies, activeAvatar] = await Promise.all([
             this.userRepo.findById(comment.userId),
             this.commentRepo.findRepliesByParentId(comment.id),
+            this.prisma.userAvatar.findFirst({
+              where: { userId: comment.userId, isActive: true },
+              orderBy: { createdAt: 'desc' },
+            }),
           ]);
 
           return {
@@ -742,7 +746,7 @@ export class InteractionService {
             user: {
               id: user?.id || '',
               name: user?.name || null,
-              avatar: null, // Avatar sistemi varsa ekle
+              avatar: activeAvatar?.imageUrl || null,
             },
           };
         })

@@ -67,6 +67,15 @@ export const AdminCreateBrandSurveySchema = z.object({
     z.object({
       questionText: z.string().min(1).max(1000),
       type: z.enum(['TEXT', 'SINGLE_CHOICE', 'MULTIPLE_CHOICE']),
+      options: z
+        .array(
+          z.object({
+            id: z.string().min(1),
+            text: z.string().min(1).max(500),
+          })
+        )
+        .optional()
+        .nullable(),
     })
   ),
 });

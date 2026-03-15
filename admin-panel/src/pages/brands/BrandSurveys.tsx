@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -12,9 +13,8 @@ import {
   Modal,
   Form,
   Select,
+  DatePicker,
   message,
-  List,
-  Descriptions,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -23,31 +23,28 @@ import {
   PlusOutlined,
   EyeOutlined,
   CloseCircleOutlined,
-  MinusCircleOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
 import {
   fetchBrandSurveyStats,
   fetchBrandSurveys,
-  fetchBrandSurvey,
   createBrandSurvey,
   closeBrandSurvey,
-  fetchBrandSurveyResponses,
   fetchBrands,
 } from '../../api/admin-brands';
 import type {
   AdminBrandSurveyStatsResponse,
   AdminBrandSurveyListItem,
-  AdminBrandSurveyDetailResponse,
   CreateBrandSurveyInput,
-  AdminBrandSurveyResponseListItem,
 } from '../../api/admin-brands';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
 function BrandSurveys() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<AdminBrandSurveyStatsResponse | null>(null);
   const [surveys, setSurveys] = useState<AdminBrandSurveyListItem[]>([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
@@ -61,13 +58,11 @@ function BrandSurveys() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [responsesModalOpen, setResponsesModalOpen] = useState(false);
-  const [selectedSurvey, setSelectedSurvey] = useState<AdminBrandSurveyDetailResponse | null>(null);
-  const [responses, setResponses] = useState<AdminBrandSurveyResponseListItem[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [loadingResponses, setLoadingResponses] = useState(false);
   const [form] = Form.useForm();
+  const [questionType, setQuestionType] = useState<Record<number, string>>({});
+  const [questionOptions, setQuestionOptions] = useState<
+    Record<number, Array<{ id: string; text: string }>>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +88,7 @@ function BrandSurveys() {
       try {
         const res = await fetchBrands({});
         if (!cancelled && res.data) {
-          setBrands(res.data.map(b => ({ id: b.id, name: b.name })));
+          setBrands(res.data.map((b) => ({ id: b.id, name: b.name })));
         }
       } catch (e) {
         console.error('Failed to load brands:', e);
@@ -126,19 +121,42 @@ function BrandSurveys() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.offset, search]);
 
-  const handleCreate = async (values: CreateBrandSurveyInput) => {
+  const handleCreate = async (values: {
+    brandId: string;
+    title: string;
+    description?: string;
+    dateRange: [unknown, unknown];
+    questions?: Array<{ questionText: string; type: string }>;
+  }) => {
     try {
-      await createBrandSurvey(values);
+      const questions = (values.questions ?? []).map((q, index) => ({
+        questionText: q.questionText,
+        type: q.type,
+        options: questionOptions[index]?.length ? questionOptions[index] : null,
+      }));
+
+      const data: CreateBrandSurveyInput = {
+        brandId: values.brandId,
+        title: values.title,
+        description: values.description,
+        startsAt: (values.dateRange[0] as { toISOString: () => string }).toISOString(),
+        endsAt: (values.dateRange[1] as { toISOString: () => string }).toISOString(),
+        questions,
+      };
+
+      await createBrandSurvey(data);
       message.success('Survey created successfully');
       setCreateModalOpen(false);
       form.resetFields();
+      setQuestionType({});
+      setQuestionOptions({});
       loadSurveys();
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Failed to create survey');
     }
   };
 
-  const handleClose = async (id: string, title: string) => {
+  const handleClose = async (surveyId: string, title: string) => {
     Modal.confirm({
       title: 'Close Survey',
       content: `Are you sure you want to close "${title}"? Users will no longer be able to respond.`,
@@ -146,7 +164,7 @@ function BrandSurveys() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await closeBrandSurvey(id);
+          await closeBrandSurvey(surveyId);
           message.success('Survey closed successfully');
           loadSurveys();
         } catch (e) {
@@ -156,31 +174,41 @@ function BrandSurveys() {
     });
   };
 
-  const openDetailModal = async (id: string) => {
-    setLoadingDetail(true);
-    setDetailModalOpen(true);
-    try {
-      const res = await fetchBrandSurvey(id);
-      setSelectedSurvey(res.data);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to load survey details');
-    } finally {
-      setLoadingDetail(false);
+  const getStatusTag = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return <Tag color="green">Active</Tag>;
+      case 'UPCOMING':
+        return <Tag color="blue">Upcoming</Tag>;
+      case 'ENDED':
+        return <Tag color="default">Ended</Tag>;
+      default:
+        return <Tag>{status}</Tag>;
     }
   };
 
-  const openResponsesModal = async (survey: AdminBrandSurveyListItem) => {
-    setSelectedSurvey(survey as AdminBrandSurveyDetailResponse);
-    setResponsesModalOpen(true);
-    setLoadingResponses(true);
-    try {
-      const res = await fetchBrandSurveyResponses(survey.id, { limit: 100, offset: 0 });
-      setResponses(res.data ?? []);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to load responses');
-    } finally {
-      setLoadingResponses(false);
-    }
+  const addOptionToQuestion = (fieldIndex: number) => {
+    const newId = `opt_${Date.now()}`;
+    setQuestionOptions((prev) => ({
+      ...prev,
+      [fieldIndex]: [...(prev[fieldIndex] ?? []), { id: newId, text: '' }],
+    }));
+  };
+
+  const removeOptionFromQuestion = (fieldIndex: number, optionId: string) => {
+    setQuestionOptions((prev) => ({
+      ...prev,
+      [fieldIndex]: (prev[fieldIndex] ?? []).filter((o) => o.id !== optionId),
+    }));
+  };
+
+  const updateQuestionOptionText = (fieldIndex: number, optionId: string, text: string) => {
+    setQuestionOptions((prev) => ({
+      ...prev,
+      [fieldIndex]: (prev[fieldIndex] ?? []).map((o) =>
+        o.id === optionId ? { ...o, text } : o,
+      ),
+    }));
   };
 
   const columns: ColumnsType<AdminBrandSurveyListItem> = [
@@ -195,23 +223,29 @@ function BrandSurveys() {
       title: 'Title',
       dataIndex: 'title',
       key: 'title',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
     },
     {
       title: 'Status',
-      dataIndex: 'isActive',
-      key: 'isActive',
+      dataIndex: 'status',
+      key: 'status',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'center',
-      render: (isActive) =>
-        isActive ? <Tag color="green">Active</Tag> : <Tag color="gray">Closed</Tag>,
+      render: (status: string) => getStatusTag(status),
+    },
+    {
+      title: 'Questions',
+      dataIndex: 'questionCount',
+      key: 'questionCount',
+      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
+      align: 'right',
     },
     {
       title: 'Responses',
       dataIndex: 'responseCount',
       key: 'responseCount',
-      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
       align: 'right',
     },
     {
@@ -220,37 +254,23 @@ function BrandSurveys() {
       key: 'createdAt',
       width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
-      render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
-    },
-    {
-      title: 'Closed',
-      dataIndex: 'closedAt',
-      key: 'closedAt',
-      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
-      ellipsis: true,
-      render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
+      render: (date: string) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
     },
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_TRIPLE,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
       render: (_, record) => (
         <Space size="small">
           <Button
             size="small"
-            type="text"
+            type="link"
             icon={<EyeOutlined />}
-            onClick={() => openDetailModal(record.id)}
-          />
-          <Button
-            size="small"
-            type="text"
-            icon={<FormOutlined />}
-            onClick={() => openResponsesModal(record)}
+            onClick={() => navigate(`/brands/surveys/${record.id}`)}
           >
-            {record.responseCount}
+            View
           </Button>
-          {record.isActive && (
+          {record.status === 'ACTIVE' && (
             <Button
               size="small"
               type="text"
@@ -284,11 +304,6 @@ function BrandSurveys() {
           icon: <FormOutlined />,
         },
         {
-          label: 'Completed',
-          value: stats.completed,
-          icon: <FormOutlined />,
-        },
-        {
           label: 'Total Responses',
           value: stats.totalResponses,
           icon: <FormOutlined />,
@@ -302,7 +317,7 @@ function BrandSurveys() {
         title="Brand Surveys"
         description="Create and manage brand surveys"
         icon={<FormOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -318,7 +333,7 @@ function BrandSurveys() {
       )}
 
       <Card>
-        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Input
               placeholder="Search surveys..."
@@ -328,7 +343,11 @@ function BrandSurveys() {
               style={{ width: 250 }}
               allowClear
             />
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setCreateModalOpen(true)}
+            >
               Create Survey
             </Button>
           </Row>
@@ -346,7 +365,7 @@ function BrandSurveys() {
               showTotal: (total) => `Total ${total} surveys`,
             }}
             onChange={handleTableChange}
-            scroll={TABLE_SCROLL_CONFIGS.DEFAULT}
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
             locale={{
               emptyText: <Empty description="No surveys found" />,
             }}
@@ -361,6 +380,8 @@ function BrandSurveys() {
         onCancel={() => {
           setCreateModalOpen(false);
           form.resetFields();
+          setQuestionType({});
+          setQuestionOptions({});
         }}
         onOk={() => form.submit()}
         width={700}
@@ -375,9 +396,9 @@ function BrandSurveys() {
               placeholder="Select brand"
               showSearch
               filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
               }
-              options={brands.map(b => ({ label: b.name, value: b.id }))}
+              options={brands.map((b) => ({ label: b.name, value: b.id }))}
             />
           </Form.Item>
           <Form.Item
@@ -390,13 +411,20 @@ function BrandSurveys() {
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} placeholder="Optional survey description" />
           </Form.Item>
+          <Form.Item
+            name="dateRange"
+            label="Date Range"
+            rules={[{ required: true, message: 'Please select date range' }]}
+          >
+            <DatePicker.RangePicker showTime style={{ width: '100%' }} />
+          </Form.Item>
           <Form.List name="questions">
             {(fields, { add, remove }) => (
               <>
                 <div style={{ marginBottom: 8, fontWeight: 'bold' }}>Questions</div>
                 {fields.map((field, index) => (
                   <Card key={field.key} size="small" style={{ marginBottom: 8 }}>
-                    <Space orientation="vertical" style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }}>
                       <Form.Item
                         {...field}
                         name={[field.name, 'questionText']}
@@ -408,25 +436,92 @@ function BrandSurveys() {
                       <Space>
                         <Form.Item
                           {...field}
-                          name={[field.name, 'questionType']}
+                          name={[field.name, 'type']}
                           rules={[{ required: true, message: 'Select type' }]}
                           style={{ marginBottom: 0 }}
+                          initialValue="TEXT"
                         >
-                          <Select placeholder="Type" style={{ width: 120 }}>
-                            <Select.Option value="TEXT">Text</Select.Option>
-                            <Select.Option value="RATING">Rating</Select.Option>
-                            <Select.Option value="CHOICE">Choice</Select.Option>
-                          </Select>
+                          <Select
+                            placeholder="Type"
+                            style={{ width: 160 }}
+                            onChange={(value: string) =>
+                              setQuestionType((prev) => ({ ...prev, [index]: value }))
+                            }
+                            options={[
+                              { label: 'Text', value: 'TEXT' },
+                              { label: 'Single Choice', value: 'SINGLE_CHOICE' },
+                              { label: 'Multiple Choice', value: 'MULTIPLE_CHOICE' },
+                            ]}
+                          />
                         </Form.Item>
                         <Button
                           size="small"
                           danger
-                          icon={<MinusCircleOutlined />}
-                          onClick={() => remove(field.name)}
+                          icon={<DeleteOutlined />}
+                          onClick={() => {
+                            remove(field.name);
+                            setQuestionType((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                            setQuestionOptions((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                          }}
                         >
                           Remove
                         </Button>
                       </Space>
+
+                      {(questionType[index] === 'SINGLE_CHOICE' ||
+                        questionType[index] === 'MULTIPLE_CHOICE') && (
+                        <div style={{ marginTop: 8 }}>
+                          <div
+                            style={{
+                              marginBottom: 4,
+                              fontSize: 12,
+                              color: 'var(--ant-color-text-secondary)',
+                            }}
+                          >
+                            Options
+                          </div>
+                          {(questionOptions[index] ?? []).map((option, optIndex) => (
+                            <Space
+                              key={option.id}
+                              style={{ display: 'flex', marginBottom: 4 }}
+                              align="center"
+                            >
+                              <Input
+                                size="small"
+                                placeholder={`Option ${optIndex + 1}`}
+                                value={option.text}
+                                onChange={(e) =>
+                                  updateQuestionOptionText(index, option.id, e.target.value)
+                                }
+                                style={{ width: 300 }}
+                              />
+                              <Button
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => removeOptionFromQuestion(index, option.id)}
+                              />
+                            </Space>
+                          ))}
+                          <Button
+                            size="small"
+                            type="dashed"
+                            onClick={() => addOptionToQuestion(index)}
+                            icon={<PlusOutlined />}
+                            style={{ marginTop: 4 }}
+                          >
+                            Add Option
+                          </Button>
+                        </div>
+                      )}
                     </Space>
                   </Card>
                 ))}
@@ -437,132 +532,6 @@ function BrandSurveys() {
             )}
           </Form.List>
         </Form>
-      </Modal>
-
-      {/* Detail Modal */}
-      <Modal
-        title="Survey Details"
-        open={detailModalOpen}
-        onCancel={() => {
-          setDetailModalOpen(false);
-          setSelectedSurvey(null);
-        }}
-        footer={[
-          <Button key="close" onClick={() => setDetailModalOpen(false)}>
-            Close
-          </Button>,
-        ]}
-        width={700}
-      >
-        {loadingDetail ? (
-          <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
-        ) : (
-          selectedSurvey && (
-            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-              <Descriptions bordered column={2} size="small">
-                <Descriptions.Item label="Brand" span={2}>
-                  {selectedSurvey.brandName}
-                </Descriptions.Item>
-                <Descriptions.Item label="Title" span={2}>
-                  {selectedSurvey.title}
-                </Descriptions.Item>
-                {selectedSurvey.description && (
-                  <Descriptions.Item label="Description" span={2}>
-                    {selectedSurvey.description}
-                  </Descriptions.Item>
-                )}
-                <Descriptions.Item label="Status">
-                  {selectedSurvey.isActive ? (
-                    <Tag color="green">Active</Tag>
-                  ) : (
-                    <Tag color="gray">Closed</Tag>
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="Responses">
-                  {selectedSurvey.responseCount}
-                </Descriptions.Item>
-                <Descriptions.Item label="Created">
-                  {new Date(selectedSurvey.createdAt).toLocaleString('en-US')}
-                </Descriptions.Item>
-                {selectedSurvey.closedAt && (
-                  <Descriptions.Item label="Closed">
-                    {new Date(selectedSurvey.closedAt).toLocaleString('en-US')}
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
-
-              {selectedSurvey.questions && selectedSurvey.questions.length > 0 && (
-                <Card title="Questions" size="small">
-                  <List
-                    dataSource={selectedSurvey.questions}
-                    renderItem={(question, index) => (
-                      <List.Item>
-                        <List.Item.Meta
-                          title={`${index + 1}. ${question.questionText}`}
-                          description={
-                            <Space>
-                              <Tag>{question.questionType}</Tag>
-                              {question.options && question.options.length > 0 && (
-                                <span>Options: {question.options.join(', ')}</span>
-                              )}
-                            </Space>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </Card>
-              )}
-            </Space>
-          )
-        )}
-      </Modal>
-
-      {/* Responses Modal */}
-      <Modal
-        title={`Responses - ${selectedSurvey?.title}`}
-        open={responsesModalOpen}
-        onCancel={() => {
-          setResponsesModalOpen(false);
-          setSelectedSurvey(null);
-          setResponses([]);
-        }}
-        footer={[
-          <Button key="close" onClick={() => setResponsesModalOpen(false)}>
-            Close
-          </Button>,
-        ]}
-        width={900}
-      >
-        {loadingResponses ? (
-          <div style={{ textAlign: 'center', padding: '20px' }}>Loading responses...</div>
-        ) : responses.length === 0 ? (
-          <Empty description="No responses yet" />
-        ) : (
-          <List
-            dataSource={responses}
-            renderItem={(response) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={`${response.username ?? response.userEmail ?? 'Anonymous'} - ${new Date(
-                    response.createdAt
-                  ).toLocaleString('en-US')}`}
-                  description={
-                    <div>
-                      {Object.entries(response.answers as Record<string, string>).map(
-                        ([questionId, answer]) => (
-                          <div key={questionId} style={{ marginBottom: 4 }}>
-                            <strong>Q{questionId}:</strong> {answer}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  }
-                />
-              </List.Item>
-            )}
-          />
-        )}
       </Modal>
     </div>
   );

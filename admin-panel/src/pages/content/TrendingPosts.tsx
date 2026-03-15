@@ -141,19 +141,11 @@ function TrendingPosts() {
 
   const columns: ColumnsType<AdminTrendingPostListItem> = [
     {
-      title: 'Title',
+      title: 'Post',
       key: 'title',
       width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
       render: (_, record) => titleDisplay(record),
-    },
-    {
-      title: 'Excerpt',
-      dataIndex: 'bodyExcerpt',
-      key: 'bodyExcerpt',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
-      ellipsis: true,
-      render: (text) => text ?? '—',
     },
     {
       title: 'Type',

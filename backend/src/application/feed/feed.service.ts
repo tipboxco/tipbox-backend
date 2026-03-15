@@ -32,6 +32,7 @@ import { FeedScoringService } from './feed-scoring.service';
 import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
 import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
 import { getPostCounts, asProfileUpdateMany } from '../../infrastructure/repositories/prisma-types.helper';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 /** Lightweight shape used by feed mapping helpers (product relation with optional group). */
 interface FeedProductLike {
@@ -2217,9 +2218,9 @@ export class FeedService {
     try {
       logger.info({ message: 'Starting to add all existing posts to feeds' });
 
-      // Tüm aktif kullanıcıları al
+      // Tüm aktif kullanıcıları al (sistem kullanıcıları hariç)
       const allActiveUsers = await this.prisma.user.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', ...NOT_SYSTEM_USER },
         select: { id: true },
       });
 

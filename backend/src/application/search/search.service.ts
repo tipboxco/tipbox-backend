@@ -3,6 +3,7 @@ import { SearchData, SearchUserData, SearchBrandData, SearchProductData } from '
 import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { NOT_SYSTEM_USER } from '../../infrastructure/config/system-users';
 
 export type SearchTypes = Array<'user' | 'brand' | 'product'>;
 
@@ -37,6 +38,7 @@ export class SearchService {
         // Default mode: En son aktif kullanıcıları getir
         tasks.push(
           this.prisma.user.findMany({
+            where: { ...NOT_SYSTEM_USER },
             include: {
               profile: true,
               titles: {
@@ -60,6 +62,7 @@ export class SearchService {
         tasks.push(
           this.prisma.user.findMany({
             where: {
+              ...NOT_SYSTEM_USER,
               OR: [
                 { email: { contains: trimmed, mode: 'insensitive' } },
                 { profile: { is: { displayName: { contains: trimmed, mode: 'insensitive' } } } },
