@@ -501,7 +501,7 @@ export class BrandService {
       const items = (hasMore ? brands.slice(0, limit) : brands).map((brand) => ({
         brandId: brand.id,
         name: brand.name,
-        image: brand.imageUrl,
+        image: `${brand.imageUrl}&token=${process.env.LOGO_DEV_API_TOKEN}`,
       }));
 
       return {
