@@ -9,7 +9,6 @@ import {
   ShoppingOutlined,
   ShopOutlined,
   TrophyOutlined,
-  CalendarOutlined,
   CreditCardOutlined,
   WalletOutlined,
   MessageOutlined,
@@ -100,22 +99,12 @@ const menuItems: MenuItem[] = [
     icon: <TrophyOutlined />,
     label: 'Gamification',
     children: [
+      { key: 'gamification-events', label: 'Community Events', path: '/events' },
       { key: 'gamification-collections', label: 'Collections', path: '/gamification/collections' },
       { key: 'gamification-event-badges', label: 'Event Badges', path: '/gamification/event-badges' },
       { key: 'gamification-brand-badges', label: 'Brand Badges', path: '/gamification/brand-badges' },
       { key: 'gamification-cosmetic-badges', label: 'Cosmetic Badges', path: '/gamification/cosmetic-badges' },
       { key: 'gamification-progress', label: 'User Progress', path: '/gamification/progress' },
-    ],
-  },
-  {
-    key: 'events',
-    icon: <CalendarOutlined />,
-    label: 'Events',
-    children: [
-      { key: 'events-list', label: 'Event List', path: '/events' },
-      { key: 'events-badges', label: 'Event Badges', path: '/events/badges' },
-      { key: 'events-rewards', label: 'Event Rewards', path: '/events/rewards' },
-      { key: 'events-analytics', label: 'Event Analytics', path: '/events/analytics' },
     ],
   },
   {

@@ -14,6 +14,7 @@ import QueueProvider from '../infrastructure/queue/queue.provider';
 import { getPrisma } from '../infrastructure/repositories/prisma.client';
 import WorkerManager from '../infrastructure/workers';
 import { maybeBackfillFeedOnStartup } from '../infrastructure/scheduler/feed-distribution.startup-backfill';
+import { ensureDefaultActionTypes } from '../infrastructure/scheduler/action-types.bootstrap';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -63,6 +64,9 @@ async function startServer() {
     // Worker'ları başlat
     const workerManager = new WorkerManager();
     await workerManager.startAll();
+
+    // Eksik action type'ları oluştur (idempotent, non-blocking)
+    void ensureDefaultActionTypes();
 
     // Feed tablosu boş + queue idle ise (ör: seed sonrası/restart), feed distribution job'larını otomatik kuyruğa al.
     // Non-blocking: server boot'u bekletmesin.

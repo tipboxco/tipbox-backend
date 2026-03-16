@@ -21,6 +21,7 @@ import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
 interface AddBadgeToEventModalProps {
   open: boolean;
   eventId: string;
+  nextRank?: number;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -37,7 +38,7 @@ const RARITY_COLORS: Record<string, string> = {
   EPIC: 'purple',
 };
 
-function AddBadgeToEventModal({ open, eventId, onClose, onSuccess }: AddBadgeToEventModalProps) {
+function AddBadgeToEventModal({ open, eventId, nextRank = 1, onClose, onSuccess }: AddBadgeToEventModalProps) {
   const [form] = Form.useForm<FormValues>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +123,7 @@ function AddBadgeToEventModal({ open, eventId, onClose, onSuccess }: AddBadgeToE
         {...FORM_LAYOUT_VERTICAL}
         onFinish={handleSubmit}
         initialValues={{
-          rank: 1,
+          rank: nextRank,
         }}
       >
         {error && (

@@ -51,6 +51,7 @@ import type {
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import EditEventModal from './modals/EditEventModal';
 import AddBadgeToEventModal from './modals/AddBadgeToEventModal';
+import CreateBadgeModal from '../gamification/CreateBadgeModal';
 import IdDisplay from '../../components/IdDisplay';
 
 const { TextArea } = Input;
@@ -281,7 +282,8 @@ function EventSummaryTab({
 function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: string }) {
   const [list, setList] = useState<AdminEventBadgeListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [addExistingModalOpen, setAddExistingModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRank, setEditRank] = useState(0);
@@ -455,14 +457,21 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
   return (
     <div>
       <Card bordered title={`Event Badges: ${eventTitle}`} style={{ marginBottom: 16 }}>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setAddModalOpen(true)}
-          style={{ marginBottom: 16 }}
-        >
-          Add Badge to Event
-        </Button>
+        <Space style={{ marginBottom: 16 }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalOpen(true)}
+          >
+            New Badge
+          </Button>
+          <Button
+            icon={<PlusOutlined />}
+            onClick={() => setAddExistingModalOpen(true)}
+          >
+            Add Existing Badge
+          </Button>
+        </Space>
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 48 }}>
@@ -486,14 +495,28 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
         )}
       </Card>
 
-      {addModalOpen && (
-        <AddBadgeToEventModal
-          open={addModalOpen}
+      {createModalOpen && (
+        <CreateBadgeModal
+          badgeType="EVENT"
+          listPath="/gamification/event-badges"
           eventId={eventId}
-          onClose={() => setAddModalOpen(false)}
+          onClose={() => setCreateModalOpen(false)}
           onSuccess={() => {
             load();
-            setAddModalOpen(false);
+            setCreateModalOpen(false);
+          }}
+        />
+      )}
+
+      {addExistingModalOpen && (
+        <AddBadgeToEventModal
+          open={addExistingModalOpen}
+          eventId={eventId}
+          nextRank={list.length > 0 ? Math.max(...list.map((b) => b.rank)) + 1 : 1}
+          onClose={() => setAddExistingModalOpen(false)}
+          onSuccess={() => {
+            load();
+            setAddExistingModalOpen(false);
           }}
         />
       )}

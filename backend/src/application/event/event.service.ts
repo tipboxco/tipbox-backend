@@ -1276,7 +1276,19 @@ export class EventService {
         .incrementProgressByCode(userId, MainAction.JOIN, 'ALL', 1)
         .catch((err) => {
           logger.warn({
-            message: 'Failed to increment achievement progress for event join',
+            message: 'Failed to increment achievement progress for event join (ALL)',
+            userId,
+            eventId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+      // Collection badge progress for EVENT-specific join tracking (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.JOIN, 'EVENT', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for event join (EVENT)',
             userId,
             eventId,
             error: err instanceof Error ? err.message : String(err),

@@ -450,15 +450,29 @@ router.post(
     if (!event) throw new NotFoundError('Event bulunamadı');
     const badge = await prisma.badge.findUnique({ where: { id: body.badgeId } });
     if (!badge) throw new NotFoundError('Badge bulunamadı');
+
+    // Check if rank already exists for this event, if so use next available rank
+    const existingWithRank = await prisma.eventBadge.findFirst({
+      where: { eventId, rank: body.rank },
+    });
+    let rank = body.rank;
+    if (existingWithRank) {
+      const maxRankEntry = await prisma.eventBadge.aggregate({
+        where: { eventId },
+        _max: { rank: true },
+      });
+      rank = (maxRankEntry._max.rank ?? 0) + 1;
+    }
+
     const eb = await prisma.eventBadge.create({
-      data: { eventId, badgeId: body.badgeId, rank: body.rank, displayOrder: body.displayOrder ?? undefined },
+      data: { eventId, badgeId: body.badgeId, rank, displayOrder: body.displayOrder ?? null },
       include: { badge: { include: { category: { select: { name: true } } } } },
     });
     await prisma.adminLog.create({
       data: {
         adminId,
         action: 'EVENT_BADGE_ADD',
-        description: `eventId: ${eventId}, badgeId: ${body.badgeId}, rank: ${body.rank}`,
+        description: `eventId: ${eventId}, badgeId: ${body.badgeId}, rank: ${rank}`,
         entityType: 'event_badge',
         entityId: 0,
       },

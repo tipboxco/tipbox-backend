@@ -61,9 +61,6 @@ import UserProgress from './pages/gamification/UserProgress';
 // Event pages
 import EventList from './pages/events/EventList';
 import EventDetail from './pages/events/EventDetail';
-import EventBadges from './pages/events/EventBadges';
-import EventRewards from './pages/events/EventRewards';
-import EventAnalytics from './pages/events/EventAnalytics';
 
 // Billing & Rewards pages
 import Transactions from './pages/commerce/Transactions';
@@ -201,9 +198,6 @@ function App() {
 
           {/* Events — static routes first, :id last */}
           <Route path="events" element={<EventList />} />
-          <Route path="events/badges" element={<EventBadges />} />
-          <Route path="events/rewards" element={<EventRewards />} />
-          <Route path="events/analytics" element={<EventAnalytics />} />
           <Route path="events/:id" element={<EventDetail />} />
 
           {/* Billing & Rewards */}

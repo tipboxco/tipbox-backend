@@ -485,6 +485,7 @@ export class InventoryService {
       pipeline.complete({ inventoryId: inventory.id });
 
       // Action log (fire-and-forget)
+      const inventoryActionCode = hasOwned ? 'INVENTORY_OWN' : 'INVENTORY_TRIED';
       this.actionLogService
         .logAction({
           userId,
@@ -492,7 +493,7 @@ export class InventoryService {
           actionTypeCode: 'INVENTORY_ADD',
           entityType: 'inventory',
           entityId: inventory.id,
-          metadata: { productId: dto.productId },
+          metadata: { productId: dto.productId, status: dto.status },
         })
         .catch((err) => {
           logger.warn({
@@ -509,6 +510,18 @@ export class InventoryService {
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for inventory create',
+            userId,
+            inventoryId: inventory.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+      // Collection badge progress for status-specific tracking (INVENTORY_OWN / INVENTORY_TRIED) - async
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.SYSTEM, inventoryActionCode, 1)
+        .catch((err) => {
+          logger.warn({
+            message: `Failed to increment achievement progress for ${inventoryActionCode}`,
             userId,
             inventoryId: inventory.id,
             error: err instanceof Error ? err.message : String(err),
