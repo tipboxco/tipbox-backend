@@ -30,9 +30,13 @@ inputs:
     required: false
     default: 'false'
   changed_services:
-    description: 'Space-separated list of services to build (empty = all)'
+    description: 'Space-separated list of changed services (empty = all)'
     required: false
     default: ''
+  infra_changed:
+    description: 'Whether infrastructure files (compose/nginx/Dockerfile) changed'
+    required: false
+    default: 'false'
 runs:
   using: 'composite'
   steps:
@@ -49,6 +53,7 @@ runs:
         DB_NAME: ${{ inputs.db_name }}
         FORCE_REBUILD: ${{ inputs.force_rebuild }}
         CHANGED_SERVICES: ${{ inputs.changed_services }}
+        INFRA_CHANGED: ${{ inputs.infra_changed }}
       run: |
         # prepare stage özeldir: git pull yapmadan önce sunucuda script dosyaları yok.
         # Bu yüzden prepare inline heredoc ile çalışır; diğer tüm stage'ler script çağırır.
@@ -75,5 +80,5 @@ runs:
         else
           SCRIPT_PATH="$PROJECT_DIR/.github/scripts/initialize/stage-${STAGE}.sh"
           ssh "$SSH_HOST" \
-            "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' CHANGED_SERVICES='$CHANGED_SERVICES' && bash '$SCRIPT_PATH'"
+            "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' CHANGED_SERVICES='$CHANGED_SERVICES' INFRA_CHANGED='$INFRA_CHANGED' && bash '$SCRIPT_PATH'"
         fi

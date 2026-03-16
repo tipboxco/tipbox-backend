@@ -13,7 +13,11 @@ RUN pnpm install
 # Source
 COPY . .
 
+# Entrypoint script'ini kopyala ve çalıştırılabilir yap
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 5174
 
-# Vite dev server (host 0.0.0.0 via config)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "run", "dev"]
