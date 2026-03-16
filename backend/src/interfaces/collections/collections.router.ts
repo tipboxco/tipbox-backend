@@ -8,8 +8,15 @@ import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import {
   CollectionsListQuerySchema,
   CollectionDetailQuerySchema,
+  UserCollectionProgressQuerySchema,
+  CompletedCollectionsQuerySchema,
 } from './collections.schemas';
-import type { CollectionsListQuery, CollectionDetailQuery } from './collections.schemas';
+import type {
+  CollectionsListQuery,
+  CollectionDetailQuery,
+  UserCollectionProgressQuery,
+  CompletedCollectionsQuery,
+} from './collections.schemas';
 
 const router = Router();
 const notificationService = new NotificationService();
@@ -102,28 +109,10 @@ router.use(authMiddleware);
  *                       totalProgress:
  *                         type: integer
  *                         description: Collection'ın toplam ilerleme hedefi
- *                       backgroundGradient:
- *                         type: object
- *                         properties:
- *                           colors:
- *                             type: array
- *                             items:
- *                               type: string
- *                             description: Min 2 renk, hex formatında
- *                           start:
- *                             type: object
- *                             properties:
- *                               x:
- *                                 type: number
- *                               y:
- *                                 type: number
- *                           end:
- *                             type: object
- *                             properties:
- *                               x:
- *                                 type: number
- *                               y:
- *                                 type: number
+ *                       coverImage:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Collection kapak görseli URL'i
  *                       category:
  *                         type: string
  *                         nullable: true
@@ -214,6 +203,227 @@ router.get(
   '/categories',
   asyncHandler(async (_req: Request, res: Response) => {
     const result = await collectionsService.getCollectionCategories();
+    return res.json(result);
+  }),
+);
+
+/* ========== EP-05: User's Collection Progress (Profile) ========== */
+
+/**
+ * @openapi
+ * /api/collections/user-progress:
+ *   get:
+ *     summary: Kullanıcının ilerleme kaydettiği collection'ları getir
+ *     description: |
+ *       Belirtilen kullanıcının (veya giriş yapan kullanıcının) herhangi bir ilerleme kaydettiği
+ *       collection listesini getirir. Hiç ilerleme olmayan collection'lar listelenmez.
+ *       Profil sayfasında "Koleksiyonlar" bölümünde kullanılır.
+ *       Hem in_progress hem completed collection'ları içerir.
+ *       Cursor tabanlı pagination ile infinite scroll desteği sağlar.
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         description: Hedef kullanıcı ID. Verilmezse giriş yapan kullanıcının collection'ları döner.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (infinite scroll için)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: İlerleme kaydedilmiş collection listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 collections:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       currentProgress:
+ *                         type: integer
+ *                         description: Kullanıcının mevcut ilerlemesi
+ *                       totalProgress:
+ *                         type: integer
+ *                         description: Toplam ilerleme hedefi
+ *                       coverImage:
+ *                         type: string
+ *                         nullable: true
+ *                       category:
+ *                         type: string
+ *                         nullable: true
+ *                       status:
+ *                         type: string
+ *                         enum: [in_progress, completed]
+ *                         description: Collection durumu
+ *                       totalBadges:
+ *                         type: integer
+ *                         description: Collection'daki toplam badge sayısı
+ *                       earnedBadges:
+ *                         type: integer
+ *                         description: Kullanıcının kazandığı badge sayısı
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                       description: Toplam ilerleme kaydedilmiş collection sayısı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/user-progress',
+  validateQuery(UserCollectionProgressQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const currentUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const query = req.query as unknown as UserCollectionProgressQuery;
+    const targetUserId = query.userId || String(currentUserId);
+
+    const result = await collectionsService.getUserCollectionProgress(targetUserId, {
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+
+    return res.json(result);
+  }),
+);
+
+/* ========== EP-04: User's Completed Collections ========== */
+
+/**
+ * @openapi
+ * /api/collections/completed:
+ *   get:
+ *     summary: Kullanıcının tamamladığı collection'ları getir
+ *     description: |
+ *       Belirtilen kullanıcının (veya giriş yapan kullanıcının) tamamladığı collection listesini getirir.
+ *       Profil sayfasında "Tamamlanan Koleksiyonlar" bölümünde kullanılır.
+ *       Cursor tabanlı pagination ile infinite scroll desteği sağlar.
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         description: Hedef kullanıcı ID. Verilmezse giriş yapan kullanıcının tamamladığı collection'lar döner.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (infinite scroll için)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Tamamlanan collection listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 collections:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       coverImage:
+ *                         type: string
+ *                         nullable: true
+ *                       category:
+ *                         type: string
+ *                         nullable: true
+ *                       completedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         description: Son goal'un tamamlandığı tarih
+ *                       totalBadges:
+ *                         type: integer
+ *                         description: Collection'daki toplam badge sayısı
+ *                       earnedBadges:
+ *                         type: integer
+ *                         description: Kullanıcının kazandığı badge sayısı
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                       description: Toplam tamamlanan collection sayısı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/completed',
+  validateQuery(CompletedCollectionsQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const currentUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const query = req.query as unknown as CompletedCollectionsQuery;
+    const targetUserId = query.userId || String(currentUserId);
+
+    const result = await collectionsService.getCompletedCollections(targetUserId, {
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+
     return res.json(result);
   }),
 );

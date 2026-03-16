@@ -3,16 +3,19 @@ import RedisConfigManager from '../config/redis.config';
 import QueueProvider, { NotificationJobData } from '../queue/queue.provider';
 import { NotificationPrismaRepository } from '../repositories/notification-prisma.repository';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { ExpoPushService } from '../push/expo-push.service';
 import logger from '../logger/logger';
 
 export class NotificationWorker {
   private worker!: Worker;
   private redisConfig: RedisConfigManager;
   private notificationRepo: NotificationPrismaRepository;
+  private expoPushService: ExpoPushService;
 
   constructor() {
     this.redisConfig = RedisConfigManager.getInstance();
     this.notificationRepo = new NotificationPrismaRepository();
+    this.expoPushService = new ExpoPushService();
   }
 
   /**
@@ -108,10 +111,9 @@ export class NotificationWorker {
         await this.sendSocketNotification(userId, socketNotification);
       }
 
-      // 3. Send push notification (if enabled)
-      // Note: Push notification service removed (Expo not used)
+      // 3. Send push notification via Expo (if enabled)
       if (sendPush !== false) {
-        logger.debug(`Push notification for ${type} to user ${userId} (push service not implemented)`);
+        await this.expoPushService.sendPushNotification(userId, title, message, data);
       }
 
       // 4. Send email (if enabled and implemented)

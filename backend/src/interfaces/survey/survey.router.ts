@@ -12,8 +12,8 @@ router.use(authMiddleware);
  * @openapi
  * /api/surveys/{surveyId}/questions:
  *   get:
- *     summary: Anket sorularını getirir
- *     description: Belirtilen anketin tüm sorularını ve seçeneklerini döner.
+ *     summary: Get survey questions
+ *     description: Returns all questions and options for the specified survey.
  *     tags: [Surveys]
  *     security:
  *       - bearerAuth: []
@@ -24,10 +24,10 @@ router.use(authMiddleware);
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Anket ID'si
+ *         description: Survey ID
  *     responses:
  *       200:
- *         description: Anket soruları başarıyla getirildi.
+ *         description: Survey questions retrieved successfully.
  *         content:
  *           application/json:
  *             schema:
@@ -44,6 +44,9 @@ router.use(authMiddleware);
  *                         type: string
  *                       text:
  *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [TEXT, SINGLE_CHOICE, MULTIPLE_CHOICE]
  *                       options:
  *                         type: array
  *                         items:
@@ -55,12 +58,14 @@ router.use(authMiddleware);
  *                               type: string
  *                       order:
  *                         type: integer
+ *                       isAnswered:
+ *                         type: boolean
  *                 totalQuestions:
  *                   type: integer
  *       401:
- *         description: Kimlik doğrulaması başarısız.
+ *         description: Unauthorized.
  *       404:
- *         description: Anket bulunamadı.
+ *         description: Survey not found.
  */
 router.get(
   '/:surveyId/questions',
@@ -80,10 +85,12 @@ router.get(
 
 /**
  * @openapi
- * /api/surveys/{surveyId}/questions/{questionId}/answer:
+ * /api/surveys/{surveyId}/submit:
  *   post:
- *     summary: Anket cevabını gönderir
- *     description: Belirtilen soruya verilen cevabı kaydeder veya günceller.
+ *     summary: Submit all survey answers at once
+ *     description: >
+ *       Submits all answers for a survey in a single request, completes the survey,
+ *       awards points, and checks for badge eligibility.
  *     tags: [Surveys]
  *     security:
  *       - bearerAuth: []
@@ -94,14 +101,7 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Anket ID'si
- *       - in: path
- *         name: questionId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Soru ID'si
+ *         description: Survey ID
  *     requestBody:
  *       required: true
  *       content:
@@ -109,14 +109,25 @@ router.get(
  *           schema:
  *             type: object
  *             required:
- *               - answerId
+ *               - answers
  *             properties:
- *               answerId:
- *                 type: string
- *                 description: Seçilen cevap ID'si
+ *               answers:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - questionId
+ *                     - answerId
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                       format: uuid
+ *                     answerId:
+ *                       type: string
+ *                       description: Selected option ID or text answer
  *     responses:
  *       200:
- *         description: Cevap başarıyla kaydedildi.
+ *         description: Survey submitted and completed successfully.
  *         content:
  *           application/json:
  *             schema:
@@ -126,83 +137,37 @@ router.get(
  *                   type: boolean
  *                 message:
  *                   type: string
- *                 isCompleted:
- *                   type: boolean
- *                   description: Tüm sorulara cevap verildiyse true
- *       401:
- *         description: Kimlik doğrulaması başarısız.
- *       404:
- *         description: Anket veya soru bulunamadı.
- */
-router.post(
-  '/:surveyId/questions/:questionId/answer',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { surveyId, questionId } = req.params;
-    const { answerId } = req.body;
-    const userPayload = req.user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
-    }
-
-    if (!answerId) {
-      return res.status(400).json({ success: false, message: 'answerId is required' });
-    }
-
-    const result = await brandService.submitSurveyAnswer(surveyId, questionId, userId, answerId);
-    return res.json(result);
-  }),
-);
-
-/**
- * @openapi
- * /api/surveys/{surveyId}/complete:
- *   post:
- *     summary: Anketi tamamla ve puan kazan
- *     description: Tüm soruları cevaplanan anketi tamamlar, kullanıcıya puan verir ve badge kontrolü yapar.
- *     tags: [Surveys]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: surveyId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Anket ID'si
- *     responses:
- *       200:
- *         description: Anket başarıyla tamamlandı, puan ve badge bilgileri döndü.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 pointsAwarded:
+ *                 awardedPoints:
  *                   type: integer
- *                 totalSurveyPoints:
+ *                 newTotalPoints:
  *                   type: integer
  *                 badgesEarned:
  *                   type: array
  *                   items:
  *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       rarity:
+ *                         type: string
  *       400:
- *         description: Anket henüz tamamlanmadı veya zaten tamamlanmış.
+ *         description: Invalid request or survey already completed.
  *       401:
- *         description: Kimlik doğrulaması başarısız.
+ *         description: Unauthorized.
  *       404:
- *         description: Anket bulunamadı.
+ *         description: Survey not found.
  */
 router.post(
-  '/:surveyId/complete',
+  '/:surveyId/submit',
   asyncHandler(async (req: Request, res: Response) => {
     const { surveyId } = req.params;
+    const { answers } = req.body;
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
@@ -210,7 +175,20 @@ router.post(
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const result = await brandService.completeSurvey(surveyId, userId);
+    if (!answers || !Array.isArray(answers) || answers.length === 0) {
+      return res.status(400).json({ success: false, message: 'answers array is required' });
+    }
+
+    // Validate each answer has required fields
+    for (const answer of answers) {
+      if (!answer.questionId || !answer.answerId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Each answer must have questionId and answerId' });
+      }
+    }
+
+    const result = await brandService.submitSurvey(surveyId, userId, answers);
     return res.json(result);
   }),
 );

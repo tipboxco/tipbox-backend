@@ -3,23 +3,27 @@ import {
   Card,
   Table,
   Select,
-  Input,
   Button,
   Space,
   Empty,
   Alert,
   Modal,
+  Tag,
+  Form,
   message as antdMessage,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { StarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import PostSearchSelect from '../../components/PostSearchSelect';
+import IdDisplay from '../../components/IdDisplay';
 import {
   fetchFeedHighlights,
   createFeedHighlight,
   deleteFeedHighlight,
 } from '../../api/admin-content';
 import type { AdminFeedHighlightListItem } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
@@ -41,7 +45,9 @@ function FeedHighlights() {
   const [reasonFilter, setReasonFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+
+  // Add modal state
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [newPostId, setNewPostId] = useState('');
   const [newReason, setNewReason] = useState('STAFF_PICK');
 
@@ -68,7 +74,7 @@ function FeedHighlights() {
 
   const handleAdd = async () => {
     if (!newPostId.trim()) {
-      antdMessage.warning('Please enter Post ID');
+      antdMessage.warning('Please select a post');
       return;
     }
     setActionLoading('add');
@@ -77,8 +83,9 @@ function FeedHighlights() {
         postId: newPostId.trim(),
         reason: newReason,
       });
-      setShowAdd(false);
+      setAddModalOpen(false);
       setNewPostId('');
+      setNewReason('STAFF_PICK');
       antdMessage.success('Highlight added');
       load();
     } catch (e) {
@@ -86,6 +93,12 @@ function FeedHighlights() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleCloseModal = () => {
+    setAddModalOpen(false);
+    setNewPostId('');
+    setNewReason('STAFF_PICK');
   };
 
   const handleDelete = async (id: string) => {
@@ -110,18 +123,32 @@ function FeedHighlights() {
     });
   };
 
+  const titleDisplay = (record: AdminFeedHighlightListItem) =>
+    record.postTitle?.trim() || record.bodyExcerpt?.trim().slice(0, 80) || '—';
+
   const columns: ColumnsType<AdminFeedHighlightListItem> = [
     {
-      title: 'Post',
-      key: 'post',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
+      title: 'Title',
+      key: 'title',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
-      render: (_, record) =>
-        record.postTitle
-          ? record.postTitle.length > 50
-            ? record.postTitle.slice(0, 50) + '…'
-            : record.postTitle
-          : record.postId,
+      render: (_, record) => titleDisplay(record),
+    },
+    {
+      title: 'Excerpt',
+      dataIndex: 'bodyExcerpt',
+      key: 'bodyExcerpt',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
+      ellipsis: true,
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Type',
+      dataIndex: 'postType',
+      key: 'postType',
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
+      ellipsis: true,
+      render: (type) => (type ? <Tag color={BADGE_COLOR_PRIMARY}>{type}</Tag> : '—'),
     },
     {
       title: 'Author',
@@ -130,6 +157,14 @@ function FeedHighlights() {
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
+    },
+    {
+      title: 'Post ID',
+      dataIndex: 'postId',
+      key: 'postId',
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
+      ellipsis: true,
+      render: (id) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Reason',
@@ -210,41 +245,12 @@ function FeedHighlights() {
                 </Select.Option>
               ))}
             </Select>
-            <Button type="primary" onClick={() => setShowAdd(!showAdd)}>
-              {showAdd ? 'Cancel' : 'Add highlight'}
+            <Button type="primary" onClick={() => setAddModalOpen(true)}>
+              Add highlight
             </Button>
           </Space>
         }
       >
-        {showAdd && (
-          <Space style={{ marginBottom: 16, width: '100%' }}>
-            <Input
-              placeholder="Post ID"
-              value={newPostId}
-              onChange={(e) => setNewPostId(e.target.value)}
-              style={{ width: 200 }}
-            />
-            <Select
-              value={newReason}
-              onChange={setNewReason}
-              style={{ width: 140 }}
-            >
-              {REASONS.map((r) => (
-                <Select.Option key={r.value} value={r.value}>
-                  {r.label}
-                </Select.Option>
-              ))}
-            </Select>
-            <Button
-              type="primary"
-              loading={actionLoading === 'add'}
-              onClick={handleAdd}
-            >
-              Add
-            </Button>
-          </Space>
-        )}
-
         <Table
           columns={columns}
           dataSource={rows}
@@ -269,6 +275,40 @@ function FeedHighlights() {
           }}
         />
       </Card>
+
+      <Modal
+        title="Add Highlight"
+        open={addModalOpen}
+        onCancel={handleCloseModal}
+        onOk={handleAdd}
+        okText="Add"
+        confirmLoading={actionLoading === 'add'}
+        destroyOnClose
+        width={560}
+      >
+        <Form layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="Post" required>
+            <PostSearchSelect
+              value={newPostId}
+              onChange={(id) => setNewPostId(id)}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item label="Reason">
+            <Select
+              value={newReason}
+              onChange={setNewReason}
+              style={{ width: 200 }}
+            >
+              {REASONS.map((r) => (
+                <Select.Option key={r.value} value={r.value}>
+                  {r.label}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

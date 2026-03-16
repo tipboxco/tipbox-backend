@@ -96,6 +96,7 @@ export const AdminTrendingCreateSchema = z.object({
 export const AdminTrendingUpdateSchema = z.object({
   score: z.number().min(0).optional(),
   trendPeriod: TrendPeriodEnum.optional(),
+  refresh: z.boolean().optional(),
 });
 
 export const AdminTopCommunityChoicesQuerySchema = AdminPaginationQuerySchema.extend({

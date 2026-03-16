@@ -26,3 +26,35 @@ export const CollectionDetailQuerySchema = z.object({
 });
 
 export type CollectionDetailQuery = z.infer<typeof CollectionDetailQuerySchema>;
+
+export const UserCollectionProgressQuerySchema = z.object({
+  userId: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return 20;
+      const num = Number(val);
+      if (Number.isNaN(num) || num < 1) return 20;
+      return Math.min(num, 50);
+    }),
+});
+
+export type UserCollectionProgressQuery = z.infer<typeof UserCollectionProgressQuerySchema>;
+
+export const CompletedCollectionsQuerySchema = z.object({
+  userId: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return 20;
+      const num = Number(val);
+      if (Number.isNaN(num) || num < 1) return 20;
+      return Math.min(num, 50);
+    }),
+});
+
+export type CompletedCollectionsQuery = z.infer<typeof CompletedCollectionsQuerySchema>;

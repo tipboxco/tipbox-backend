@@ -265,6 +265,787 @@ router.get(
   })
 );
 
+// ==================== Brand Categories ====================
+
+/**
+ * GET /admin/brands/categories
+ * List brand categories
+ */
+router.get(
+  '/categories',
+  validateQuery(AdminBrandCategoriesQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = req.query as unknown as {
+      search?: string;
+    };
+
+    const categories = await prisma.brandCategory.findMany({
+      where: q.search
+        ? { name: { contains: q.search, mode: 'insensitive' as const } }
+        : undefined,
+      orderBy: { name: 'asc' as const },
+      include: {
+        category: { select: { name: true } },
+        _count: { select: { brands: true } },
+      },
+    });
+
+    const data: AdminBrandCategoryListItem[] = categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      imageUrl: cat.imageUrl,
+      categoryId: cat.categoryId,
+      categoryName: cat.category?.name ?? null,
+      brandCount: cat._count.brands,
+      createdAt: cat.createdAt.toISOString(),
+    }));
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/brands/categories/:id/brands
+ * List brands in a category (with pagination & search)
+ */
+router.get(
+  '/categories/:id/brands',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const offset = Number(req.query.offset) || 0;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+
+    const existing = await prisma.brandCategory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    const where: Record<string, unknown> = { categoryId: id };
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
+
+    const [brands, total] = await Promise.all([
+      prisma.brand.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+          isPopular: true,
+          createdAt: true,
+        },
+      }),
+      prisma.brand.count({ where }),
+    ]);
+
+    const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
+      id: b.id,
+      name: b.name,
+      logoUrl: b.logoUrl,
+      isPopular: b.isPopular,
+      createdAt: b.createdAt.toISOString(),
+    }));
+
+    const pagination: PaginationMeta = { total, limit, offset };
+    return res.json({ success: true, data, pagination });
+  })
+);
+
+/**
+ * POST /admin/brands/categories
+ * Create brand category
+ */
+router.post(
+  '/categories',
+  validateBody(AdminCreateBrandCategorySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const body = req.body as AdminCreateBrandCategoryInput;
+
+    const category = await prisma.brandCategory.create({
+      data: {
+        name: body.name,
+        imageUrl: body.imageUrl ?? null,
+        categoryId: body.categoryId ?? null,
+      },
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_CREATE',
+        description: `categoryId: ${category.id}, name: ${category.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category created', { categoryId: category.id, adminId });
+
+    return res.status(201).json({ success: true, data: category });
+  })
+);
+
+/**
+ * PATCH /admin/brands/categories/:id
+ * Update brand category
+ */
+router.patch(
+  '/categories/:id',
+  validateBody(AdminUpdateBrandCategorySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+    const body = req.body as AdminUpdateBrandCategoryInput;
+
+    const existing = await prisma.brandCategory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    // Clean up old image from S3 if being replaced
+    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
+      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
+    }
+
+    const category = await prisma.brandCategory.update({
+      where: { id },
+      data: body,
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_UPDATE',
+        description: `categoryId: ${category.id}, name: ${category.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category updated', { categoryId: category.id, adminId });
+
+    return res.json({ success: true, data: category });
+  })
+);
+
+/**
+ * DELETE /admin/brands/categories/:id
+ * Delete brand category
+ */
+router.delete(
+  '/categories/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+
+    const existing = await prisma.brandCategory.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { brands: true } },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Brand category not found');
+    }
+
+    if (existing._count.brands > 0) {
+      throw new ValidationError(
+        `Cannot delete brand category with ${existing._count.brands} brands. Reassign brands first.`
+      );
+    }
+
+    await prisma.brandCategory.delete({ where: { id } });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_CATEGORY_DELETE',
+        description: `categoryId: ${id}, name: ${existing.name}`,
+        entityType: 'brand_category',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand category deleted', { categoryId: id, adminId });
+
+    return res.json({ success: true, message: 'Brand category deleted' });
+  })
+);
+
+// ==================== Brand Surveys ====================
+// NOTE: Survey routes MUST be defined before /:id to avoid Express matching "surveys" as an :id param
+
+/**
+ * GET /admin/brands/surveys/stats
+ * Get brand surveys statistics
+ */
+router.get(
+  '/surveys/stats',
+  asyncHandler(async (req: Request, res: Response) => {
+    const total = await prisma.brandSurvey.count();
+
+    // Active surveys (started but not ended)
+    const now = new Date();
+    const active = await prisma.brandSurvey.count({
+      where: {
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+    });
+
+    // Total responses
+    const totalResponses = await prisma.brandSurveyAnswer.count();
+
+    // Average response rate (responses / questions)
+    const totalQuestions = await prisma.brandSurveyQuestion.count();
+    const avgResponseRate = totalQuestions > 0 ? (totalResponses / totalQuestions) * 100 : 0;
+
+    // Ending soon (within 7 days)
+    const sevenDaysFromNow = new Date(now);
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+    const endingSoonSurveys = await prisma.brandSurvey.findMany({
+      where: {
+        endsAt: {
+          gt: now,
+          lte: sevenDaysFromNow,
+        },
+      },
+      take: 5,
+      orderBy: { endsAt: 'asc' },
+      include: {
+        brand: { select: { name: true } },
+      },
+    });
+
+    const endingSoon = endingSoonSurveys.map((survey) => ({
+      surveyId: survey.id,
+      title: survey.title,
+      brandName: survey.brand.name,
+      endsAt: survey.endsAt.toISOString(),
+    }));
+
+    const data: AdminBrandSurveyStatsResponse = {
+      total,
+      active,
+      totalResponses,
+      avgResponseRate: Math.round(avgResponseRate * 100) / 100,
+      endingSoon,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/brands/surveys
+ * List brand surveys with pagination and filters
+ */
+router.get(
+  '/surveys',
+  validateQuery(AdminBrandSurveysQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = req.query as unknown as {
+      limit: number;
+      offset: number;
+      brandId?: string;
+      status?: string;
+      search?: string;
+      sort: string;
+      order: 'asc' | 'desc';
+    };
+
+    const where: Record<string, unknown> = {};
+    if (q.brandId) where.brandId = q.brandId;
+    if (q.search) {
+      where.OR = [
+        { title: { contains: q.search, mode: 'insensitive' } },
+        { description: { contains: q.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Filter by status
+    const now = new Date();
+    if (q.status === 'ACTIVE') {
+      where.startsAt = { lte: now };
+      where.endsAt = { gt: now };
+    } else if (q.status === 'UPCOMING') {
+      where.startsAt = { gt: now };
+    } else if (q.status === 'ENDED') {
+      where.endsAt = { lte: now };
+    }
+
+    const [surveys, total] = await Promise.all([
+      prisma.brandSurvey.findMany({
+        where,
+        orderBy: { [q.sort]: q.order },
+        take: q.limit,
+        skip: q.offset,
+        include: {
+          brand: { select: { name: true } },
+          _count: { select: { questions: true } },
+          questions: {
+            include: {
+              _count: { select: { answers: true } },
+            },
+          },
+        },
+      }),
+      prisma.brandSurvey.count({ where }),
+    ]);
+
+    const data: AdminBrandSurveyListItem[] = surveys.map((survey) => {
+      const totalResponseCount = survey.questions.reduce(
+        (sum, q) => sum + q._count.answers,
+        0
+      );
+
+      let status = 'UPCOMING';
+      if (survey.startsAt <= now && survey.endsAt > now) {
+        status = 'ACTIVE';
+      } else if (survey.endsAt <= now) {
+        status = 'ENDED';
+      }
+
+      return {
+        id: survey.id,
+        brandId: survey.brandId,
+        brandName: survey.brand.name,
+        title: survey.title,
+        description: survey.description,
+        startsAt: survey.startsAt.toISOString(),
+        endsAt: survey.endsAt.toISOString(),
+        status,
+        questionCount: survey._count.questions,
+        responseCount: totalResponseCount,
+        createdAt: survey.createdAt.toISOString(),
+      };
+    });
+
+    const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
+    return res.json({ success: true, data, pagination });
+  })
+);
+
+/**
+ * GET /admin/brands/surveys/:id
+ * Get survey details
+ */
+router.get(
+  '/surveys/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const survey = await prisma.brandSurvey.findUnique({
+      where: { id },
+      include: {
+        brand: { select: { name: true } },
+        questions: {
+          include: {
+            _count: { select: { answers: true } },
+          },
+        },
+      },
+    });
+
+    if (!survey) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    const now = new Date();
+    let status = 'UPCOMING';
+    if (survey.startsAt <= now && survey.endsAt > now) {
+      status = 'ACTIVE';
+    } else if (survey.endsAt <= now) {
+      status = 'ENDED';
+    }
+
+    const totalResponseCount = survey.questions.reduce(
+      (sum, q) => sum + q._count.answers,
+      0
+    );
+
+    const data: AdminBrandSurveyDetailResponse = {
+      id: survey.id,
+      brandId: survey.brandId,
+      brandName: survey.brand.name,
+      title: survey.title,
+      description: survey.description,
+      startsAt: survey.startsAt.toISOString(),
+      endsAt: survey.endsAt.toISOString(),
+      status,
+      questionCount: survey.questions.length,
+      responseCount: totalResponseCount,
+      createdAt: survey.createdAt.toISOString(),
+      updatedAt: survey.updatedAt.toISOString(),
+      questions: survey.questions.map((q) => ({
+        id: q.id,
+        questionText: q.questionText,
+        type: q.type,
+        options: q.options as Array<{ id: string; text: string }> | null,
+        answerCount: q._count.answers,
+      })),
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/brands/surveys/:id/responses
+ * Get survey responses
+ */
+router.get(
+  '/surveys/:id/responses',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const survey = await prisma.brandSurvey.findUnique({
+      where: { id },
+      include: {
+        questions: {
+          include: {
+            answers: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    profile: { select: { userName: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!survey) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    const totalResponses = survey.questions.reduce(
+      (sum, q) => sum + q.answers.length,
+      0
+    );
+
+    const data: AdminBrandSurveyResponsesResponse = {
+      surveyId: survey.id,
+      surveyTitle: survey.title,
+      totalResponses,
+      questions: survey.questions.map((q) => ({
+        id: q.id,
+        questionText: q.questionText,
+        type: q.type,
+        answers: q.answers.map((a) => ({
+          id: a.id,
+          userId: a.userId,
+          username: a.user.profile?.userName || null,
+          answerText: a.answerText,
+          createdAt: a.createdAt.toISOString(),
+        })),
+      })),
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * POST /admin/brands/surveys/:id/questions
+ * Add a question to an existing survey
+ */
+router.post(
+  '/surveys/:id/questions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+    const body = req.body as { questionText: string; type: string; options?: Array<{ id: string; text: string }> | null };
+
+    if (!body.questionText || !body.type) {
+      throw new ValidationError('questionText and type are required');
+    }
+
+    const survey = await prisma.brandSurvey.findUnique({ where: { id } });
+    if (!survey) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    const validTypes = ['TEXT', 'SINGLE_CHOICE', 'MULTIPLE_CHOICE'] as const;
+    if (!validTypes.includes(body.type as (typeof validTypes)[number])) {
+      throw new ValidationError('Invalid question type. Must be TEXT, SINGLE_CHOICE, or MULTIPLE_CHOICE');
+    }
+
+    const question = await prisma.brandSurveyQuestion.create({
+      data: {
+        surveyId: id,
+        questionText: body.questionText,
+        type: body.type as (typeof validTypes)[number],
+        ...(body.options ? { options: body.options as unknown as import('@prisma/client').Prisma.InputJsonValue } : {}),
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_SURVEY_QUESTION_ADD',
+        description: `surveyId: ${id}, questionId: ${question.id}`,
+        entityType: 'brand_survey_question',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Survey question added', { surveyId: id, questionId: question.id, adminId });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: question.id,
+        questionText: question.questionText,
+        type: question.type,
+        options: question.options as Array<{ id: string; text: string }> | null,
+      },
+    });
+  })
+);
+
+/**
+ * DELETE /admin/brands/surveys/:id/questions/:questionId
+ * Delete a question from a survey
+ */
+router.delete(
+  '/surveys/:id/questions/:questionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id, questionId } = req.params;
+
+    const question = await prisma.brandSurveyQuestion.findFirst({
+      where: { id: questionId, surveyId: id },
+      include: { _count: { select: { answers: true } } },
+    });
+
+    if (!question) {
+      throw new NotFoundError('Question not found');
+    }
+
+    if (question._count.answers > 0) {
+      throw new ValidationError(`Cannot delete question with ${question._count.answers} answers`);
+    }
+
+    await prisma.brandSurveyQuestion.delete({ where: { id: questionId } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_SURVEY_QUESTION_DELETE',
+        description: `surveyId: ${id}, questionId: ${questionId}`,
+        entityType: 'brand_survey_question',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Survey question deleted', { surveyId: id, questionId, adminId });
+
+    return res.json({ success: true, message: 'Question deleted' });
+  })
+);
+
+/**
+ * POST /admin/brands/surveys
+ * Create brand survey
+ */
+router.post(
+  '/surveys',
+  validateBody(AdminCreateBrandSurveySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const body = req.body as AdminCreateBrandSurveyInput;
+
+    // Validate dates
+    if (new Date(body.startsAt) >= new Date(body.endsAt)) {
+      throw new ValidationError('Start date must be before end date');
+    }
+
+    // Create survey with questions in transaction
+    const survey = await prisma.$transaction(async (tx) => {
+      const newSurvey = await tx.brandSurvey.create({
+        data: {
+          brandId: body.brandId,
+          title: body.title,
+          description: body.description ?? null,
+          startsAt: new Date(body.startsAt),
+          endsAt: new Date(body.endsAt),
+        },
+      });
+
+      // Create questions with options
+      for (const q of body.questions) {
+        await tx.brandSurveyQuestion.create({
+          data: {
+            surveyId: newSurvey.id,
+            questionText: q.questionText,
+            type: q.type,
+            ...(q.options ? { options: q.options } : {}),
+          },
+        });
+      }
+
+      return newSurvey;
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_SURVEY_CREATE',
+        description: `surveyId: ${survey.id}, title: ${survey.title}, brandId: ${survey.brandId}, questions: ${body.questions.length}`,
+        entityType: 'brand_survey',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand survey created', { surveyId: survey.id, adminId });
+
+    return res.status(201).json({ success: true, data: survey });
+  })
+);
+
+/**
+ * PATCH /admin/brands/surveys/:id
+ * Update brand survey (title, description, dates only - not questions)
+ */
+router.patch(
+  '/surveys/:id',
+  validateBody(AdminUpdateBrandSurveySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+    const body = req.body as AdminUpdateBrandSurveyInput;
+
+    const existing = await prisma.brandSurvey.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    // Validate dates if both provided
+    if (body.startsAt && body.endsAt) {
+      if (new Date(body.startsAt) >= new Date(body.endsAt)) {
+        throw new ValidationError('Start date must be before end date');
+      }
+    }
+
+    const updateData: Record<string, unknown> = { ...body };
+    if (body.startsAt) updateData.startsAt = new Date(body.startsAt);
+    if (body.endsAt) updateData.endsAt = new Date(body.endsAt);
+
+    const survey = await prisma.brandSurvey.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_SURVEY_UPDATE',
+        description: `surveyId: ${survey.id}, title: ${survey.title}`,
+        entityType: 'brand_survey',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand survey updated', { surveyId: survey.id, adminId });
+
+    return res.json({ success: true, data: survey });
+  })
+);
+
+/**
+ * DELETE /admin/brands/surveys/:id
+ * Delete brand survey
+ */
+router.delete(
+  '/surveys/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+
+    const existing = await prisma.brandSurvey.findUnique({
+      where: { id },
+      include: {
+        questions: {
+          include: {
+            _count: { select: { answers: true } },
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    // Warning if survey has responses
+    const totalResponses = existing.questions.reduce(
+      (sum, q) => sum + q._count.answers,
+      0
+    );
+
+    if (totalResponses > 0) {
+      logger.warn('Deleting survey with responses', {
+        surveyId: id,
+        responseCount: totalResponses,
+        adminId,
+      });
+    }
+
+    await prisma.brandSurvey.delete({ where: { id } });
+
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BRAND_SURVEY_DELETE',
+        description: `surveyId: ${id}, title: ${existing.title}, responses: ${totalResponses}`,
+        entityType: 'brand_survey',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Brand survey deleted', { surveyId: id, adminId });
+
+    return res.json({ success: true, message: 'Survey deleted' });
+  })
+);
+
+// ==================== Brand Detail & CRUD ====================
+
 /**
  * GET /admin/brands/:id
  * Get brand details
@@ -522,679 +1303,6 @@ router.delete(
     logger.info('Brand deleted', { brandId: id, adminId });
 
     return res.json({ success: true, message: 'Brand deleted' });
-  })
-);
-
-// ==================== Brand Categories ====================
-
-/**
- * GET /admin/brands/categories
- * List brand categories
- */
-router.get(
-  '/categories',
-  validateQuery(AdminBrandCategoriesQuerySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const q = req.query as unknown as {
-      search?: string;
-    };
-
-    const where: Record<string, unknown> = {};
-    if (q.search) {
-      where.name = { contains: q.search, mode: 'insensitive' };
-    }
-
-    const categories = await prisma.brandCategory.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      include: {
-        _count: { select: { brands: true } },
-      },
-    });
-
-    const data: AdminBrandCategoryListItem[] = await Promise.all(
-      categories.map(async (cat) => {
-        let categoryName: string | null = null;
-
-        if (cat.categoryId) {
-          const category = await prisma.category.findUnique({
-            where: { id: cat.categoryId },
-            select: { name: true },
-          });
-          categoryName = category?.name || null;
-        }
-
-        return {
-          id: cat.id,
-          name: cat.name,
-          imageUrl: cat.imageUrl,
-          categoryId: cat.categoryId,
-          categoryName,
-          brandCount: cat._count.brands,
-          createdAt: cat.createdAt.toISOString(),
-        };
-      })
-    );
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * GET /admin/brands/categories/:id/brands
- * List brands in a category
- */
-router.get(
-  '/categories/:id/brands',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const existing = await prisma.brandCategory.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    const brands = await prisma.brand.findMany({
-      where: { categoryId: id },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        logoUrl: true,
-        isPopular: true,
-        createdAt: true,
-      },
-    });
-
-    const data: AdminBrandCategoryBrandItem[] = brands.map((b) => ({
-      id: b.id,
-      name: b.name,
-      logoUrl: b.logoUrl,
-      isPopular: b.isPopular,
-      createdAt: b.createdAt.toISOString(),
-    }));
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * POST /admin/brands/categories
- * Create brand category
- */
-router.post(
-  '/categories',
-  validateBody(AdminCreateBrandCategorySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const body = req.body as AdminCreateBrandCategoryInput;
-
-    const category = await prisma.brandCategory.create({
-      data: {
-        name: body.name,
-        imageUrl: body.imageUrl ?? null,
-        categoryId: body.categoryId ?? null,
-      },
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_CREATE',
-        description: `categoryId: ${category.id}, name: ${category.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category created', { categoryId: category.id, adminId });
-
-    return res.status(201).json({ success: true, data: category });
-  })
-);
-
-/**
- * PATCH /admin/brands/categories/:id
- * Update brand category
- */
-router.patch(
-  '/categories/:id',
-  validateBody(AdminUpdateBrandCategorySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-    const body = req.body as AdminUpdateBrandCategoryInput;
-
-    const existing = await prisma.brandCategory.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    // Clean up old image from S3 if being replaced
-    if (body.imageUrl !== undefined && existing.imageUrl && body.imageUrl !== existing.imageUrl) {
-      try { await s3Service.deleteFile(existing.imageUrl); } catch { /* ignore */ }
-    }
-
-    const category = await prisma.brandCategory.update({
-      where: { id },
-      data: body,
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_UPDATE',
-        description: `categoryId: ${category.id}, name: ${category.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category updated', { categoryId: category.id, adminId });
-
-    return res.json({ success: true, data: category });
-  })
-);
-
-/**
- * DELETE /admin/brands/categories/:id
- * Delete brand category
- */
-router.delete(
-  '/categories/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-
-    const existing = await prisma.brandCategory.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { brands: true } },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Brand category not found');
-    }
-
-    if (existing._count.brands > 0) {
-      throw new ValidationError(
-        `Cannot delete brand category with ${existing._count.brands} brands. Reassign brands first.`
-      );
-    }
-
-    await prisma.brandCategory.delete({ where: { id } });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_CATEGORY_DELETE',
-        description: `categoryId: ${id}, name: ${existing.name}`,
-        entityType: 'brand_category',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand category deleted', { categoryId: id, adminId });
-
-    return res.json({ success: true, message: 'Brand category deleted' });
-  })
-);
-
-// ==================== Brand Surveys ====================
-
-/**
- * GET /admin/brands/surveys/stats
- * Get brand surveys statistics
- */
-router.get(
-  '/surveys/stats',
-  asyncHandler(async (req: Request, res: Response) => {
-    const total = await prisma.brandSurvey.count();
-
-    // Active surveys (started but not ended)
-    const now = new Date();
-    const active = await prisma.brandSurvey.count({
-      where: {
-        startsAt: { lte: now },
-        endsAt: { gt: now },
-      },
-    });
-
-    // Total responses
-    const totalResponses = await prisma.brandSurveyAnswer.count();
-
-    // Average response rate (responses / questions)
-    const totalQuestions = await prisma.brandSurveyQuestion.count();
-    const avgResponseRate = totalQuestions > 0 ? (totalResponses / totalQuestions) * 100 : 0;
-
-    // Ending soon (within 7 days)
-    const sevenDaysFromNow = new Date(now);
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-
-    const endingSoonSurveys = await prisma.brandSurvey.findMany({
-      where: {
-        endsAt: {
-          gt: now,
-          lte: sevenDaysFromNow,
-        },
-      },
-      take: 5,
-      orderBy: { endsAt: 'asc' },
-      include: {
-        brand: { select: { name: true } },
-      },
-    });
-
-    const endingSoon = endingSoonSurveys.map((survey) => ({
-      surveyId: survey.id,
-      title: survey.title,
-      brandName: survey.brand.name,
-      endsAt: survey.endsAt.toISOString(),
-    }));
-
-    const data: AdminBrandSurveyStatsResponse = {
-      total,
-      active,
-      totalResponses,
-      avgResponseRate: Math.round(avgResponseRate * 100) / 100,
-      endingSoon,
-    };
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * GET /admin/brands/surveys
- * List brand surveys with pagination and filters
- */
-router.get(
-  '/surveys',
-  validateQuery(AdminBrandSurveysQuerySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const q = req.query as unknown as {
-      limit: number;
-      offset: number;
-      brandId?: string;
-      status?: string;
-      search?: string;
-      sort: string;
-      order: 'asc' | 'desc';
-    };
-
-    const where: Record<string, unknown> = {};
-    if (q.brandId) where.brandId = q.brandId;
-    if (q.search) {
-      where.OR = [
-        { title: { contains: q.search, mode: 'insensitive' } },
-        { description: { contains: q.search, mode: 'insensitive' } },
-      ];
-    }
-
-    // Filter by status
-    const now = new Date();
-    if (q.status === 'ACTIVE') {
-      where.startsAt = { lte: now };
-      where.endsAt = { gt: now };
-    } else if (q.status === 'UPCOMING') {
-      where.startsAt = { gt: now };
-    } else if (q.status === 'ENDED') {
-      where.endsAt = { lte: now };
-    }
-
-    const [surveys, total] = await Promise.all([
-      prisma.brandSurvey.findMany({
-        where,
-        orderBy: { [q.sort]: q.order },
-        take: q.limit,
-        skip: q.offset,
-        include: {
-          brand: { select: { name: true } },
-          _count: { select: { questions: true } },
-          questions: {
-            include: {
-              _count: { select: { answers: true } },
-            },
-          },
-        },
-      }),
-      prisma.brandSurvey.count({ where }),
-    ]);
-
-    const data: AdminBrandSurveyListItem[] = surveys.map((survey) => {
-      const totalResponseCount = survey.questions.reduce(
-        (sum, q) => sum + q._count.answers,
-        0
-      );
-
-      let status = 'UPCOMING';
-      if (survey.startsAt <= now && survey.endsAt > now) {
-        status = 'ACTIVE';
-      } else if (survey.endsAt <= now) {
-        status = 'ENDED';
-      }
-
-      return {
-        id: survey.id,
-        brandId: survey.brandId,
-        brandName: survey.brand.name,
-        title: survey.title,
-        description: survey.description,
-        startsAt: survey.startsAt.toISOString(),
-        endsAt: survey.endsAt.toISOString(),
-        status,
-        questionCount: survey._count.questions,
-        responseCount: totalResponseCount,
-        createdAt: survey.createdAt.toISOString(),
-      };
-    });
-
-    const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
-    return res.json({ success: true, data, pagination });
-  })
-);
-
-/**
- * GET /admin/brands/surveys/:id
- * Get survey details
- */
-router.get(
-  '/surveys/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const survey = await prisma.brandSurvey.findUnique({
-      where: { id },
-      include: {
-        brand: { select: { name: true } },
-        questions: {
-          include: {
-            _count: { select: { answers: true } },
-          },
-        },
-      },
-    });
-
-    if (!survey) {
-      throw new NotFoundError('Survey not found');
-    }
-
-    const now = new Date();
-    let status = 'UPCOMING';
-    if (survey.startsAt <= now && survey.endsAt > now) {
-      status = 'ACTIVE';
-    } else if (survey.endsAt <= now) {
-      status = 'ENDED';
-    }
-
-    const totalResponseCount = survey.questions.reduce(
-      (sum, q) => sum + q._count.answers,
-      0
-    );
-
-    const data: AdminBrandSurveyDetailResponse = {
-      id: survey.id,
-      brandId: survey.brandId,
-      brandName: survey.brand.name,
-      title: survey.title,
-      description: survey.description,
-      startsAt: survey.startsAt.toISOString(),
-      endsAt: survey.endsAt.toISOString(),
-      status,
-      questionCount: survey.questions.length,
-      responseCount: totalResponseCount,
-      createdAt: survey.createdAt.toISOString(),
-      updatedAt: survey.updatedAt.toISOString(),
-      questions: survey.questions.map((q) => ({
-        id: q.id,
-        questionText: q.questionText,
-        type: q.type,
-        answerCount: q._count.answers,
-      })),
-    };
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * GET /admin/brands/surveys/:id/responses
- * Get survey responses
- */
-router.get(
-  '/surveys/:id/responses',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const survey = await prisma.brandSurvey.findUnique({
-      where: { id },
-      include: {
-        questions: {
-          include: {
-            answers: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    profile: { select: { userName: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!survey) {
-      throw new NotFoundError('Survey not found');
-    }
-
-    const totalResponses = survey.questions.reduce(
-      (sum, q) => sum + q.answers.length,
-      0
-    );
-
-    const data: AdminBrandSurveyResponsesResponse = {
-      surveyId: survey.id,
-      surveyTitle: survey.title,
-      totalResponses,
-      questions: survey.questions.map((q) => ({
-        id: q.id,
-        questionText: q.questionText,
-        type: q.type,
-        answers: q.answers.map((a) => ({
-          id: a.id,
-          userId: a.userId,
-          username: a.user.profile?.userName || null,
-          answerText: a.answerText,
-          createdAt: a.createdAt.toISOString(),
-        })),
-      })),
-    };
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
- * POST /admin/brands/surveys
- * Create brand survey
- */
-router.post(
-  '/surveys',
-  validateBody(AdminCreateBrandSurveySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const body = req.body as AdminCreateBrandSurveyInput;
-
-    // Validate dates
-    if (new Date(body.startsAt) >= new Date(body.endsAt)) {
-      throw new ValidationError('Start date must be before end date');
-    }
-
-    // Create survey with questions in transaction
-    const survey = await prisma.$transaction(async (tx) => {
-      const newSurvey = await tx.brandSurvey.create({
-        data: {
-          brandId: body.brandId,
-          title: body.title,
-          description: body.description ?? null,
-          startsAt: new Date(body.startsAt),
-          endsAt: new Date(body.endsAt),
-        },
-      });
-
-      // Create questions
-      await tx.brandSurveyQuestion.createMany({
-        data: body.questions.map((q) => ({
-          surveyId: newSurvey.id,
-          questionText: q.questionText,
-          type: q.type,
-        })),
-      });
-
-      return newSurvey;
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_SURVEY_CREATE',
-        description: `surveyId: ${survey.id}, title: ${survey.title}, brandId: ${survey.brandId}, questions: ${body.questions.length}`,
-        entityType: 'brand_survey',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand survey created', { surveyId: survey.id, adminId });
-
-    return res.status(201).json({ success: true, data: survey });
-  })
-);
-
-/**
- * PATCH /admin/brands/surveys/:id
- * Update brand survey (title, description, dates only - not questions)
- */
-router.patch(
-  '/surveys/:id',
-  validateBody(AdminUpdateBrandSurveySchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-    const body = req.body as AdminUpdateBrandSurveyInput;
-
-    const existing = await prisma.brandSurvey.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundError('Survey not found');
-    }
-
-    // Validate dates if both provided
-    if (body.startsAt && body.endsAt) {
-      if (new Date(body.startsAt) >= new Date(body.endsAt)) {
-        throw new ValidationError('Start date must be before end date');
-      }
-    }
-
-    const updateData: Record<string, unknown> = { ...body };
-    if (body.startsAt) updateData.startsAt = new Date(body.startsAt);
-    if (body.endsAt) updateData.endsAt = new Date(body.endsAt);
-
-    const survey = await prisma.brandSurvey.update({
-      where: { id },
-      data: updateData,
-    });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_SURVEY_UPDATE',
-        description: `surveyId: ${survey.id}, title: ${survey.title}`,
-        entityType: 'brand_survey',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand survey updated', { surveyId: survey.id, adminId });
-
-    return res.json({ success: true, data: survey });
-  })
-);
-
-/**
- * DELETE /admin/brands/surveys/:id
- * Delete brand survey
- */
-router.delete(
-  '/surveys/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const adminId = req.user?.id;
-    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const { id } = req.params;
-
-    const existing = await prisma.brandSurvey.findUnique({
-      where: { id },
-      include: {
-        questions: {
-          include: {
-            _count: { select: { answers: true } },
-          },
-        },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Survey not found');
-    }
-
-    // Warning if survey has responses
-    const totalResponses = existing.questions.reduce(
-      (sum, q) => sum + q._count.answers,
-      0
-    );
-
-    if (totalResponses > 0) {
-      logger.warn('Deleting survey with responses', {
-        surveyId: id,
-        responseCount: totalResponses,
-        adminId,
-      });
-    }
-
-    await prisma.brandSurvey.delete({ where: { id } });
-
-    // Log admin action
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'BRAND_SURVEY_DELETE',
-        description: `surveyId: ${id}, title: ${existing.title}, responses: ${totalResponses}`,
-        entityType: 'brand_survey',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Brand survey deleted', { surveyId: id, adminId });
-
-    return res.json({ success: true, message: 'Survey deleted' });
   })
 );
 

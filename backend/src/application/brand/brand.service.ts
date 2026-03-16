@@ -3610,11 +3610,13 @@ export class BrandService {
     questions: Array<{
       id: string;
       text: string;
+      type: string;
       options: Array<{
         id: string;
         text: string;
       }>;
       order: number;
+      isAnswered: boolean;
     }>;
     totalQuestions: number;
   }> {
@@ -3649,22 +3651,17 @@ export class BrandService {
 
     // Soruları formatla
     const questions = survey.questions.map((question, index) => {
-      // Options şimdilik boş array - veritabanında saklanmıyor
-      // TODO: Options'ları veritabanına eklemek için schema güncellemesi gerekebilir
-      // Frontend normalize ediyor, bu yüzden boş array kabul edilebilir
-      // Ancak SINGLE_CHOICE ve MULTIPLE_CHOICE soruları için options gerekli
-      const options: Array<{ id: string; text: string }> = [];
+      const options = Array.isArray(question.options)
+        ? (question.options as Array<{ id: string; text: string }>)
+        : [];
 
-      // Eğer SINGLE_CHOICE veya MULTIPLE_CHOICE ise, options'ları seed data'dan alabiliriz
-      // Şimdilik boş array döndürüyoruz - frontend normalize edecek
-      // Not: Options'ları veritabanına eklemek için BrandSurveyQuestion modeline
-      // options JSON field'ı eklenmeli veya ayrı bir BrandSurveyQuestionOption tablosu oluşturulmalı
-      
       return {
         id: question.id,
         text: question.questionText,
+        type: question.type,
         options,
         order: index + 1,
+        isAnswered: answeredQuestionIds.has(question.id),
       };
     });
 
@@ -3676,152 +3673,118 @@ export class BrandService {
   }
 
   /**
-   * Anket cevabını gönderir
-   * POST /surveys/{surveyId}/questions/{questionId}/answer
+   * Submit all survey answers at once and complete the survey.
+   * POST /surveys/{surveyId}/submit
    */
-  async submitSurveyAnswer(
+  async submitSurvey(
     surveyId: string,
-    questionId: string,
     userId: string,
-    answerId: string
+    answers: Array<{ questionId: string; answerId: string }>,
   ): Promise<{
     success: boolean;
     message?: string;
-    isCompleted: boolean;
+    awardedPoints?: number;
+    newTotalPoints?: number;
+    badgesEarned?: BadgeEarned[];
   }> {
-    // Survey kontrolü
-    const survey = await this.prisma.brandSurvey.findUnique({
-      where: { id: surveyId },
-      include: {
-        questions: true,
-      },
-    });
-
-    if (!survey) {
-      throw new NotFoundError(`Survey not found: ${surveyId}`);
-    }
-
-    // Question kontrolü
-    const question = survey.questions.find((q) => q.id === questionId);
-    if (!question) {
-      throw new NotFoundError(`Question not found: ${questionId}`);
-    }
-
-    // Kullanıcının bu soruya daha önce cevap verip vermediğini kontrol et
-    const existingAnswer = await this.prisma.brandSurveyAnswer.findUnique({
-      where: {
-        questionId_userId: {
-          questionId,
-          userId,
-        },
-      },
-    });
-
-    // Cevabı güncelle veya oluştur
-    if (existingAnswer) {
-      await this.prisma.brandSurveyAnswer.update({
-        where: { id: existingAnswer.id },
-        data: {
-          answerText: answerId,
-          updatedAt: new Date(),
-        },
-      });
-    } else {
-      await this.prisma.brandSurveyAnswer.create({
-        data: {
-          id: randomUUID(),
-          questionId,
-          userId,
-          answerText: answerId,
-        },
-      });
-    }
-
-    // Kullanıcının tüm sorulara cevap verip vermediğini kontrol et
-    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
-      where: {
-        userId,
-        question: {
-          surveyId: surveyId,
-        },
-      },
-    });
-
-    const isCompleted = userAnswers.length >= survey.questions.length;
-
-    return {
-      success: true,
-      message: existingAnswer ? 'Cevap güncellendi' : 'Cevap kaydedildi',
-      isCompleted,
-    };
-  }
-
-  /**
-   * Anketi tamamla - puan ver ve badge kontrolü yap
-   */
-  async completeSurvey(surveyId: string, userId: string) {
-    // Survey var mı kontrol et
+    // Survey check
     const survey = await this.prisma.brandSurvey.findUnique({
       where: { id: surveyId },
       include: { questions: true },
     });
 
     if (!survey) {
-      throw new NotFoundError('Survey not found');
+      throw new NotFoundError(`Survey not found: ${surveyId}`);
     }
 
-    // Kullanıcı tüm sorulara cevap vermiş mi kontrol et
-    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
-      where: {
-        userId,
-        question: { surveyId },
-      },
-    });
-
-    if (userAnswers.length < survey.questions.length) {
+    // Check survey is active
+    const now = new Date();
+    if (now < survey.startsAt || now > survey.endsAt) {
       return {
         success: false,
-        message: `Lütfen tüm soruları cevaplayın. (${userAnswers.length}/${survey.questions.length})`,
+        message: 'This survey is not currently active.',
       };
     }
 
-    // Daha önce tamamlanmış mı kontrol et
+    // Check already completed
     const existingCompletion = await this.prisma.userSurveyCompletion.findUnique({
       where: {
-        userId_surveyId: {
-          userId,
-          surveyId,
-        },
+        userId_surveyId: { userId, surveyId },
       },
     });
 
     if (existingCompletion) {
       return {
         success: false,
-        message: 'Bu anketi zaten tamamladınız.',
+        message: 'You have already completed this survey.',
       };
     }
 
-    // Puan ver (her anket 10 puan)
-    const pointsAwarded = 10;
+    // Validate all questions are answered
+    const questionIds = new Set(survey.questions.map((q) => q.id));
+    const answeredQuestionIds = new Set(answers.map((a) => a.questionId));
 
-    // Completion kaydını oluştur
-    await this.prisma.userSurveyCompletion.create({
-      data: {
-        userId,
-        surveyId,
-        pointsAwarded,
-      },
+    for (const qId of questionIds) {
+      if (!answeredQuestionIds.has(qId)) {
+        return {
+          success: false,
+          message: `Please answer all questions. (${answeredQuestionIds.size}/${questionIds.size})`,
+        };
+      }
+    }
+
+    // Validate no unknown questionIds
+    for (const a of answers) {
+      if (!questionIds.has(a.questionId)) {
+        return {
+          success: false,
+          message: `Unknown question: ${a.questionId}`,
+        };
+      }
+    }
+
+    // Save all answers + completion in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Upsert answers
+      for (const answer of answers) {
+        await tx.brandSurveyAnswer.upsert({
+          where: {
+            questionId_userId: {
+              questionId: answer.questionId,
+              userId,
+            },
+          },
+          update: {
+            answerText: answer.answerId,
+            updatedAt: new Date(),
+          },
+          create: {
+            id: randomUUID(),
+            questionId: answer.questionId,
+            userId,
+            answerText: answer.answerId,
+          },
+        });
+      }
+
+      // Create completion record
+      await tx.userSurveyCompletion.create({
+        data: {
+          userId,
+          surveyId,
+          pointsAwarded: 10,
+        },
+      });
     });
 
-    // Toplam survey puanını hesapla
+    // Calculate total survey points
     const completions = await this.prisma.userSurveyCompletion.findMany({
       where: { userId },
       select: { pointsAwarded: true },
     });
     const totalSurveyPoints = completions.reduce((sum, c) => sum + c.pointsAwarded, 0);
 
-    // Badge kontrolü yap
+    // Badge checks
     const badgesEarned: BadgeEarned[] = [];
     const surveyBadges = await this.prisma.badge.findMany({
       where: {
@@ -3830,7 +3793,6 @@ export class BrandService {
       orderBy: { name: 'asc' },
     });
 
-    // Badge kazanma koşulları
     const badgeThresholds = [
       { points: 10, name: 'Survey Explorer (Bronze)' },
       { points: 25, name: 'Survey Master (Silver)' },
@@ -3841,19 +3803,18 @@ export class BrandService {
       if (totalSurveyPoints >= threshold.points) {
         const badge = surveyBadges.find((b) => b.name === threshold.name);
         if (badge) {
-          // Badge zaten kazanılmış mı kontrol et
           const hasBadge = await this.prisma.userBadge.findFirst({
             where: { userId, badgeId: badge.id },
           });
 
           if (!hasBadge) {
-            // Badge'i ver
             await this.prisma.userBadge.create({
               data: {
                 id: randomUUID(),
                 userId,
                 badgeId: badge.id,
-                earnedAt: new Date(),
+                isVisible: true,
+                visibility: 'PUBLIC',
               },
             });
 
@@ -3873,9 +3834,9 @@ export class BrandService {
 
     return {
       success: true,
-      message: 'Anket tamamlandı! Tebrikler!',
-      pointsAwarded,
-      totalSurveyPoints,
+      message: 'Survey completed successfully!',
+      awardedPoints: 10,
+      newTotalPoints: totalSurveyPoints,
       badgesEarned,
     };
   }

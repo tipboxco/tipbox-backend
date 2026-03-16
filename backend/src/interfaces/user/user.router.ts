@@ -3319,7 +3319,15 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
  *                       type: integer
  */
 router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
   const { id } = req.params;
+  if (String(authUserId) !== String(id)) {
+    return res.status(403).json({ success: false, message: 'You can only view your own bookmarks' });
+  }
+
   const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
