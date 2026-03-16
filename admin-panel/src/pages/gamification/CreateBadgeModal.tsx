@@ -22,6 +22,7 @@ interface CreateBadgeModalProps {
   badgeType: CreateBadgeModalType;
   listPath: string;
   collectionId?: string | null;
+  eventId?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -33,6 +34,7 @@ function CreateBadgeModal({
   badgeType,
   listPath,
   collectionId,
+  eventId: preselectedEventId,
   onClose,
   onSuccess,
 }: CreateBadgeModalProps) {
@@ -59,8 +61,8 @@ function CreateBadgeModal({
           fetchActionTypes(),
         ];
 
-        // Load events for EVENT type
-        if (isEvent) {
+        // Load events for EVENT type (skip if event is preselected)
+        if (isEvent && !preselectedEventId) {
           promises.push(fetchEvents({ limit: 100, sort: 'createdAt', order: 'desc' }));
         }
 
@@ -83,7 +85,7 @@ function CreateBadgeModal({
             setActionTypes(actionTypesRes.data);
           }
 
-          if (isEvent && results[2]) {
+          if (isEvent && !preselectedEventId && results[2]) {
             const eventsRes = results[2] as Awaited<ReturnType<typeof fetchEvents>>;
             if (eventsRes.data) {
               setEvents(eventsRes.data);
@@ -121,18 +123,23 @@ function CreateBadgeModal({
       maxLength: 500,
       placeholder: 'e.g., First Post Creator',
     },
-    {
-      name: 'rarity',
-      label: 'Rarity',
-      type: 'select',
-      required: true,
-      options: [
-        { label: 'Common', value: 'COMMON' },
-        { label: 'Rare', value: 'RARE' },
-        { label: 'Epic', value: 'EPIC' },
-      ],
-      placeholder: 'Select rarity level',
-    },
+    // Rarity: hidden for EVENT (defaults to COMMON), shown for others
+    ...(!isEvent
+      ? [
+          {
+            name: 'rarity',
+            label: 'Rarity',
+            type: 'select' as const,
+            required: true,
+            options: [
+              { label: 'Common', value: 'COMMON' },
+              { label: 'Rare', value: 'RARE' },
+              { label: 'Epic', value: 'EPIC' },
+            ],
+            placeholder: 'Select rarity level',
+          },
+        ]
+      : []),
 
     // Category: hidden for EVENT (auto-set), shown for others
     ...(isEvent
@@ -148,8 +155,8 @@ function CreateBadgeModal({
           },
         ]),
 
-    // Event selector (only for EVENT type)
-    ...(isEvent
+    // Event selector (only for EVENT type, hidden when event is preselected)
+    ...(isEvent && !preselectedEventId
       ? [
           {
             name: 'eventId',
@@ -202,47 +209,51 @@ function CreateBadgeModal({
       placeholder: 'Describe what this badge represents',
     },
 
-    // 4. Activation Rules
-    {
-      name: 'actionTypeId',
-      label: 'Main Action Type',
-      type: 'select',
-      required: false,
-      options: actionTypes.map((a) => ({
-        label: `${a.label} (${a.mainAction} / ${a.code})`,
-        value: a.id,
-      })),
-      placeholder: 'Select main action (POST, LIKE, BOOKMARK, etc.)',
-    },
-    {
-      name: 'pointsRequired',
-      label: 'Target Value (Points Required)',
-      type: 'number',
-      required: false,
-      placeholder: 'e.g., 10',
-      rules: [
-        {
-          validator: async (_rule: unknown, value: unknown) => {
-            const numValue = typeof value === 'number' ? value : Number(value);
-            if (value != null && (!numValue || numValue < 1)) {
-              throw new Error('Target value must be at least 1');
-            }
+    // 4. Activation Rules (only for COLLECTION type)
+    ...(!isEvent
+      ? [
+          {
+            name: 'actionTypeId',
+            label: 'Main Action Type',
+            type: 'select' as const,
+            required: false,
+            options: actionTypes.map((a) => ({
+              label: `${a.label} (${a.mainAction} / ${a.code})`,
+              value: a.id,
+            })),
+            placeholder: 'Select main action (POST, LIKE, BOOKMARK, etc.)',
           },
-        },
-      ],
-    },
-    {
-      name: 'difficulty',
-      label: 'Difficulty',
-      type: 'select',
-      required: false,
-      options: [
-        { label: 'Easy', value: 'EASY' },
-        { label: 'Medium', value: 'MEDIUM' },
-        { label: 'Hard', value: 'HARD' },
-      ],
-      placeholder: 'Select difficulty',
-    },
+          {
+            name: 'pointsRequired',
+            label: 'Target Value (Points Required)',
+            type: 'number' as const,
+            required: false,
+            placeholder: 'e.g., 10',
+            rules: [
+              {
+                validator: async (_rule: unknown, value: unknown) => {
+                  const numValue = typeof value === 'number' ? value : Number(value);
+                  if (value != null && (!numValue || numValue < 1)) {
+                    throw new Error('Target value must be at least 1');
+                  }
+                },
+              },
+            ],
+          },
+          {
+            name: 'difficulty',
+            label: 'Difficulty',
+            type: 'select' as const,
+            required: false,
+            options: [
+              { label: 'Easy', value: 'EASY' },
+              { label: 'Medium', value: 'MEDIUM' },
+              { label: 'Hard', value: 'HARD' },
+            ],
+            placeholder: 'Select difficulty',
+          },
+        ]
+      : []),
   ];
 
   const handleSubmit = async (values: Record<string, unknown>) => {
@@ -262,14 +273,15 @@ function CreateBadgeModal({
         description: (values.description as string)?.trim() || null,
         imageUrl: (values.imageUrl as string)?.trim() || null,
         type: badgeType,
-        rarity: values.rarity as 'COMMON' | 'RARE' | 'EPIC',
+        rarity: isEvent ? 'COMMON' : (values.rarity as 'COMMON' | 'RARE' | 'EPIC'),
         categoryId: effectiveCategoryId,
         collectionId: badgeType === 'COLLECTION' && collectionId ? collectionId : null,
       });
 
-      // If EVENT type, link badge to the selected event
-      if (isEvent && badgeRes.data?.id && values.eventId) {
-        await addEventBadge(values.eventId as string, {
+      // If EVENT type, link badge to the selected or preselected event
+      const targetEventId = preselectedEventId ?? (values.eventId as string);
+      if (isEvent && badgeRes.data?.id && targetEventId) {
+        await addEventBadge(targetEventId, {
           badgeId: badgeRes.data.id,
           rank: 1,
         });
@@ -288,11 +300,13 @@ function CreateBadgeModal({
 
       onSuccess();
 
-      // Navigate based on context
-      if (badgeRes.data?.id && badgeType !== 'COLLECTION') {
-        navigate(`${listPath}/${badgeRes.data.id}`);
-      } else if (badgeType === 'COLLECTION') {
-        navigate(listPath);
+      // Navigate based on context (skip navigation if event was preselected - stay on event page)
+      if (!preselectedEventId) {
+        if (badgeRes.data?.id && badgeType !== 'COLLECTION') {
+          navigate(`${listPath}/${badgeRes.data.id}`);
+        } else if (badgeType === 'COLLECTION') {
+          navigate(listPath);
+        }
       }
 
       onClose();

@@ -36,7 +36,8 @@ function AddBadgeToCollectionModal({
   const [loading, setLoading] = useState(true);
   const formRef = useRef<FormInstance>(null);
 
-  const needsCategoryField = collectionCategoryId === null;
+  // Always load badge categories - collection's categoryId is a different model (Category, not BadgeCategory)
+  const needsCategoryField = true;
 
   // Load required data when modal opens
   useEffect(() => {
@@ -47,10 +48,8 @@ function AddBadgeToCollectionModal({
     (async () => {
       setLoading(true);
       try {
-        // Load categories only if collection doesn't have one
-        const categoriesPromise = needsCategoryField
-          ? fetchBadgeCategories()
-          : Promise.resolve({ data: [] as AdminBadgeCategoryListItem[] });
+        // Always load badge categories
+        const categoriesPromise = fetchBadgeCategories();
 
         // Load ALL action types at once
         const actionTypesPromise = fetchActionTypes();
@@ -81,7 +80,7 @@ function AddBadgeToCollectionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, needsCategoryField]);
+  }, [open]);
 
   // Get unique main actions from action types
   const mainActions = Array.from(new Set(allActionTypes.map((at) => at.mainAction))).sort();
@@ -165,8 +164,6 @@ function AddBadgeToCollectionModal({
       required: true,
       options: categories.map((c) => ({ label: c.name, value: c.id })),
       placeholder: 'Select category',
-      // Only show if collection doesn't have a category
-      conditional: () => needsCategoryField,
     },
     {
       name: 'mainAction',
@@ -308,8 +305,8 @@ function AddBadgeToCollectionModal({
         throw new Error('Badge name is required');
       }
 
-      // Use collection's category if available, otherwise use form value
-      const effectiveCategoryId = collectionCategoryId ?? trimString(values.categoryId);
+      // Always use form value - collection's categoryId is a Category ID, not a BadgeCategory ID
+      const effectiveCategoryId = trimString(values.categoryId);
 
       if (!effectiveCategoryId) {
         throw new Error('Badge category is required');

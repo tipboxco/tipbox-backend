@@ -7,6 +7,7 @@ import { ContentPost } from '../../domain/content/content-post.entity';
 import { User } from '../../domain/user/user.entity';
 import { ShareType } from '../../domain/interaction/share-type.enum';
 import { VoteType } from '../../domain/interaction/vote-type.enum';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { ContentLikePrismaRepository } from '../../infrastructure/repositories/content-like-prisma.repository';
 import { ContentPostPrismaRepository } from '../../infrastructure/repositories/content-post-prisma.repository';
 import { ContentPostVotePrismaRepository } from '../../infrastructure/repositories/content-post-vote-prisma.repository';
@@ -746,7 +747,7 @@ export class InteractionService {
             user: {
               id: user?.id || '',
               name: user?.name || null,
-              avatar: activeAvatar?.imageUrl || null,
+              avatar: resolveMediaUrl(activeAvatar?.imageUrl || null, true),
             },
           };
         })

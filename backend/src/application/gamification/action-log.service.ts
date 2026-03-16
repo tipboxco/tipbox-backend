@@ -191,10 +191,15 @@ export class ActionLogService {
       const actionLogData: Prisma.ActionLogCreateManyInput[] = [];
 
       // ContentPostType -> ActionType code mapping
-      // Only EXPERIENCE and FREE (mapped to GENERAL) are tracked
       const postTypeToActionCode: Record<string, string> = {
         EXPERIENCE: 'EXPERIENCE',
-        FREE: 'GENERAL',
+        TIPS: 'TIPS',
+        REVIEW: 'REVIEW',
+        GENERAL: 'GENERAL',
+        FREE: 'FREE',
+        QUESTION: 'QUESTION',
+        COMPARE: 'COMPARE',
+        UPDATE: 'UPDATE',
       };
 
       // Backfill posts

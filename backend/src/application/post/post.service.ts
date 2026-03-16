@@ -663,12 +663,10 @@ export class PostService {
       });
 
       // Collection badge progress (async, hata olsa bile devam et)
-      // Post type'a göre farklı action code'ları kullanılabilir
-      const postTypeCode = 'GENERAL'; // Default
       this.achievementProgressService.incrementProgressByCode(
         userId,
         MainAction.POST,
-        postTypeCode,
+        'FREE',
         1
       ).catch((err) => {
         logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
@@ -890,6 +888,16 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
 
+      // Collection badge progress (async, hata olsa bile devam et)
+      this.achievementProgressService.incrementProgressByCode(
+        userId,
+        MainAction.POST,
+        'TIPS',
+        1
+      ).catch((err) => {
+        logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
+      });
+
       // Keyword-based badge progress (async, fire-and-forget)
       this.achievementProgressService
         .incrementKeywordProgress(userId, ContentPostType.TIPS, request.description || '')
@@ -1074,6 +1082,16 @@ export class PostService {
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+
+      // Collection badge progress (async, hata olsa bile devam et)
+      this.achievementProgressService.incrementProgressByCode(
+        userId,
+        MainAction.POST,
+        'QUESTION',
+        1
+      ).catch((err) => {
+        logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
       });
 
       // Keyword-based badge progress (async, fire-and-forget)
