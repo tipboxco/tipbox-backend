@@ -394,7 +394,7 @@ export const GET = async (
     try {
       const { data: brands } = await query.graph({
         entity: "brand",
-        fields: ["id", "product.id", "name", "description", "metadata"],
+        fields: ["id", "products.id", "name", "description", "metadata"],
         filters: { id: brandId },
       })
 
@@ -404,10 +404,10 @@ export const GET = async (
       }
       brandDetail = brand
 
-      const brandProductIds = brand.product
-        ? (Array.isArray(brand.product)
-          ? (brand.product as Record<string, unknown>[]).map(p => p.id as string)
-          : [(brand.product as Record<string, unknown>).id as string])
+      const brandProductIds = brand.products
+        ? (Array.isArray(brand.products)
+          ? (brand.products as Record<string, unknown>[]).map(p => p.id as string)
+          : [(brand.products as Record<string, unknown>).id as string])
         : []
 
       // Category ile kesişim (intersection)

@@ -17,13 +17,13 @@ export const DELETE = async (
   // Brand'e bağlı tüm ürünleri getir (sadece ID)
   const { data: brands } = await query.graph({
     entity: "brand",
-    fields: ["id", "product.id"],
+    fields: ["id", "products.id"],
     filters: { id: brandId },
   })
 
   const brand = brands[0]
-  const products = brand?.product
-    ? (Array.isArray(brand.product) ? brand.product : [brand.product])
+  const products = brand?.products
+    ? (Array.isArray(brand.products) ? brand.products : [brand.products])
     : []
 
   if (products.length === 0) {

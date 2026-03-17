@@ -185,33 +185,40 @@ export const GET = async (
   // Brand bilgisini Query Graph ile getir (if needed)
   let productsWithBrand = products
   if (hasBrand !== undefined || excludeBrandId !== undefined) {
-    // Sadece ihtiyacımız varsa brand iste
     const productIds = products.map((p: { id: string }) => p.id)
     if (productIds.length > 0) {
-      const { data: productsData } = await query.graph({
-        entity: "product",
-        fields: ["id", "brand.*"],
-        filters: { id: productIds },
-      })
-      const brandMap = new Map(
-        productsData.map(
-          (p: { id: string; brand?: { id: string; name: string } | null }) => [p.id, p.brand]
+      try {
+        const { data: productsData } = await query.graph({
+          entity: "product",
+          fields: ["id", "brand.*"],
+          filters: { id: productIds },
+        })
+        const brandMap = new Map(
+          productsData.map(
+            (p: { id: string; brand?: { id: string; name: string } | null }) => [p.id, p.brand]
+          )
         )
-      )
-      productsWithBrand = products.map((p: any) => ({
-        ...p,
-        brand: brandMap.get(p.id) || null,
-      }))
-      // Brand filterle
-      if (hasBrand === "false") {
-        productsWithBrand = productsWithBrand.filter((p: any) => !p.brand)
-      } else if (hasBrand === "true") {
-        productsWithBrand = productsWithBrand.filter((p: any) => !!p.brand)
-      }
-      if (excludeBrandId) {
-        productsWithBrand = productsWithBrand.filter(
-          (p: any) => !p.brand || p.brand.id !== excludeBrandId
-        )
+        productsWithBrand = products.map((p: Record<string, unknown>) => ({
+          ...p,
+          brand: brandMap.get(p.id as string) || null,
+        }))
+        // Brand filterle
+        if (hasBrand === "false") {
+          productsWithBrand = productsWithBrand.filter((p: Record<string, unknown>) => !p.brand)
+        } else if (hasBrand === "true") {
+          productsWithBrand = productsWithBrand.filter((p: Record<string, unknown>) => !!p.brand)
+        }
+        if (excludeBrandId) {
+          productsWithBrand = productsWithBrand.filter(
+            (p: Record<string, unknown>) => {
+              const brand = p.brand as Record<string, unknown> | null
+              return !brand || brand.id !== excludeBrandId
+            }
+          )
+        }
+      } catch (err) {
+        // Link henüz oluşturulmamışsa veya hata varsa, brand filtresi olmadan devam et
+        console.error("Brand link query failed:", err instanceof Error ? err.message : err)
       }
     }
   }

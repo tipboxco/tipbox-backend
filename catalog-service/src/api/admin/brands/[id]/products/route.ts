@@ -53,10 +53,10 @@ export const GET = async (
     return
   }
 
-  // Sadece sayfa ürünlerinin detaylarını çek (minimal fields, variants/images yok)
+  // Sadece sayfa ürünlerinin detaylarını çek (minimal fields + categories)
   const { data: productDetails } = await query.graph({
     entity: "product",
-    fields: ["id", "title", "handle", "status", "thumbnail"],
+    fields: ["id", "title", "handle", "status", "thumbnail", "categories.*"],
     filters: { id: pageProductIds },
   })
 
