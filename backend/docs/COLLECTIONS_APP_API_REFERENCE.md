@@ -27,6 +27,78 @@ GET /api/collections/
 | `cursor`        | string | —       | Pagination cursor (infinite scroll)                            |
 | `limit`         | number | `20`    | Sayfa başına item (min: 1, max: 50)                            |
 
+### Filtreleme Rehberi
+
+EP-01 üç farklı filtreleme yöntemini destekler. Frontend ekibi ihtiyaca göre bunları kombine edebilir.
+
+#### 1. Chip Filter (Kategori Handle)
+
+Üstteki yatay kaydırılabilir chip'ler için kullanılır. Önce EP-02'den kategorileri çek, sonra seçilen chip'in `handle` değerini gönder.
+
+```
+# Önce kategorileri çek
+GET /api/collections/categories
+→ [{ id: "uuid-1", name: "Electronics", handle: "electronics" }, ...]
+
+# Seçilen chip ile filtrele
+GET /api/collections/?category=electronics
+```
+
+- `category` boş veya `all` gönderilirse filtre uygulanmaz (tüm collection'lar döner).
+- Sadece en az 1 collection'a sahip kategoriler EP-02'den döner.
+
+#### 2. Bottom Sheet Filter (Kategori ID)
+
+Hiyerarşik kategori seçimi için kullanılır. Ana kategori → alt kategori şeklinde çalışır.
+
+```
+# Sadece ana kategori seçildi
+GET /api/collections/?mainCategoryId=uuid-main
+
+# Ana + alt kategori seçildi (alt kategori öncelikli)
+GET /api/collections/?mainCategoryId=uuid-main&subCategoryId=uuid-sub
+```
+
+- `subCategoryId` varsa sadece o kullanılır, `mainCategoryId` ignore edilir.
+- `subCategoryId` yoksa `mainCategoryId` kullanılır.
+
+#### 3. Durum Filtresi (Status)
+
+Kullanıcının ilerleme durumuna göre filtreler.
+
+```
+GET /api/collections/?status=completed
+GET /api/collections/?status=in_progress
+GET /api/collections/?status=not_started
+GET /api/collections/?status=all          # varsayılan, filtre yok
+```
+
+| Değer          | Açıklama                                              |
+|----------------|-------------------------------------------------------|
+| `all`          | Tüm collection'lar (varsayılan)                       |
+| `completed`    | `currentProgress >= totalProgress` olanlar            |
+| `in_progress`  | `currentProgress > 0 && currentProgress < totalProgress` |
+| `not_started`  | `currentProgress === 0` olanlar                       |
+
+#### 4. Arama (Search)
+
+Collection adı ve açıklamalarında case-insensitive arama yapar.
+
+```
+GET /api/collections/?search=summer
+```
+
+- `name`, `shortDescription` ve `longDescription` alanlarında arar.
+- 500ms debounce önerilir.
+
+#### Filtreleri Kombine Etme
+
+Tüm filtreler aynı anda kullanılabilir:
+
+```
+GET /api/collections/?category=electronics&status=in_progress&search=badge&limit=10
+```
+
 ### Response `200`
 
 ```json
