@@ -1,4 +1,12 @@
-FROM node:23-alpine
+# ══════════════════════════════════════════════════════════════════
+# Multi-stage Dockerfile
+#   dev   → bind mount + named volume kullanır, build hızlı (~5s)
+#   full  → deps + source baked-in (CI veya standalone kullanım)
+# ══════════════════════════════════════════════════════════════════
+
+# ── Stage: base ──────────────────────────────────────────────────
+# System deps + pnpm. Nadiren değişir → haftalarca cache'de kalır.
+FROM node:23-alpine AS base
 
 WORKDIR /app
 
@@ -14,26 +22,36 @@ ENV PNPM_HOME=/app/.pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN pnpm config set store-dir /app/.pnpm-store
 
-# 1) Sadece dependency dosyalarını kopyala (layer cache için)
-COPY package.json .npmrc ./
-COPY pnpm-lock.yaml* ./
-
-# 2) Prisma schema'yı kopyala (install öncesi - postinstall prisma generate çalıştırır)
-COPY prisma ./prisma
-
-# 3) Dependencies'leri yükle
-#    BuildKit cache mount: pnpm store sunucuda kalıcı tutulur, tekrar download olmaz
-RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
-    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
-
-# 4) Source code'u kopyala (en sık değişen layer en sona)
-COPY . .
-
-# Entrypoint script'ini kopyala ve çalıştırılabilir yap
+# Entrypoint her stage'de lazım
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
-
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "run", "dev"]
+
+# ── Stage: dev ───────────────────────────────────────────────────
+# Dev/test compose'da kullanılır.
+# Bind mount → source code, named volume → node_modules sağlar.
+# Entrypoint pnpm install + prisma generate'i runtime'da halleder.
+# Build süresi: ~5 saniye (cache hit) — deps yüklenmez, source kopyalanmaz.
+FROM base AS dev
+# Hiçbir şey eklemeye gerek yok — base yeterli.
+
+# ── Stage: full ──────────────────────────────────────────────────
+# Deps + source image'a baked-in. Standalone çalışır (bind mount gerektirmez).
+FROM base AS full
+
+# 1) Dependency dosyaları (layer cache için ayrı)
+COPY package.json .npmrc ./
+COPY pnpm-lock.yaml* ./
+
+# 2) Prisma schema (postinstall prisma generate çalıştırır)
+COPY prisma ./prisma
+
+# 3) Dependencies — BuildKit cache mount ile pnpm store kalıcı
+RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
+# 4) Source code (en sık değişen layer en sona)
+COPY . .

@@ -39,12 +39,28 @@ if [ $attempt -eq $max_attempts ]; then
 fi
 
 # ── node_modules kontrolü ──
-# pnpm sanal store'u: .pnpm dizini var mı kontrol et (node_modules/.prisma pnpm'de oluşmaz)
+# pnpm-lock.yaml checksum'ı ile paket değişikliklerini tespit et
+LOCK_CHECKSUM=""
+if [ -f "pnpm-lock.yaml" ]; then
+  LOCK_CHECKSUM=$(md5sum pnpm-lock.yaml | cut -d' ' -f1)
+fi
+STORED_CHECKSUM=""
+if [ -f "node_modules/.lock-checksum" ]; then
+  STORED_CHECKSUM=$(cat node_modules/.lock-checksum)
+fi
+
 if [ ! -d "node_modules/.pnpm" ]; then
   echo "🔄 node_modules eksik, yükleniyor..."
-  # --ignore-scripts: postinstall'daki prisma generate'i atla, aşağıda zaten çalıştırıyoruz
   pnpm install --ignore-scripts
+  echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
   echo "✅ Bağımlılıklar yüklendi!"
+elif [ "$LOCK_CHECKSUM" != "$STORED_CHECKSUM" ]; then
+  echo "🔄 pnpm-lock.yaml değişti, paketler güncelleniyor..."
+  pnpm install --ignore-scripts
+  echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
+  echo "✅ Bağımlılıklar güncellendi!"
+else
+  echo "✅ node_modules güncel."
 fi
 
 # Prisma Client her zaman üret — schema değişikliklerinin yansıması için zorunlu

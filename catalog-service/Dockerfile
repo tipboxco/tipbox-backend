@@ -1,33 +1,36 @@
 # syntax=docker/dockerfile:1
-# Development Dockerfile for Medusa - BuildKit optimized
-FROM node:20-alpine
+# ══════════════════════════════════════════════════════════════════
+# Multi-stage Dockerfile for Medusa (Catalog Service)
+#   dev   → bind mount + named volume, build hızlı (~3s)
+#   full  → deps + source baked-in
+# ══════════════════════════════════════════════════════════════════
 
-# Install dos2unix, postgresql-client and unzip
+# ── Stage: base ──────────────────────────────────────────────────
+FROM node:20-alpine AS base
+
 RUN apk add --no-cache dos2unix postgresql-client unzip
 
-# pnpm aktif et
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Set working directory
 WORKDIR /server
 
-# 1) Sadece dependency dosyalarini kopyala (layer cache icin)
-COPY .npmrc ./
-COPY package.json ./
-COPY pnpm-lock.yaml* ./
+COPY start.sh ./
+RUN dos2unix start.sh && chmod +x start.sh
 
-# 2) Dependencies'leri yukle (BuildKit cache mount ile pnpm store cache'lenir)
+EXPOSE 9000
+
+CMD ["sh", "-c", "sh /server/start.sh"]
+
+# ── Stage: dev ───────────────────────────────────────────────────
+FROM base AS dev
+
+# ── Stage: full ──────────────────────────────────────────────────
+FROM base AS full
+
+COPY .npmrc package.json pnpm-lock.yaml* ./
+
 RUN --mount=type=cache,id=pnpm-store-catalog,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile || pnpm install
 
-# 3) Source code'u kopyala
 COPY . .
-
-# Fix Windows CRLF line endings and make executable
 RUN dos2unix start.sh && chmod +x start.sh
-
-# Expose the port Medusa runs on
-EXPOSE 9000
-
-# Start with migrations and then the development server
-CMD ["sh", "-c", "dos2unix /server/start.sh 2>/dev/null || true; sh /server/start.sh"]
