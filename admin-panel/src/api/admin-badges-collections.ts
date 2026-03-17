@@ -82,7 +82,7 @@ export async function uploadHighlightsImage(file: File) {
   formData.append('file', file);
 
   try {
-    const res = await postFormData<{ url: string }>(`${prefix}/collections/upload-highlights`, formData);
+    const res = await postFormData<{ url: string }>(`${prefix}/upload-highlights`, formData);
     if (!res.data?.url) {
       throw new Error('Upload succeeded but no URL returned');
     }
@@ -131,7 +131,6 @@ export async function fetchCollection(id: string) {
 export async function createCollection(body: {
   name: string;
   bannerUrl?: string | null;
-  highlightsImage?: string | null;
   owner?: string | null;
   focusSector?: string | null;
   targetGroup?: string | null;
@@ -149,7 +148,6 @@ export async function updateCollection(
   body: Partial<{
     name: string;
     bannerUrl: string | null;
-    highlightsImage: string | null;
     owner: string | null;
     focusSector: string | null;
     targetGroup: string | null;
@@ -316,6 +314,7 @@ export async function createBadge(body: {
   name: string;
   description?: string | null;
   imageUrl?: string | null;
+  highlightsImage?: string | null;
   type: string;
   rarity: string;
   boostMultiplier?: number | null;
@@ -332,6 +331,7 @@ export async function updateBadge(
     name: string;
     description: string | null;
     imageUrl: string | null;
+    highlightsImage: string | null;
     type: string;
     rarity: string;
     status: string;

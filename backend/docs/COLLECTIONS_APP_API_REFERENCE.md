@@ -2,7 +2,7 @@
 
 > Base path: `/api/collections` (veya `/api/events/collections`)
 > Auth: Tüm endpointler `Bearer token` gerektirir.
-> Son güncelleme: 2026-03-17 — `highlightsImage` alanı eklendi.
+> Son güncelleme: 2026-03-17 — Badge'lere `highlightsImage` alanı eklendi.
 
 ---
 
@@ -111,7 +111,6 @@ GET /api/collections/?category=electronics&status=in_progress&search=badge&limit
       "currentProgress": 3,
       "totalProgress": 10,
       "coverImage": "https://cdn.example.com/media/collections/banners/abc.jpg",
-      "highlightsImage": "https://cdn.example.com/media/collections/highlights/xyz.jpg",
       "category": "electronics"
     }
   ],
@@ -134,7 +133,6 @@ GET /api/collections/?category=electronics&status=in_progress&search=badge&limit
 | `currentProgress`  | number         | Kullanıcının mevcut ilerlemesi                    |
 | `totalProgress`    | number         | Toplam ilerleme hedefi                            |
 | `coverImage`       | string \| null | Collection kapak görseli (CDN URL)                |
-| `highlightsImage`  | string \| null | Collection highlights görseli (CDN URL)           |
 | `category`         | string \| null | Kategori handle'ı                                 |
 
 ---
@@ -208,7 +206,6 @@ GET /api/collections/:collectionId
     "currentProgress": 3,
     "totalProgress": 10,
     "coverImage": "https://cdn.example.com/media/collections/banners/abc.jpg",
-    "highlightsImage": "https://cdn.example.com/media/collections/highlights/xyz.jpg",
     "category": "electronics"
   },
   "badges": [
@@ -217,6 +214,7 @@ GET /api/collections/:collectionId
       "title": "First Purchase",
       "description": "Complete your first purchase",
       "icon": "https://cdn.example.com/media/badges/def.png",
+      "highlightsImage": "https://cdn.example.com/media/badges/highlights/ghi.png",
       "currentProgress": 1,
       "totalProgress": 1,
       "status": "completed"
@@ -235,20 +233,20 @@ GET /api/collections/:collectionId
 | `currentProgress`  | number         | Kullanıcının toplam ilerlemesi           |
 | `totalProgress`    | number         | Toplam ilerleme hedefi                   |
 | `coverImage`       | string \| null | Kapak görseli (CDN URL)                  |
-| `highlightsImage`  | string \| null | Highlights görseli (CDN URL)             |
 | `category`         | string \| null | Kategori handle'ı                        |
 
 ### Badge Fields
 
-| Field             | Type   | Description                                                         |
-|-------------------|--------|---------------------------------------------------------------------|
-| `id`              | string | Badge UUID                                                          |
-| `title`           | string | Badge adı                                                           |
-| `description`     | string | Badge açıklaması                                                    |
-| `icon`            | string | Badge görseli (CDN URL)                                             |
-| `currentProgress` | number | Kullanıcının bu badge için ilerlemesi                               |
-| `totalProgress`   | number | Tamamlanma hedefi                                                   |
-| `status`          | string | `not_started` \| `in_progress` \| `completed`                      |
+| Field              | Type           | Description                                                    |
+|--------------------|----------------|----------------------------------------------------------------|
+| `id`               | string         | Badge UUID                                                     |
+| `title`            | string         | Badge adı                                                      |
+| `description`      | string         | Badge açıklaması                                               |
+| `icon`             | string         | Badge görseli (CDN URL)                                        |
+| `highlightsImage`  | string \| null | Badge highlights görseli (CDN URL)                             |
+| `currentProgress`  | number         | Kullanıcının bu badge için ilerlemesi                          |
+| `totalProgress`    | number         | Tamamlanma hedefi                                              |
+| `status`           | string         | `not_started` \| `in_progress` \| `completed`                 |
 
 ### Status Hesaplama
 
@@ -284,7 +282,6 @@ GET /api/collections/completed
       "title": "Starter Collection",
       "description": "Get started with the platform",
       "coverImage": "https://cdn.example.com/media/collections/banners/abc.jpg",
-      "highlightsImage": "https://cdn.example.com/media/collections/highlights/xyz.jpg",
       "category": "onboarding",
       "completedAt": "2026-03-15T14:30:00.000Z",
       "totalBadges": 5,
@@ -308,7 +305,6 @@ GET /api/collections/completed
 | `title`            | string         | Collection adı                           |
 | `description`      | string         | Açıklama                                 |
 | `coverImage`       | string \| null | Kapak görseli (CDN URL)                  |
-| `highlightsImage`  | string \| null | Highlights görseli (CDN URL)             |
 | `category`         | string \| null | Kategori handle'ı                        |
 | `completedAt`      | string \| null | Son goal'un tamamlandığı tarih (ISO 8601)|
 | `totalBadges`      | number         | Collection'daki toplam badge sayısı      |
@@ -344,7 +340,6 @@ GET /api/collections/user-progress
       "currentProgress": 4,
       "totalProgress": 10,
       "coverImage": "https://cdn.example.com/media/collections/banners/abc.jpg",
-      "highlightsImage": "https://cdn.example.com/media/collections/highlights/xyz.jpg",
       "category": "tech",
       "status": "in_progress",
       "totalBadges": 8,
@@ -370,7 +365,6 @@ GET /api/collections/user-progress
 | `currentProgress`  | number         | Kullanıcının mevcut ilerlemesi                   |
 | `totalProgress`    | number         | Toplam ilerleme hedefi                           |
 | `coverImage`       | string \| null | Kapak görseli (CDN URL)                          |
-| `highlightsImage`  | string \| null | Highlights görseli (CDN URL)                     |
 | `category`         | string \| null | Kategori handle'ı                                |
 | `status`           | string         | `in_progress` \| `completed`                     |
 | `totalBadges`      | number         | Collection'daki toplam badge sayısı              |
@@ -451,11 +445,11 @@ Tüm liste endpointleri aynı pagination yapısını kullanır:
 
 ## Image URL'leri
 
-Tüm image alanları (`coverImage`, `highlightsImage`, `icon`) CDN URL olarak döner:
+Tüm image alanları (`coverImage`, `icon`, `highlightsImage`) CDN URL olarak döner:
 
 - **coverImage**: Collection kapak görseli (`collections/banners/` klasöründen)
-- **highlightsImage**: Collection highlights görseli (`collections/highlights/` klasöründen)
 - **icon**: Badge görseli (`badges/` klasöründen)
+- **highlightsImage**: Badge highlights görseli (`badges/highlights/` klasöründen)
 
 URL formatı: `{MEDIA_PUBLIC_BASE_URL}/{path}`
 Örnek: `https://api-test.tipbox.co/media/collections/banners/abc123.jpg`

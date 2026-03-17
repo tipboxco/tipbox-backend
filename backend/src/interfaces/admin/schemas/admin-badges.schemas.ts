@@ -15,7 +15,6 @@ export const AdminCollectionsQuerySchema = z.object({
 export const AdminCreateCollectionSchema = z.object({
   name: z.string().min(1).max(500),
   bannerUrl: z.string().url().optional().nullable(),
-  highlightsImage: z.string().url().optional().nullable(),
   owner: z.string().max(500).optional().nullable(),
   focusSector: z.string().max(500).optional().nullable(),
   targetGroup: z.string().max(500).optional().nullable(),
@@ -86,6 +85,7 @@ export const AdminCreateBadgeSchema = z.object({
   name: z.string().min(1).max(500),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
+  highlightsImage: z.string().url().optional().nullable(),
   type: BadgeTypeEnum,
   rarity: BadgeRarityEnum,
   status: BadgeStatusEnum.optional().default('ACTIVE'),
@@ -100,6 +100,7 @@ export const AdminUpdateBadgeSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
+  highlightsImage: z.string().url().optional().nullable(),
   type: BadgeTypeEnum.optional(),
   rarity: BadgeRarityEnum.optional(),
   status: BadgeStatusEnum.optional(),

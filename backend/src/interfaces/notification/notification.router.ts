@@ -767,10 +767,15 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
         enriched.badgeName = badgeName;
         
         // badge görseli ekle (badgeUrl olarak)
-        let badgeImageUrl = null;
+        let badgeImageUrl: string | null = null;
         if (data.badgeId && badgeImages.has(data.badgeId)) {
-          badgeImageUrl = badgeImages.get(data.badgeId);
-        } else if (randomImageCache) {
+          badgeImageUrl = badgeImages.get(data.badgeId) ?? null;
+        }
+        // Badge görseli yoksa (null/undefined) → enricher'ın set ettiği imageUrl veya random fallback
+        if (!badgeImageUrl && data.imageUrl) {
+          badgeImageUrl = String(data.imageUrl);
+        }
+        if (!badgeImageUrl && randomImageCache) {
           badgeImageUrl = randomImageCache;
         }
         enriched.badgeUrl = badgeImageUrl;
@@ -807,10 +812,14 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
         // ACHIEVEMENT_UNLOCKED için badgeId ve imageUrl (achievementId kaldırıldı)
         if (!enriched.data) enriched.data = {};
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
-        let badgeImageUrl = null;
+        let badgeImageUrl: string | null = null;
         if (data.badgeId && badgeImages.has(data.badgeId)) {
-          badgeImageUrl = badgeImages.get(data.badgeId);
-        } else if (randomImageCache) {
+          badgeImageUrl = badgeImages.get(data.badgeId) ?? null;
+        }
+        if (!badgeImageUrl && data.imageUrl) {
+          badgeImageUrl = String(data.imageUrl);
+        }
+        if (!badgeImageUrl && randomImageCache) {
           badgeImageUrl = randomImageCache;
         }
         if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
@@ -1560,10 +1569,10 @@ router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response)
 
         // Data objesinden badgeUrl ve badgeName'i root seviyeye taşı
         if (mutableNotif.data) {
-          if (notifData.imageUrl) {
+          if (notifData.imageUrl && !mutableNotif.badgeUrl) {
             mutableNotif.badgeUrl = notifData.imageUrl;
           }
-          if (notifData.badgeName) {
+          if (notifData.badgeName && !mutableNotif.badgeName) {
             mutableNotif.badgeName = notifData.badgeName;
           }
           // Data objesini tamamen kaldır

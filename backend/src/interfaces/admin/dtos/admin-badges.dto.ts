@@ -8,7 +8,6 @@ export type AdminCollectionListItem = {
   id: string;
   name: string;
   bannerUrl: string | null;
-  highlightsImage: string | null;
   owner: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
@@ -33,6 +32,7 @@ export type AdminCollectionBadgeListItem = {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  highlightsImage: string | null;
   type: string;
   rarity: string;
   status: string;
@@ -70,6 +70,7 @@ export type AdminBadgeListItem = {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  highlightsImage: string | null;
   type: string;
   rarity: string;
   status: string;

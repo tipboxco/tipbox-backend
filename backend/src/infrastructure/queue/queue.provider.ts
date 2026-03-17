@@ -9,6 +9,12 @@ export interface JobData {
 export interface NotificationJobData extends JobData {
   type: string;
   userId: string;
+  title: string;
+  message: string;
+  data: Record<string, unknown>;
+  sendEmail?: boolean;
+  sendPush?: boolean;
+  sendInApp?: boolean;
   [key: string]: unknown;
 }
 

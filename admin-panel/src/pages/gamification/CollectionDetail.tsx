@@ -51,7 +51,6 @@ import {
   bulkReorderBadges,
   fetchCollectionCategories,
   uploadMedia,
-  uploadHighlightsImage,
   fetchCollectionUserProgress,
   type AdminCollectionCategoryMain,
   type AdminCollectionUserProgressItem,
@@ -278,7 +277,6 @@ function CollectionSummaryTab({
         completionBonus: (values.completionBonus as string) || null,
         categoryId: categoryId,
         bannerUrl: (values.bannerUrl as string) || null,
-        highlightsImage: (values.highlightsImage as string) || null,
       });
       antdMessage.success('Collection updated successfully');
       await onUpdated();
@@ -376,23 +374,6 @@ function CollectionSummaryTab({
         maxSize: 5 * 1024 * 1024,
         onUpload: async (file: File) => {
           const response = await uploadMedia(file);
-          if (!response.data?.url) throw new Error('Upload failed');
-          return response.data.url;
-        },
-      },
-    },
-
-    // 4b. Highlights Image
-    {
-      name: 'highlightsImage',
-      label: 'Highlights Image',
-      type: 'upload',
-      span: 2,
-      uploadConfig: {
-        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
-        maxSize: 5 * 1024 * 1024,
-        onUpload: async (file: File) => {
-          const response = await uploadHighlightsImage(file);
           if (!response.data?.url) throw new Error('Upload failed');
           return response.data.url;
         },

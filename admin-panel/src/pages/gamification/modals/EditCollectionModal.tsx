@@ -16,7 +16,6 @@ import {
   fetchCollection,
   updateCollection,
   uploadMedia,
-  uploadHighlightsImage,
   fetchCollectionCategories,
   type AdminCollectionCategoryMain,
 } from '../../../api/admin-badges-collections';
@@ -34,7 +33,6 @@ interface EditCollectionModalProps {
 interface FormValues {
   name: string;
   bannerUrl?: string;
-  highlightsImage?: string;
   owner?: string;
   focusSector?: string;
   targetGroup?: string;
@@ -50,10 +48,8 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
-  const [uploadingHighlights, setUploadingHighlights] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string>('');
-  const [highlightsImageUrl, setHighlightsImageUrl] = useState<string>('');
   const [categories, setCategories] = useState<AdminCollectionCategoryMain[]>([]);
 
   useEffect(() => {
@@ -83,7 +79,6 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
             form.setFieldsValue({
               name: data.name,
               bannerUrl: data.bannerUrl ?? '',
-              highlightsImage: data.highlightsImage ?? '',
               owner: data.owner ?? '',
               focusSector: data.focusSector ?? '',
               targetGroup: data.targetGroup ?? '',
@@ -94,7 +89,6 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
               categoryId: formCategoryId,
             });
             setBannerUrl(data.bannerUrl ?? '');
-            setHighlightsImageUrl(data.highlightsImage ?? '');
           }
         }
       } catch (e) {
@@ -131,24 +125,6 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
     return false;
   };
 
-  const handleHighlightsUpload = async (file: File) => {
-    setUploadingHighlights(true);
-    setError(null);
-    try {
-      const res = await uploadHighlightsImage(file);
-      if (res.data?.url) {
-        setHighlightsImageUrl(res.data.url);
-        form.setFieldValue('highlightsImage', res.data.url);
-        antdMessage.success('Highlights image uploaded');
-      }
-    } catch (err) {
-      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
-    } finally {
-      setUploadingHighlights(false);
-    }
-    return false;
-  };
-
   // Helper to safely trim string values
   const trimString = (value: string | undefined | null): string | null => {
     if (!value) return null;
@@ -176,7 +152,6 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
       await updateCollection(collectionId, {
         name: values.name.trim(),
         bannerUrl: trimString(values.bannerUrl),
-        highlightsImage: trimString(values.highlightsImage),
         owner: trimString(values.owner),
         focusSector: trimString(values.focusSector),
         targetGroup: trimString(values.targetGroup),
@@ -267,50 +242,6 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
                 onChange={(e) => {
                   setBannerUrl(e.target.value);
                   form.setFieldValue('bannerUrl', e.target.value);
-                }}
-                placeholder="or paste image URL"
-                size="small"
-              />
-            </Space>
-          </Form.Item>
-
-          <Form.Item label="Highlights Image" name="highlightsImage">
-            <Space orientation="vertical" style={{ width: '100%' }} size="small">
-              <Upload
-                beforeUpload={handleHighlightsUpload}
-                showUploadList={false}
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                disabled={uploadingHighlights}
-              >
-                <Button icon={<CloudUploadOutlined />} loading={uploadingHighlights} size="small">
-                  {uploadingHighlights ? 'Uploading...' : 'Upload image'}
-                </Button>
-              </Upload>
-              {highlightsImageUrl && (
-                <div>
-                  <img
-                    src={highlightsImageUrl}
-                    alt="Highlights"
-                    style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4 }}
-                  />
-                  <Button
-                    size="small"
-                    danger
-                    onClick={() => {
-                      setHighlightsImageUrl('');
-                      form.setFieldValue('highlightsImage', '');
-                    }}
-                    style={{ marginTop: 4 }}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              )}
-              <Input
-                value={highlightsImageUrl}
-                onChange={(e) => {
-                  setHighlightsImageUrl(e.target.value);
-                  form.setFieldValue('highlightsImage', e.target.value);
                 }}
                 placeholder="or paste image URL"
                 size="small"

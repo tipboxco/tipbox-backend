@@ -713,13 +713,15 @@ export class InteractionService {
    * Post'un yorumlarını getir
    */
   async getPostComments(
-    postId: string, 
+    postId: string,
     limit = 50,
-    sortBy: 'newest' | 'oldest' | 'popular' = 'newest'
+    sortBy: 'newest' | 'oldest' | 'popular' = 'newest',
+    userId?: string,
   ): Promise<{
     comments: Array<{
       comment: ContentComment;
-      replies: ContentComment[];
+      isLiked: boolean;
+      replies: Array<{ isLiked: boolean; id: string; postId: string; userId: string; parentId: string | null; comment: string; isAnswer: boolean; likesCount: number; createdAt: Date; updatedAt: Date }>;
       user: {
         id: string;
         name: string | null;
@@ -730,20 +732,42 @@ export class InteractionService {
     try {
       const comments = await this.commentRepo.findByPostId(postId, limit, sortBy);
 
+      // Fetch all liked comment IDs for this user in one query
+      const allCommentIds = comments.map((c) => c.id);
+      const allReplies = await Promise.all(
+        comments.map((c) => this.commentRepo.findRepliesByParentId(c.id)),
+      );
+      const allReplyIds = allReplies.flat().map((r) => r.id);
+      const allIds = [...allCommentIds, ...allReplyIds];
+
+      let likedCommentIds = new Set<string>();
+      if (userId && allIds.length > 0) {
+        const likes = await this.prisma.contentLike.findMany({
+          where: { userId, commentId: { in: allIds } },
+          select: { commentId: true },
+        });
+        likedCommentIds = new Set(likes.map((l) => l.commentId).filter(Boolean) as string[]);
+      }
+
       const commentsWithData = await Promise.all(
-        comments.map(async (comment) => {
-          const [user, replies, activeAvatar] = await Promise.all([
+        comments.map(async (comment, index) => {
+          const [user, activeAvatar] = await Promise.all([
             this.userRepo.findById(comment.userId),
-            this.commentRepo.findRepliesByParentId(comment.id),
             this.prisma.userAvatar.findFirst({
               where: { userId: comment.userId, isActive: true },
               orderBy: { createdAt: 'desc' },
             }),
           ]);
 
+          const replies = allReplies[index];
+
           return {
             comment,
-            replies,
+            isLiked: likedCommentIds.has(comment.id),
+            replies: replies.map((reply) => ({
+              ...reply,
+              isLiked: likedCommentIds.has(reply.id),
+            })),
             user: {
               id: user?.id || '',
               name: user?.name || null,

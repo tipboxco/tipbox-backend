@@ -7,6 +7,7 @@ import {
   fetchActionTypes,
   createCollectionGoal,
   uploadMedia,
+  uploadHighlightsImage,
 } from '../../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../../types/admin';
 import { CreatableFormDrawer } from '../../../components/form';
@@ -134,6 +135,30 @@ function AddBadgeToCollectionModal({
         onUpload: async (file: File) => {
           try {
             const response = await uploadMedia(file);
+            if (!response.data?.url) {
+              throw new Error('Upload failed - no URL returned');
+            }
+            return response.data.url;
+          } catch (error) {
+            throw new Error(
+              error instanceof Error ? error.message : 'Failed to upload image'
+            );
+          }
+        },
+      },
+    },
+    {
+      name: 'highlightsImage',
+      label: 'Highlights Image (Optional)',
+      type: 'upload',
+      required: false,
+      placeholder: 'Upload highlights image (JPG, PNG, GIF, WebP - Max 5MB)',
+      uploadConfig: {
+        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024, // 5MB
+        onUpload: async (file: File) => {
+          try {
+            const response = await uploadHighlightsImage(file);
             if (!response.data?.url) {
               throw new Error('Upload failed - no URL returned');
             }
@@ -317,6 +342,7 @@ function AddBadgeToCollectionModal({
         name: values.name.trim(),
         description: trimString(values.description),
         imageUrl: trimString(values.imageUrl),
+        highlightsImage: trimString(values.highlightsImage),
         type: 'COLLECTION' as const,
         rarity: values.rarity as 'COMMON' | 'RARE' | 'EPIC',
         categoryId: effectiveCategoryId,

@@ -89,15 +89,14 @@ export class NotificationWorker {
         type: type as NotificationType,
         title,
         message,
-        data,
+        data: data as unknown as Record<string, string>,
       });
+
+      // Unread count'u bir kere çek, hem socket hem push için kullan
+      const unreadCount = await this.notificationRepo.getUnreadCount(userId);
 
       // 2. Send realtime notification via Socket.IO (if enabled)
       if (sendInApp !== false) {
-        // Get current unread count for the user
-        const unreadCount = await this.notificationRepo.getUnreadCount(userId);
-        
-        // Extract avatar and imageUrl from data for socket notification
         const socketNotification = {
           type,
           title,
@@ -105,7 +104,7 @@ export class NotificationWorker {
           data,
           avatar: data.avatar || null,
           imageUrl: data.imageUrl || null,
-          unreadCount: unreadCount, // ✅ Mobil için: Unread count ekle
+          unreadCount,
           timestamp: new Date().toISOString(),
         };
         await this.sendSocketNotification(userId, socketNotification);
@@ -113,7 +112,8 @@ export class NotificationWorker {
 
       // 3. Send push notification via Expo (if enabled)
       if (sendPush !== false) {
-        await this.expoPushService.sendPushNotification(userId, title, message, data);
+        const pushData = { ...data, unreadCount };
+        await this.expoPushService.sendPushNotification(userId, title, message, pushData);
       }
 
       // 4. Send email (if enabled and implemented)

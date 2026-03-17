@@ -3226,23 +3226,15 @@ export class BrandService {
       // Not JSON, continue with text parsing
     }
 
-    // Try to extract experience sections from body
-    const priceMatch = body.match(/\[price_and_shopping[^\]]*\](.*?)(?:\[|Rating:|$)/is);
-    const usageMatch = body.match(/\[product_and_usage[^\]]*\](.*?)(?:\[|Rating:|$)/is);
-    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
-    const extractedRating = ratingMatch ? parseInt(ratingMatch[1]) : null;
-
-    // Generate random ratings if not provided
-    const generateRating = () =>
-      extractedRating && extractedRating > 0
-        ? extractedRating
-        : this.calculateExperienceRating(body);
+    // Try to extract experience sections from body (each section has its own rating)
+    const priceMatch = body.match(/\[price_and_shopping[^\]]*\]\s*(.*?)\s*\(Rating:\s*(\d+)\/5\)/is);
+    const usageMatch = body.match(/\[product_and_usage[^\]]*\]\s*(.*?)\s*\(Rating:\s*(\d+)\/5\)/is);
 
     if (priceMatch) {
       content.push({
         title: 'Price and Shopping Experience',
         content: priceMatch[1].trim(),
-        rating: generateRating(),
+        rating: parseInt(priceMatch[2], 10) || this.calculateExperienceRating(body),
       });
     }
 
@@ -3250,7 +3242,7 @@ export class BrandService {
       content.push({
         title: 'Product and Usage Experience',
         content: usageMatch[1].trim(),
-        rating: generateRating(),
+        rating: parseInt(usageMatch[2], 10) || this.calculateExperienceRating(body),
       });
     }
 
@@ -3262,14 +3254,14 @@ export class BrandService {
         content.push({
           title: 'Product and Usage Experience',
           content: existingContent,
-          rating: generateRating(),
+          rating: this.calculateExperienceRating(existingContent),
         });
       } else if (usageMatch && !priceMatch) {
         // Only usage found, add price
         content.unshift({
           title: 'Price and Shopping Experience',
           content: existingContent,
-          rating: generateRating(),
+          rating: this.calculateExperienceRating(existingContent),
         });
       }
     }

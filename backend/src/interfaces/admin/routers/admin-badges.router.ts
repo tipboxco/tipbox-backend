@@ -155,7 +155,6 @@ router.get(
       id: c.id,
       name: c.name,
       bannerUrl: c.bannerUrl,
-      highlightsImage: c.highlightsImage,
       owner: c.owner,
       categoryId: c.categoryId,
       categoryName: c.category?.name ?? null,
@@ -184,6 +183,7 @@ router.get(
       name: b.name,
       description: b.description,
       imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
+      highlightsImage: b.highlightsImage ? resolveMediaUrl(b.highlightsImage) : null,
       type: b.type,
       rarity: b.rarity,
       status: b.status,
@@ -588,7 +588,6 @@ router.get(
       id: collection.id,
       name: collection.name,
       bannerUrl: collection.bannerUrl,
-      highlightsImage: collection.highlightsImage,
       owner: collection.owner,
       categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
@@ -619,7 +618,6 @@ router.post(
       data: {
         name: body.name,
         bannerUrl: body.bannerUrl ?? null,
-        highlightsImage: body.highlightsImage ?? null,
         owner: body.owner ?? null,
         focusSector: body.focusSector ?? null,
         targetGroup: body.targetGroup ?? null,
@@ -644,7 +642,6 @@ router.post(
       id: collection.id,
       name: collection.name,
       bannerUrl: collection.bannerUrl,
-      highlightsImage: collection.highlightsImage,
       owner: collection.owner,
       categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
@@ -677,7 +674,6 @@ router.patch(
     const updateData: Record<string, unknown> = {};
     if (body.name !== undefined) updateData.name = body.name;
     if (body.bannerUrl !== undefined) updateData.bannerUrl = body.bannerUrl;
-    if (body.highlightsImage !== undefined) updateData.highlightsImage = body.highlightsImage;
     if (body.owner !== undefined) updateData.owner = body.owner;
     if (body.focusSector !== undefined) updateData.focusSector = body.focusSector;
     if (body.targetGroup !== undefined) updateData.targetGroup = body.targetGroup;
@@ -689,10 +685,6 @@ router.patch(
     // Clean up old banner from S3 if being replaced
     if (body.bannerUrl !== undefined && collection.bannerUrl && body.bannerUrl !== collection.bannerUrl) {
       try { await s3Service.deleteFile(collection.bannerUrl); } catch { /* ignore */ }
-    }
-    // Clean up old highlights image from S3 if being replaced
-    if (body.highlightsImage !== undefined && collection.highlightsImage && body.highlightsImage !== collection.highlightsImage) {
-      try { await s3Service.deleteFile(collection.highlightsImage); } catch { /* ignore */ }
     }
     const updated = await prisma.badgeCollection.update({
       where: { id },
@@ -712,7 +704,6 @@ router.patch(
       id: updated.id,
       name: updated.name,
       bannerUrl: updated.bannerUrl,
-      highlightsImage: updated.highlightsImage,
       owner: updated.owner,
       categoryId: updated.categoryId ?? undefined,
       categoryName: updated.category?.name ?? null,
@@ -786,11 +777,11 @@ router.post(
 );
 
 /**
- * POST /admin/badges/collections/upload-highlights
- * Upload badge collection highlights image to MinIO (collections/highlights/ folder)
+ * POST /admin/badges/upload-highlights
+ * Upload badge highlights image to MinIO (badges/highlights/ folder)
  */
 router.post(
-  '/collections/upload-highlights',
+  '/upload-highlights',
   upload.single('file'),
   validateFileType('ADMIN_IMAGES'),
   asyncHandler(async (req: Request, res: Response) => {
@@ -802,11 +793,11 @@ router.post(
     if (!allowedExt.includes(ext)) {
       return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
     }
-    const fileName = `collections/highlights/${uuidv4()}.${ext}`;
+    const fileName = `badges/highlights/${uuidv4()}.${ext}`;
     const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
     const url = resolveMediaUrl(path);
     logger.info({
-      message: 'Badge collection highlights image uploaded',
+      message: 'Badge highlights image uploaded',
       fileName,
       url,
       adminId: req.user?.id,
@@ -1004,6 +995,7 @@ router.get(
         name: b.name,
         description: b.description,
         imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
+        highlightsImage: b.highlightsImage ? resolveMediaUrl(b.highlightsImage) : null,
         type: b.type,
         rarity: b.rarity,
         status: b.status,
@@ -1128,6 +1120,7 @@ router.get(
       name: badge.name,
       description: badge.description,
       imageUrl: badge.imageUrl ? resolveMediaUrl(badge.imageUrl, true) : null,
+      highlightsImage: badge.highlightsImage ? resolveMediaUrl(badge.highlightsImage) : null,
       type: badge.type,
       rarity: badge.rarity,
       status: badge.status,
@@ -1159,6 +1152,7 @@ router.post(
         name: body.name,
         description: body.description ?? undefined,
         imageUrl: body.imageUrl ?? undefined,
+        highlightsImage: body.highlightsImage ?? undefined,
         type: body.type,
         rarity: body.rarity,
         status: body.status ?? 'ACTIVE',
@@ -1184,6 +1178,7 @@ router.post(
       name: badge.name,
       description: badge.description,
       imageUrl: badge.imageUrl ? resolveMediaUrl(badge.imageUrl, true) : null,
+      highlightsImage: badge.highlightsImage ? resolveMediaUrl(badge.highlightsImage) : null,
       type: badge.type,
       rarity: badge.rarity,
       status: badge.status,
@@ -1217,6 +1212,7 @@ router.patch(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
+    if (body.highlightsImage !== undefined) updateData.highlightsImage = body.highlightsImage;
     if (body.type !== undefined) updateData.type = body.type;
     if (body.rarity !== undefined) updateData.rarity = body.rarity;
     if (body.status !== undefined) updateData.status = body.status;
@@ -1228,6 +1224,10 @@ router.patch(
     // Clean up old image from S3 if being replaced
     if (body.imageUrl !== undefined && badge.imageUrl && body.imageUrl !== badge.imageUrl) {
       try { await s3Service.deleteFile(badge.imageUrl); } catch { /* ignore */ }
+    }
+    // Clean up old highlights image from S3 if being replaced
+    if (body.highlightsImage !== undefined && badge.highlightsImage && body.highlightsImage !== badge.highlightsImage) {
+      try { await s3Service.deleteFile(badge.highlightsImage); } catch { /* ignore */ }
     }
     const updated = await prisma.badge.update({
       where: { id },
@@ -1248,6 +1248,7 @@ router.patch(
       name: updated.name,
       description: updated.description,
       imageUrl: updated.imageUrl ? resolveMediaUrl(updated.imageUrl, true) : null,
+      highlightsImage: updated.highlightsImage ? resolveMediaUrl(updated.highlightsImage) : null,
       type: updated.type,
       rarity: updated.rarity,
       status: updated.status,
