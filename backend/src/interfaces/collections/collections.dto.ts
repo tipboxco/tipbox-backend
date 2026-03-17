@@ -37,6 +37,7 @@ export interface CollectionBadge {
   title: string;
   description: string;
   icon: string;
+  highlightsImage: string | null;
   currentProgress: number;
   totalProgress: number;
   status: CollectionBadgeStatus;

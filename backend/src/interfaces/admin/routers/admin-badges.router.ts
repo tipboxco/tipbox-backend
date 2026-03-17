@@ -23,6 +23,8 @@ import {
   AdminCreateBadgeSchema,
   AdminUpdateBadgeSchema,
   AdminBadgeOwnersQuerySchema,
+  AdminBulkReorderBadgesSchema,
+  AdminBulkUpdateBadgeStatusSchema,
 } from '../schemas/admin-badges.schemas';
 
 // Import DTOs
@@ -173,7 +175,7 @@ router.get(
     if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
     const badges = await prisma.badge.findMany({
       where: { collectionId: id },
-      orderBy: { name: 'asc' },
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
       include: { category: { select: { id: true, name: true } } },
     });
     const data: AdminCollectionBadgeListItem[] = badges.map((b) => ({
@@ -181,8 +183,11 @@ router.get(
       name: b.name,
       description: b.description,
       imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
+      highlightsImage: b.highlightsImage ? resolveMediaUrl(b.highlightsImage) : null,
       type: b.type,
       rarity: b.rarity,
+      status: b.status,
+      displayOrder: b.displayOrder,
       categoryId: b.categoryId,
       categoryName: b.category?.name ?? null,
       createdAt: b.createdAt.toISOString(),
@@ -771,6 +776,36 @@ router.post(
   })
 );
 
+/**
+ * POST /admin/badges/upload-highlights
+ * Upload badge highlights image to MinIO (badges/highlights/ folder)
+ */
+router.post(
+  '/upload-highlights',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `badges/highlights/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Badge highlights image uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
+
 /* ========== Admin Media (upload for banners, avatars, etc.) ========== */
 
 router.post(
@@ -909,6 +944,7 @@ router.get(
       offset: number;
       type?: string;
       rarity?: string;
+      status?: string;
       categoryId?: string;
       collectionId?: string;
       search?: string;
@@ -918,12 +954,14 @@ router.get(
     const where: {
       type?: string;
       rarity?: string;
+      status?: string;
       categoryId?: string;
       collectionId?: string | null;
       OR?: Array<{ name?: { contains: string; mode: 'insensitive' }; description?: { contains: string; mode: 'insensitive' } }>;
     } = {};
     if (q.type) where.type = q.type;
     if (q.rarity) where.rarity = q.rarity;
+    if (q.status) where.status = q.status;
     if (q.categoryId) where.categoryId = q.categoryId;
     if (q.collectionId !== undefined) where.collectionId = q.collectionId;
     if (q.search) {
@@ -957,8 +995,11 @@ router.get(
         name: b.name,
         description: b.description,
         imageUrl: b.imageUrl ? resolveMediaUrl(b.imageUrl, true) : null,
+        highlightsImage: b.highlightsImage ? resolveMediaUrl(b.highlightsImage) : null,
         type: b.type,
         rarity: b.rarity,
+        status: b.status,
+        displayOrder: b.displayOrder,
         categoryId: b.categoryId,
         categoryName: b.category?.name ?? null,
         collectionId: b.collectionId,
@@ -973,6 +1014,62 @@ router.get(
     return res.json({ success: true, data, pagination });
   })
 );
+
+/* ========== Bulk Badge Operations ========== */
+
+router.patch(
+  '/bulk/reorder',
+  validateBody(AdminBulkReorderBadgesSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { badges } = req.body as { badges: Array<{ id: string; displayOrder: number }> };
+    await prisma.$transaction(
+      badges.map((b) =>
+        prisma.badge.update({
+          where: { id: b.id },
+          data: { displayOrder: b.displayOrder },
+        })
+      )
+    );
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BADGE_BULK_REORDER',
+        description: `Reordered ${badges.length} badges`,
+        entityType: 'badge',
+        entityId: 0,
+      },
+    });
+    return res.json({ success: true, message: `${badges.length} badge sıralaması güncellendi` });
+  })
+);
+
+router.patch(
+  '/bulk/status',
+  validateBody(AdminBulkUpdateBadgeStatusSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { badgeIds, status } = req.body as { badgeIds: string[]; status: string };
+    await prisma.badge.updateMany({
+      where: { id: { in: badgeIds } },
+      data: { status: status as 'ACTIVE' | 'INACTIVE' },
+    });
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'BADGE_BULK_STATUS',
+        description: `Updated ${badgeIds.length} badges to ${status}`,
+        entityType: 'badge',
+        entityId: 0,
+      },
+    });
+    return res.json({ success: true, message: `${badgeIds.length} badge durumu ${status} olarak güncellendi` });
+  })
+);
+
+/* ========== Badge Detail & Owners ========== */
 
 router.get(
   '/:id/owners',
@@ -1023,8 +1120,11 @@ router.get(
       name: badge.name,
       description: badge.description,
       imageUrl: badge.imageUrl ? resolveMediaUrl(badge.imageUrl, true) : null,
+      highlightsImage: badge.highlightsImage ? resolveMediaUrl(badge.highlightsImage) : null,
       type: badge.type,
       rarity: badge.rarity,
+      status: badge.status,
+      displayOrder: badge.displayOrder,
       categoryId: badge.categoryId,
       categoryName: badge.category?.name ?? null,
       collectionId: badge.collectionId,
@@ -1052,8 +1152,11 @@ router.post(
         name: body.name,
         description: body.description ?? undefined,
         imageUrl: body.imageUrl ?? undefined,
+        highlightsImage: body.highlightsImage ?? undefined,
         type: body.type,
         rarity: body.rarity,
+        status: body.status ?? 'ACTIVE',
+        displayOrder: body.displayOrder ?? 0,
         boostMultiplier: body.boostMultiplier ?? undefined,
         rewardMultiplier: body.rewardMultiplier ?? undefined,
         categoryId: body.categoryId,
@@ -1075,8 +1178,11 @@ router.post(
       name: badge.name,
       description: badge.description,
       imageUrl: badge.imageUrl ? resolveMediaUrl(badge.imageUrl, true) : null,
+      highlightsImage: badge.highlightsImage ? resolveMediaUrl(badge.highlightsImage) : null,
       type: badge.type,
       rarity: badge.rarity,
+      status: badge.status,
+      displayOrder: badge.displayOrder,
       categoryId: badge.categoryId,
       categoryName: badge.category?.name ?? null,
       collectionId: badge.collectionId,
@@ -1106,8 +1212,11 @@ router.patch(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
+    if (body.highlightsImage !== undefined) updateData.highlightsImage = body.highlightsImage;
     if (body.type !== undefined) updateData.type = body.type;
     if (body.rarity !== undefined) updateData.rarity = body.rarity;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
     if (body.boostMultiplier !== undefined) updateData.boostMultiplier = body.boostMultiplier;
     if (body.rewardMultiplier !== undefined) updateData.rewardMultiplier = body.rewardMultiplier;
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId;
@@ -1115,6 +1224,10 @@ router.patch(
     // Clean up old image from S3 if being replaced
     if (body.imageUrl !== undefined && badge.imageUrl && body.imageUrl !== badge.imageUrl) {
       try { await s3Service.deleteFile(badge.imageUrl); } catch { /* ignore */ }
+    }
+    // Clean up old highlights image from S3 if being replaced
+    if (body.highlightsImage !== undefined && badge.highlightsImage && body.highlightsImage !== badge.highlightsImage) {
+      try { await s3Service.deleteFile(badge.highlightsImage); } catch { /* ignore */ }
     }
     const updated = await prisma.badge.update({
       where: { id },
@@ -1135,8 +1248,11 @@ router.patch(
       name: updated.name,
       description: updated.description,
       imageUrl: updated.imageUrl ? resolveMediaUrl(updated.imageUrl, true) : null,
+      highlightsImage: updated.highlightsImage ? resolveMediaUrl(updated.highlightsImage) : null,
       type: updated.type,
       rarity: updated.rarity,
+      status: updated.status,
+      displayOrder: updated.displayOrder,
       categoryId: updated.categoryId,
       categoryName: updated.category?.name ?? null,
       collectionId: updated.collectionId,

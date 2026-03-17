@@ -19,17 +19,102 @@ export const AdminContentPostsQuerySchema = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
-export const AdminContentPostCreateSchema = z.object({
+/* ---- Type-specific post creation schemas (discriminated union) ---- */
+
+const ContextTypeEnum = z.enum(['PRODUCT', 'PRODUCT_GROUP', 'SUB_CATEGORY']);
+const ExperienceTypeEnum = z.enum(['price_and_shopping', 'product_and_usage']);
+const ExperienceStatusEnum = z.enum(['own', 'tested']);
+const BenefitCategoryEnum = z.enum(['time_saving', 'energy_efficiency', 'durability', 'better_result']);
+
+const AdminPostBaseFields = {
   userId: z.string().uuid(),
-  type: ContentPostTypeEnum,
-  title: z.string().min(1).max(1000),
-  body: z.string().min(1).max(100000),
-  mainCategoryId: z.string().uuid().optional().nullable(),
-  subCategoryId: z.string().uuid().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
-  productId: z.string().optional().nullable(),
-  productGroupId: z.string().uuid().optional().nullable(),
   eventId: z.string().optional().nullable(),
+  images: z.array(z.string()).optional(),
+};
+
+const AdminCreateFreePostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('FREE'),
+  contextType: ContextTypeEnum,
+  contextId: z.string().min(1),
+  description: z.string().min(1).max(100000),
+});
+
+const AdminCreateTipsPostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('TIPS'),
+  contextType: ContextTypeEnum,
+  contextId: z.string().min(1),
+  description: z.string().min(1).max(100000),
+  benefitCategory: BenefitCategoryEnum,
+});
+
+const AdminCreateQuestionPostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('QUESTION'),
+  contextType: ContextTypeEnum,
+  contextId: z.string().min(1),
+  description: z.string().min(1).max(100000),
+  boostEnabled: z.boolean().optional(),
+});
+
+const AdminCreateComparePostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('COMPARE'),
+  contextType: z.literal('PRODUCT'),
+  contextId: z.string().min(1),
+  products: z.array(z.object({
+    productId: z.string().min(1),
+    isSelected: z.boolean(),
+  })).min(2),
+  description: z.string().min(1).max(100000),
+});
+
+const AdminCreateExperiencePostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('EXPERIENCE'),
+  contextType: z.literal('PRODUCT'),
+  contextId: z.string().min(1),
+  content: z.string().min(3).max(5000),
+  experience: z.array(z.object({
+    type: ExperienceTypeEnum,
+    content: z.string(),
+    rating: z.number().int().min(1).max(5),
+  })),
+  status: ExperienceStatusEnum,
+  selectedDurationId: z.string().uuid().nullable(),
+  selectedLocationId: z.string().uuid().nullable(),
+  selectedPurposeId: z.string().uuid().nullable(),
+  experienceSnippetId: z.string().uuid(),
+});
+
+const AdminCreateUpdatePostSchema = z.object({
+  ...AdminPostBaseFields,
+  type: z.literal('UPDATE'),
+  experiencePostId: z.string().min(1),
+  content: z.string().min(1).max(100000),
+  contextId: z.string().optional(),
+});
+
+export const AdminContentPostCreateSchema = z.discriminatedUnion('type', [
+  AdminCreateFreePostSchema,
+  AdminCreateTipsPostSchema,
+  AdminCreateQuestionPostSchema,
+  AdminCreateComparePostSchema,
+  AdminCreateExperiencePostSchema,
+  AdminCreateUpdatePostSchema,
+]);
+
+/* ---- Experience Split & Transfer Owner schemas ---- */
+
+export const AdminExperienceSplitSchema = z.object({
+  userId: z.string().uuid(),
+  productId: z.string().min(1),
+  content: z.string().min(3).max(5000),
+});
+
+export const AdminTransferOwnerSchema = z.object({
+  newUserId: z.string().uuid(),
 });
 
 export const AdminContentPostUpdateSchema = z.object({
@@ -42,6 +127,7 @@ export const AdminContentPostUpdateSchema = z.object({
   categoryId: z.string().nullable().optional(),
   productGroupId: z.string().uuid().nullable().optional(),
   productId: z.string().nullable().optional(),
+  eventId: z.string().nullable().optional(),
 });
 
 export const AdminContentCommentsQuerySchema = z.object({
@@ -149,6 +235,8 @@ export const AdminContentTagsQuerySchema = z.object({
 export type AdminContentPostsQuery = z.infer<typeof AdminContentPostsQuerySchema>;
 export type AdminContentPostCreateInput = z.infer<typeof AdminContentPostCreateSchema>;
 export type AdminContentPostUpdateInput = z.infer<typeof AdminContentPostUpdateSchema>;
+export type AdminExperienceSplitInput = z.infer<typeof AdminExperienceSplitSchema>;
+export type AdminTransferOwnerInput = z.infer<typeof AdminTransferOwnerSchema>;
 export type AdminContentCommentsQuery = z.infer<typeof AdminContentCommentsQuerySchema>;
 export type AdminContentCommentUpdateInput = z.infer<typeof AdminContentCommentUpdateSchema>;
 export type AdminFeedHighlightCreateInput = z.infer<typeof AdminFeedHighlightCreateSchema>;

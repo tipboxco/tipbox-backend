@@ -28,6 +28,7 @@ import {
   UserOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import IdDisplay from '../../components/IdDisplay';
@@ -41,6 +42,7 @@ import {
 } from '../../api/admin-content';
 import type { AdminContentPostDetailResponse, AdminContentCommentListItem } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
+import EditPostModal from '../../components/content/EditPostModal';
 
 const { Text, Paragraph } = Typography;
 
@@ -53,6 +55,7 @@ function ContentPostDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -90,6 +93,16 @@ function ContentPostDetail() {
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  const reloadPost = async () => {
+    if (!id) return;
+    try {
+      const res = await fetchContentPost(id);
+      if (res.data) setPost(res.data);
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to reload post');
+    }
+  };
 
   const handleDeleteComment = async (commentId: string) => {
     try {
@@ -432,6 +445,15 @@ function ContentPostDetail() {
           {/* Actions */}
           <Card bordered title="Actions">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                size="small"
+                onClick={() => setEditModalOpen(true)}
+                block
+              >
+                Edit Post
+              </Button>
               <Space wrap>
                 <Button
                   icon={<StarOutlined />}
@@ -471,6 +493,16 @@ function ContentPostDetail() {
           </Card>
         </Col>
       </Row>
+
+      {/* Edit Post Modal */}
+      {post && (
+        <EditPostModal
+          open={editModalOpen}
+          post={post}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={reloadPost}
+        />
+      )}
     </div>
   );
 }

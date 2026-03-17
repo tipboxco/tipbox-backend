@@ -899,8 +899,11 @@ model Badge {
   name             String
   description      String?
   imageUrl         String?           @map("image_url")
+  highlightsImage  String?           @map("highlights_image")
   type             BadgeType
   rarity           BadgeRarity
+  status           BadgeStatus       @default(ACTIVE)
+  displayOrder     Int               @default(0) @map("display_order")
   boostMultiplier  Float?            @map("boost_multiplier")
   rewardMultiplier Float?            @map("reward_multiplier")
   categoryId       String            @map("category_id") @db.Uuid
@@ -2380,6 +2383,13 @@ enum BadgeVisibility {
   PRIVATE
 
   @@map("badge_visibility")
+}
+
+enum BadgeStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("badge_status")
 }
 
 enum AchievementDifficulty {

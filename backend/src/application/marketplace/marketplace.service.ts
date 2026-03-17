@@ -253,17 +253,18 @@ export class MarketplaceService {
       // Get all NFT IDs to fetch listings
       const nftIds = paginated.map(nft => nft.id);
       
-      // Fetch all listings for these NFTs (active or any status)
+      // Fetch ACTIVE listings for these NFTs
       const prisma = getPrisma();
       const listings = await prisma.nFTMarketListing.findMany({
         where: {
           nftId: { in: nftIds },
           listedByUserId: userId,
+          status: NFTMarketListingStatus.ACTIVE,
         },
         orderBy: { listedAt: 'desc' },
       });
 
-      // Create a map of nftId -> listing
+      // Create a map of nftId -> listing (only ACTIVE)
       const listingMap = new Map(
         listings.map(listing => [listing.nftId, listing])
       );
@@ -274,7 +275,7 @@ export class MarketplaceService {
           id: nft.id,
           title: nft.name,
           username,
-          image: nft.imageUrl,
+          image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
           description: nft.description || undefined,
           type: nft.type,
           rarity: nft.rarity,

@@ -398,7 +398,8 @@ router.get(
       });
     }
 
-    const result = await interactionService.getPostComments(postId, limit, sortBy);
+    const userId = req.user?.id;
+    const result = await interactionService.getPostComments(postId, limit, sortBy, userId);
 
     return res.status(200).json({
       success: true,

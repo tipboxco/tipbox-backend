@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -16,7 +16,10 @@ import {
   Avatar,
   Progress,
   Tag,
-  Cascader,
+  Switch,
+  Tooltip,
+  Badge as AntBadge,
+  theme,
   message as antdMessage,
 } from 'antd';
 import {
@@ -27,6 +30,12 @@ import {
   FolderOpenOutlined,
   CheckCircleOutlined,
   UserOutlined,
+  HolderOutlined,
+  SaveOutlined,
+  EyeInvisibleOutlined,
+  MenuOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import EditableFormSection from '../../components/form/EditableFormSection';
@@ -38,6 +47,8 @@ import {
   fetchCollectionBadges,
   removeCollectionBadge,
   updateCollection,
+  updateBadge,
+  bulkReorderBadges,
   fetchCollectionCategories,
   uploadMedia,
   fetchCollectionUserProgress,
@@ -440,6 +451,212 @@ function CollectionSummaryTab({
   );
 }
 
+/* ========== Badge Card with Order Arrows ========== */
+
+function BadgeCard({
+  badge,
+  index,
+  total,
+  collectionId,
+  onRemove,
+  onStatusChange,
+  onMoveUp,
+  onMoveDown,
+  removing,
+  statusChanging,
+}: {
+  badge: AdminCollectionBadgeListItem;
+  index: number;
+  total: number;
+  collectionId: string;
+  onRemove: (id: string) => void;
+  onStatusChange: (id: string, status: 'ACTIVE' | 'INACTIVE') => void;
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
+  removing: string | null;
+  statusChanging: string | null;
+}) {
+  const { token } = theme.useToken();
+  const isInactive = badge.status === 'INACTIVE';
+
+  return (
+    <Col xs={24} sm={12} md={8} lg={6}>
+      <AntBadge.Ribbon
+        text={isInactive ? 'Inactive' : 'Active'}
+        color={isInactive ? 'default' : 'green'}
+      >
+        <Card
+          bordered
+          hoverable
+          style={{
+            opacity: isInactive ? 0.55 : 1,
+            transition: 'opacity 0.3s ease',
+          }}
+          cover={
+            <div style={{ position: 'relative' }}>
+              {badge.imageUrl ? (
+                <Image
+                  src={badge.imageUrl}
+                  alt={badge.name}
+                  style={{
+                    height: 150,
+                    objectFit: 'cover',
+                    filter: isInactive ? 'grayscale(70%)' : 'none',
+                    transition: 'filter 0.3s ease',
+                  }}
+                  preview={false}
+                />
+              ) : (
+                <div
+                  style={{
+                    height: 150,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: token.colorBgElevated,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                  }}
+                >
+                  <TrophyOutlined style={{ fontSize: 55, color: token.colorTextQuaternary }} />
+                </div>
+              )}
+              {/* Order badge + arrow controls */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                <div
+                  style={{
+                    background: 'rgba(0,0,0,0.6)',
+                    borderRadius: 6,
+                    padding: '2px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <MenuOutlined style={{ color: '#fff', fontSize: 12 }} />
+                  <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                    #{index + 1}
+                  </span>
+                </div>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<ArrowUpOutlined style={{ color: '#fff', fontSize: 12 }} />}
+                  disabled={index === 0}
+                  onClick={() => onMoveUp(index)}
+                  style={{
+                    background: 'rgba(0,0,0,0.5)',
+                    borderRadius: 6,
+                    minWidth: 24,
+                    height: 24,
+                    padding: 0,
+                    border: 'none',
+                  }}
+                />
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<ArrowDownOutlined style={{ color: '#fff', fontSize: 12 }} />}
+                  disabled={index === total - 1}
+                  onClick={() => onMoveDown(index)}
+                  style={{
+                    background: 'rgba(0,0,0,0.5)',
+                    borderRadius: 6,
+                    minWidth: 24,
+                    height: 24,
+                    padding: 0,
+                    border: 'none',
+                  }}
+                />
+              </div>
+            </div>
+          }
+          actions={[
+            <Tooltip key="status" title={isInactive ? 'Activate badge' : 'Deactivate badge'}>
+              <Switch
+                size="small"
+                checked={!isInactive}
+                loading={statusChanging === badge.id}
+                onChange={(checked) => onStatusChange(badge.id, checked ? 'ACTIVE' : 'INACTIVE')}
+              />
+            </Tooltip>,
+            <Link
+              key="view"
+              to={`/gamification/collections/${collectionId}/badges/${badge.id}`}
+            >
+              <Button type="link" size="small" icon={<EditOutlined />}>
+                Detail
+              </Button>
+            </Link>,
+            <Button
+              key="remove"
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={removing === badge.id}
+              onClick={() => onRemove(badge.id)}
+            >
+              Remove
+            </Button>,
+          ]}
+        >
+          <Card.Meta
+            title={
+              <Link to={`/gamification/collections/${collectionId}/badges/${badge.id}`}>
+                <Space size={4}>
+                  {isInactive && (
+                    <EyeInvisibleOutlined style={{ color: token.colorTextTertiary, fontSize: 14 }} />
+                  )}
+                  {badge.name}
+                </Space>
+              </Link>
+            }
+            description={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {badge.description && (
+                  <Text
+                    type="secondary"
+                    ellipsis={{ tooltip: badge.description }}
+                    style={{ fontSize: 13 }}
+                  >
+                    {badge.description}
+                  </Text>
+                )}
+                <Space wrap size={4}>
+                  <Tag
+                    color={
+                      badge.rarity === 'EPIC'
+                        ? 'purple'
+                        : badge.rarity === 'RARE'
+                          ? 'blue'
+                          : 'default'
+                    }
+                    style={{ margin: 0, fontSize: 11 }}
+                  >
+                    {badge.rarity}
+                  </Tag>
+                  {badge.categoryName && (
+                    <Tag style={{ margin: 0, fontSize: 11 }}>{badge.categoryName}</Tag>
+                  )}
+                </Space>
+              </div>
+            }
+          />
+        </Card>
+      </AntBadge.Ribbon>
+    </Col>
+  );
+}
+
 function CollectionBadgesTab({
   collectionId,
   collectionName,
@@ -451,14 +668,22 @@ function CollectionBadgesTab({
   onUpdated: () => void;
   refreshKey?: number;
 }) {
+  const { token } = theme.useToken();
   const [badges, setBadges] = useState<AdminCollectionBadgeListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [statusChanging, setStatusChanging] = useState<string | null>(null);
+  const [orderChanged, setOrderChanged] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const originalOrderRef = useRef<string[]>([]);
 
   const loadBadges = useCallback(async () => {
     try {
       const res = await fetchCollectionBadges(collectionId);
-      setBadges(res.data ?? []);
+      const data = res.data ?? [];
+      setBadges(data);
+      originalOrderRef.current = data.map((b) => b.id);
+      setOrderChanged(false);
     } catch (e) {
       console.error(e);
     } finally {
@@ -469,6 +694,57 @@ function CollectionBadgesTab({
   useEffect(() => {
     loadBadges();
   }, [loadBadges, refreshKey]);
+
+  const moveBadge = (fromIndex: number, toIndex: number) => {
+    setBadges((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      const newIds = updated.map((b) => b.id);
+      setOrderChanged(JSON.stringify(newIds) !== JSON.stringify(originalOrderRef.current));
+      return updated;
+    });
+  };
+
+  const handleSaveOrder = async () => {
+    setSaving(true);
+    try {
+      const reorderData = badges.map((b, index) => ({ id: b.id, displayOrder: index }));
+      await bulkReorderBadges(reorderData);
+      setBadges((prev) => prev.map((b, index) => ({ ...b, displayOrder: index })));
+      originalOrderRef.current = badges.map((b) => b.id);
+      setOrderChanged(false);
+      antdMessage.success('Badge order saved successfully');
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to save order');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetOrder = () => {
+    setBadges((prev) => {
+      const original = originalOrderRef.current;
+      const sorted = [...prev].sort(
+        (a, b) => original.indexOf(a.id) - original.indexOf(b.id),
+      );
+      return sorted;
+    });
+    setOrderChanged(false);
+  };
+
+  const handleStatusChange = async (badgeId: string, status: 'ACTIVE' | 'INACTIVE') => {
+    setStatusChanging(badgeId);
+    try {
+      await updateBadge(badgeId, { status });
+      setBadges((prev) => prev.map((b) => (b.id === badgeId ? { ...b, status } : b)));
+      antdMessage.success(`Badge ${status === 'ACTIVE' ? 'activated' : 'deactivated'}`);
+    } catch (e) {
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update status');
+    } finally {
+      setStatusChanging(null);
+    }
+  };
 
   const handleRemove = async (badgeId: string) => {
     Modal.confirm({
@@ -482,8 +758,8 @@ function CollectionBadgesTab({
         try {
           await removeCollectionBadge(collectionId, badgeId);
           antdMessage.success('Badge removed from collection');
-          await loadBadges(); // Reload badges list
-          onUpdated(); // Update collection stats
+          await loadBadges();
+          onUpdated();
         } catch (e) {
           antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         } finally {
@@ -493,8 +769,40 @@ function CollectionBadgesTab({
     });
   };
 
+  const activeBadges = badges.filter((b) => b.status === 'ACTIVE');
+  const inactiveBadges = badges.filter((b) => b.status === 'INACTIVE');
+
   return (
-    <Card bordered title={`Collection badges (${collectionName})`}>
+    <Card
+      bordered
+      title={
+        <Space>
+          <span>Collection badges ({collectionName})</span>
+          <Tag color="green">{activeBadges.length} active</Tag>
+          {inactiveBadges.length > 0 && (
+            <Tag color="default">{inactiveBadges.length} inactive</Tag>
+          )}
+        </Space>
+      }
+      extra={
+        orderChanged ? (
+          <Space>
+            <Button onClick={handleResetOrder} size="small">
+              Reset
+            </Button>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={saving}
+              onClick={handleSaveOrder}
+              size="small"
+            >
+              Save Order
+            </Button>
+          </Space>
+        ) : null
+      }
+    >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <Spin size="large" />
@@ -503,96 +811,73 @@ function CollectionBadgesTab({
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
-            <Space orientation="vertical">
+            <div>
               <Text>No badges in this collection yet.</Text>
-              <Text type="secondary">Click "Add Badge" button above to add badges to this collection.</Text>
-            </Space>
+              <br />
+              <Text type="secondary">
+                Click &quot;Add Badge&quot; button above to add badges.
+              </Text>
+            </div>
           }
         />
       ) : (
-        <Row gutter={[16, 16]}>
-          {badges.map((b) => (
-            <Col xs={24} sm={12} md={8} lg={6} key={b.id}>
-              <Card
-                bordered
-                hoverable
-                cover={
-                  b.imageUrl ? (
-                    <Image
-                      src={b.imageUrl}
-                      alt={b.name}
-                      style={{ height: 150, objectFit: 'cover' }}
-                      preview={false}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        height: 150,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: '#f0f0f0',
-                      }}
-                    >
-                      <TrophyOutlined style={{ fontSize: 55, color: '#ccc' }} />
-                    </div>
-                  )
-                }
-                actions={[
-                  <Link
-                    key="view"
-                    to={`/gamification/collections/${collectionId}/badges/${b.id}`}
-                  >
-                    <Button type="link" size="small" icon={<EditOutlined />}>
-                      View
-                    </Button>
-                  </Link>,
-                  <Button
-                    key="remove"
-                    type="link"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    loading={removing === b.id}
-                    onClick={() => handleRemove(b.id)}
-                  >
-                    Remove
-                  </Button>,
-                ]}
-              >
-                <Card.Meta
-                  title={
-                    <Link to={`/gamification/collections/${collectionId}/badges/${b.id}`}>
-                      {b.name}
-                    </Link>
-                  }
-                  description={
-                    <Space orientation="vertical" size="small" style={{ width: '100%' }}>
-                      {b.description && (
-                        <Text type="secondary" style={{ fontSize: 14 }}>
-                          {b.description}
-                        </Text>
-                      )}
-                      <Space wrap>
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          {b.rarity}
-                        </Text>
-                        {b.categoryName && (
-                          <Text type="secondary" style={{ fontSize: 13 }}>
-                            • {b.categoryName}
-                          </Text>
-                        )}
-                      </Space>
-                      <Text type="secondary" style={{ fontSize: 13 }}>
-                        {new Date(b.createdAt).toLocaleString('en-US')}
-                      </Text>
-                    </Space>
-                  }
-                />
-              </Card>
-            </Col>
-          ))}
-        </Row>
+        <>
+          {orderChanged && (
+            <div
+              style={{
+                padding: '8px 16px',
+                marginBottom: 16,
+                background: token.colorWarningBg,
+                border: `1px solid ${token.colorWarningBorder}`,
+                borderRadius: token.borderRadius,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <HolderOutlined style={{ color: token.colorWarning }} />
+              <Text style={{ fontSize: 13, color: token.colorWarningText }}>
+                You have unsaved order changes. Click &quot;Save Order&quot; to apply.
+              </Text>
+            </div>
+          )}
+          {!orderChanged && badges.length > 1 && (
+            <div
+              style={{
+                padding: '8px 16px',
+                marginBottom: 16,
+                background: token.colorBgElevated,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                borderRadius: token.borderRadius,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <MenuOutlined style={{ color: token.colorTextTertiary }} />
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Use arrow buttons to reorder badges. Toggle the switch to activate/deactivate.
+              </Text>
+            </div>
+          )}
+          <Row gutter={[16, 16]}>
+            {badges.map((b, idx) => (
+              <BadgeCard
+                key={b.id}
+                badge={b}
+                index={idx}
+                total={badges.length}
+                collectionId={collectionId}
+                onRemove={handleRemove}
+                onStatusChange={handleStatusChange}
+                onMoveUp={(i) => moveBadge(i, i - 1)}
+                onMoveDown={(i) => moveBadge(i, i + 1)}
+                removing={removing}
+                statusChanging={statusChanging}
+              />
+            ))}
+          </Row>
+        </>
       )}
     </Card>
   );

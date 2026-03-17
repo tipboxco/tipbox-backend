@@ -49,6 +49,21 @@ import { ValidationError } from '../../infrastructure/errors/custom-errors';
 import { InventoryService } from '../inventory/inventory.service';
 import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 
+/**
+ * Admin tarafından post oluşturulurken bazı kontrolleri atlamak için kullanılır.
+ * PostService create method'larına opsiyonel parametre olarak geçilir.
+ */
+export interface AdminCreateOptions {
+  /** Envanter kontrolünü atla (admin envanterde olmasa da OWN post oluşturabilsin) */
+  skipInventoryCheck?: boolean;
+  /** Event üyelik kontrolünü atla */
+  skipEventMembershipCheck?: boolean;
+  /** Boost için TIPS bakiye kontrolü ve kesintisini atla */
+  skipBoostPayment?: boolean;
+  /** Audit trail için admin kullanıcı ID'si */
+  adminId?: string;
+}
+
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
   private tipRepo: PostTipPrismaRepository;
@@ -481,7 +496,8 @@ export class PostService {
    */
   async createFreePost(
     userId: string,
-    request: CreatePostRequest
+    request: CreatePostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // ✅ YENİ: InventoryId varsa, productId'yi inventory'den çek
@@ -517,7 +533,9 @@ export class PostService {
       // Event validation and membership check (if eventId is provided)
       if (request.eventId) {
         await this.validateEvent(request.eventId);
-        await this.validateEventMembership(userId, request.eventId);
+        if (!adminOptions?.skipEventMembershipCheck) {
+          await this.validateEventMembership(userId, request.eventId);
+        }
 
         // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
         const event = await this.prisma.event.findUnique({
@@ -544,7 +562,7 @@ export class PostService {
       // Normal free post'lar için kontrol YAPILIR (sadece envanterindeki ürünler hakkında gönderi paylaşabilir)
       const isEventPost = !!request.eventId;
 
-      if (request.contextType === ContextType.PRODUCT && contextIds.productId && !isEventPost) {
+      if (request.contextType === ContextType.PRODUCT && contextIds.productId && !isEventPost && !adminOptions?.skipInventoryCheck) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
           contextIds.productId
@@ -759,7 +777,8 @@ export class PostService {
    */
   async createTipsAndTricksPost(
     userId: string,
-    request: CreateTipsAndTricksPostRequest
+    request: CreateTipsAndTricksPostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
@@ -784,7 +803,7 @@ export class PostService {
       );
 
       // ✅ YENİ: Product context ise envanter kontrolü yap
-      if (request.contextType === ContextType.PRODUCT && contextIds.productId) {
+      if (request.contextType === ContextType.PRODUCT && contextIds.productId && !adminOptions?.skipInventoryCheck) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
           contextIds.productId
@@ -959,7 +978,8 @@ export class PostService {
    */
   async createQuestionPost(
     userId: string,
-    request: CreateQuestionPostRequest
+    request: CreateQuestionPostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
@@ -993,7 +1013,7 @@ export class PostService {
 
       const boostEnabled = request.boostEnabled === true;
       let boostPrice: number | undefined;
-      if (boostEnabled) {
+      if (boostEnabled && !adminOptions?.skipBoostPayment) {
         const { price } = await this.getBoostPrice();
         const balanceInfo = await this.walletService.getUserBalance(userId);
         if (balanceInfo.available < price) {
@@ -1021,13 +1041,18 @@ export class PostService {
         boostPrice
       );
 
-      if (boostEnabled && boostPrice != null) {
+      if (boostEnabled && boostPrice != null && !adminOptions?.skipBoostPayment) {
         try {
           await this.transactionService.deductForPostBoost(userId, boostPrice, post.id);
         } catch (err) {
           await this.postRepo.update(post.id, { isBoosted: false, boostPrice: undefined });
           throw err;
         }
+        const boostedUntil = new Date();
+        boostedUntil.setDate(boostedUntil.getDate() + 7);
+        await this.postRepo.update(post.id, { boostedUntil });
+      } else if (boostEnabled && adminOptions?.skipBoostPayment) {
+        // Admin boost: set boosted without payment
         const boostedUntil = new Date();
         boostedUntil.setDate(boostedUntil.getDate() + 7);
         await this.postRepo.update(post.id, { boostedUntil });
@@ -1229,7 +1254,8 @@ export class PostService {
    */
   async createBenchmarkPost(
     userId: string,
-    request: CreateBenchmarkPostRequest
+    request: CreateBenchmarkPostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Benchmark posts can only be created for products
@@ -1268,7 +1294,7 @@ export class PostService {
       );
 
       // ✅ Ana ürün (context product) envanterde olmalı
-      if (contextIds.productId) {
+      if (contextIds.productId && !adminOptions?.skipInventoryCheck) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
           contextIds.productId
@@ -1402,7 +1428,8 @@ export class PostService {
    */
   async createExperiencePost(
     userId: string,
-    request: CreateExperiencePostRequest
+    request: CreateExperiencePostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Event validation (if eventId is provided)
@@ -1467,7 +1494,7 @@ export class PostService {
       }
 
       // ✅ YENİ: "I owned" status ise envanter kontrolü yap (tried için kontrol yok)
-      if (request.status === ExperienceStatus.OWN) {
+      if (request.status === ExperienceStatus.OWN && !adminOptions?.skipInventoryCheck) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
           contextIds.productId
@@ -1784,7 +1811,8 @@ export class PostService {
    */
   async createUpdatePost(
     userId: string,
-    request: CreateUpdatePostRequest
+    request: CreateUpdatePostRequest,
+    adminOptions?: AdminCreateOptions
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Update posts are always for products (contextType is normalized to PRODUCT in router)
@@ -1830,7 +1858,7 @@ export class PostService {
         throw new Error('Experience post not found');
       }
 
-      if (experiencePost.userId !== userId) {
+      if (experiencePost.userId !== userId && !adminOptions?.skipInventoryCheck) {
         throw new Error('You can only create update posts on your own experience posts');
       }
 

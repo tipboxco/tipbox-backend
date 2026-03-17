@@ -2072,13 +2072,13 @@ export class UserService {
       return [{ title: 'Product and Usage Experience', content: '', rating: 0 }];
     }
     const content: Array<{ title: string; content: string; rating: number }> = [];
-    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
-    const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
-    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
-    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
-    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: r });
-    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: r });
+    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\]\s*(.*?)\s*\(Rating:\s*(\d+)\/5\)/is);
+    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\]\s*(.*?)\s*\(Rating:\s*(\d+)\/5\)/is);
+    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: Math.min(5, Math.max(1, parseInt(priceMatch[2], 10))) });
+    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: Math.min(5, Math.max(1, parseInt(usageMatch[2], 10))) });
     if (content.length === 0) {
+      const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+      const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
       content.push({ title: 'Price and Shopping Experience', content: body, rating: r });
       content.push({ title: 'Product and Usage Experience', content: body, rating: r });
     }

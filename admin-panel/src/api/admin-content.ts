@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, del, postFormData } from './client';
 import type {
   AdminPostSearchItem,
   AdminContentPostsStatsResponse,
@@ -58,19 +58,126 @@ export async function fetchContentPost(id: string) {
   return get<AdminContentPostDetailResponse>(`${prefix}/content/posts/${id}`);
 }
 
-export async function createContentPost(body: {
+/* ---- Type-specific post creation ---- */
+
+export type AdminCreateFreePostBody = {
+  type: 'FREE';
   userId: string;
-  type: string;
-  title: string;
-  body: string;
-  mainCategoryId?: string | null;
-  subCategoryId?: string | null;
-  categoryId?: string | null;
-  productId?: string | null;
-  productGroupId?: string | null;
+  contextType: 'PRODUCT' | 'PRODUCT_GROUP' | 'SUB_CATEGORY';
+  contextId: string;
+  description: string;
+  images?: string[];
   eventId?: string | null;
-}) {
+};
+
+export type AdminCreateTipsPostBody = {
+  type: 'TIPS';
+  userId: string;
+  contextType: 'PRODUCT' | 'PRODUCT_GROUP' | 'SUB_CATEGORY';
+  contextId: string;
+  description: string;
+  benefitCategory: 'time_saving' | 'energy_efficiency' | 'durability' | 'better_result';
+  images?: string[];
+  eventId?: string | null;
+};
+
+export type AdminCreateQuestionPostBody = {
+  type: 'QUESTION';
+  userId: string;
+  contextType: 'PRODUCT' | 'PRODUCT_GROUP' | 'SUB_CATEGORY';
+  contextId: string;
+  description: string;
+  boostEnabled?: boolean;
+  images?: string[];
+  eventId?: string | null;
+};
+
+export type AdminCreateComparePostBody = {
+  type: 'COMPARE';
+  userId: string;
+  contextType: 'PRODUCT';
+  contextId: string;
+  products: { productId: string; isSelected: boolean }[];
+  description: string;
+  images?: string[];
+  eventId?: string | null;
+};
+
+export type AdminCreateExperiencePostBody = {
+  type: 'EXPERIENCE';
+  userId: string;
+  contextType: 'PRODUCT';
+  contextId: string;
+  content: string;
+  experience: { type: 'price_and_shopping' | 'product_and_usage'; content: string; rating: number }[];
+  status: 'own' | 'tested';
+  selectedDurationId: string | null;
+  selectedLocationId: string | null;
+  selectedPurposeId: string | null;
+  experienceSnippetId: string;
+  images?: string[];
+  eventId?: string | null;
+};
+
+export type AdminCreateUpdatePostBody = {
+  type: 'UPDATE';
+  userId: string;
+  experiencePostId: string;
+  content: string;
+  contextId?: string;
+  images?: string[];
+  eventId?: string | null;
+};
+
+export type AdminCreatePostBody =
+  | AdminCreateFreePostBody
+  | AdminCreateTipsPostBody
+  | AdminCreateQuestionPostBody
+  | AdminCreateComparePostBody
+  | AdminCreateExperiencePostBody
+  | AdminCreateUpdatePostBody;
+
+export async function createContentPost(body: AdminCreatePostBody) {
   return post<AdminContentPostDetailResponse>(`${prefix}/content/posts`, body);
+}
+
+/* ---- Experience Split (AI) ---- */
+
+export type SplitExperienceResponse = {
+  experienceSnippetId: string;
+  priceAndShopping: { content: string; rating: number; placeholder?: string | null; isEnhanced?: boolean } | null;
+  productAndUsage: { content: string; rating: number; placeholder?: string | null; isEnhanced?: boolean } | null;
+  metadata: { tokensUsed: number | null; processingTimeMs: number; model: string; promptVersion: string };
+};
+
+export async function splitExperience(body: { userId: string; productId: string; content: string }) {
+  return post<SplitExperienceResponse>(`${prefix}/content/posts/experience/split`, body);
+}
+
+/* ---- Experience Options ---- */
+
+export type ExperienceOptionsResponse = {
+  durations: { id: string; name: string }[];
+  locations: { id: string; name: string }[];
+  purposes: { id: string; name: string }[];
+};
+
+export async function fetchExperienceOptions() {
+  return get<ExperienceOptionsResponse>(`${prefix}/content/posts/experience/options`);
+}
+
+/* ---- Content Post Image Upload ---- */
+
+export async function uploadContentPostImage(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>(`${prefix}/content/posts/upload-image`, formData);
+}
+
+/* ---- Transfer Post Owner ---- */
+
+export async function transferPostOwner(postId: string, newUserId: string) {
+  return patch<AdminContentPostDetailResponse>(`${prefix}/content/posts/${postId}/transfer-owner`, { newUserId });
 }
 
 export async function updateContentPost(
@@ -85,6 +192,7 @@ export async function updateContentPost(
     categoryId: string | null;
     productGroupId: string | null;
     productId: string | null;
+    eventId: string | null;
   }>
 ) {
   return patch<AdminContentPostListItem>(`${prefix}/content/posts/${id}`, body);

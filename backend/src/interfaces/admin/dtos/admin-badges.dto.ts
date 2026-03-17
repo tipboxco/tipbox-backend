@@ -32,8 +32,11 @@ export type AdminCollectionBadgeListItem = {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  highlightsImage: string | null;
   type: string;
   rarity: string;
+  status: string;
+  displayOrder: number;
   categoryId: string;
   categoryName?: string | null;
   createdAt: string;
@@ -67,8 +70,11 @@ export type AdminBadgeListItem = {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  highlightsImage: string | null;
   type: string;
   rarity: string;
+  status: string;
+  displayOrder: number;
   categoryId: string;
   categoryName?: string | null;
   collectionId: string | null;

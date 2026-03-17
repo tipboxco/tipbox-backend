@@ -66,16 +66,18 @@ export const AdminUpdateCollectionGoalSchema = z.object({
 
 const BadgeTypeEnum = z.enum(['COLLECTION', 'EVENT', 'COSMETIC', 'BRAND']);
 const BadgeRarityEnum = z.enum(['COMMON', 'RARE', 'EPIC']);
+const BadgeStatusEnum = z.enum(['ACTIVE', 'INACTIVE']);
 
 export const AdminBadgesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
   type: BadgeTypeEnum.optional(),
   rarity: BadgeRarityEnum.optional(),
+  status: BadgeStatusEnum.optional(),
   categoryId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional(),
   collectionId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional(),
   search: z.string().min(1).optional(),
-  sort: z.enum(['createdAt', 'name']).default('createdAt'),
+  sort: z.enum(['createdAt', 'name', 'displayOrder']).default('createdAt'),
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
@@ -83,8 +85,11 @@ export const AdminCreateBadgeSchema = z.object({
   name: z.string().min(1).max(500),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
+  highlightsImage: z.string().url().optional().nullable(),
   type: BadgeTypeEnum,
   rarity: BadgeRarityEnum,
+  status: BadgeStatusEnum.optional().default('ACTIVE'),
+  displayOrder: z.number().int().min(0).optional().default(0),
   boostMultiplier: z.number().min(0).optional().nullable(),
   rewardMultiplier: z.number().min(0).optional().nullable(),
   categoryId: z.string().regex(UUID_REGEX, 'Invalid UUID format'),
@@ -95,12 +100,31 @@ export const AdminUpdateBadgeSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
+  highlightsImage: z.string().url().optional().nullable(),
   type: BadgeTypeEnum.optional(),
   rarity: BadgeRarityEnum.optional(),
+  status: BadgeStatusEnum.optional(),
+  displayOrder: z.number().int().min(0).optional(),
   boostMultiplier: z.number().min(0).optional().nullable(),
   rewardMultiplier: z.number().min(0).optional().nullable(),
   categoryId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional(),
   collectionId: z.string().regex(UUID_REGEX, 'Invalid UUID format').optional().nullable(),
+});
+
+/* ========== Bulk Badge Operations ========== */
+
+export const AdminBulkReorderBadgesSchema = z.object({
+  badges: z.array(
+    z.object({
+      id: z.string().regex(UUID_REGEX, 'Invalid UUID format'),
+      displayOrder: z.number().int().min(0),
+    })
+  ).min(1).max(200),
+});
+
+export const AdminBulkUpdateBadgeStatusSchema = z.object({
+  badgeIds: z.array(z.string().regex(UUID_REGEX, 'Invalid UUID format')).min(1).max(200),
+  status: BadgeStatusEnum,
 });
 
 export const AdminBadgeOwnersQuerySchema = AdminPaginationQuerySchema.extend({
@@ -135,5 +159,7 @@ export type AdminUpdateCollectionGoalInput = z.infer<typeof AdminUpdateCollectio
 export type AdminBadgesQuery = z.infer<typeof AdminBadgesQuerySchema>;
 export type AdminCreateBadgeInput = z.infer<typeof AdminCreateBadgeSchema>;
 export type AdminUpdateBadgeInput = z.infer<typeof AdminUpdateBadgeSchema>;
+export type AdminBulkReorderBadgesInput = z.infer<typeof AdminBulkReorderBadgesSchema>;
+export type AdminBulkUpdateBadgeStatusInput = z.infer<typeof AdminBulkUpdateBadgeStatusSchema>;
 export type AdminBadgeOwnersQuery = z.infer<typeof AdminBadgeOwnersQuerySchema>;
 export type AdminUserProgressQuery = z.infer<typeof AdminUserProgressQuerySchema>;
