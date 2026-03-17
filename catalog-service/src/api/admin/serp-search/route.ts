@@ -125,7 +125,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       }
 
       const searchParams: Record<string, string> = {
-        engine: "google_shopping_light",
+        engine: "google_shopping",
         q: q.trim(),
         api_key: apiKey,
         gl,

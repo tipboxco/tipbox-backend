@@ -425,16 +425,32 @@ export const SerpSearchDrawer = ({
         return
       }
 
-      const newResults: SerpResult[] = data.results || []
-      if (newResults.length === 0) {
+      const rawResults: SerpResult[] = data.results || []
+      if (rawResults.length === 0) {
         setHasMore(false)
         toast.success("Tamamlandı", { description: "Daha fazla sonuç bulunamadı" })
         return
       }
 
-      setResults((prev) => [...prev, ...newResults])
-      setCurrentStart((prev) => prev + newResults.length)
-      setHasMore(data.has_more === true || newResults.length >= parseInt(filters.num))
+      // Deduplicate: filter out results already in the list (by link or title)
+      setResults((prev) => {
+        const existingKeys = new Set<string>()
+        for (const r of prev) {
+          if (r.link) existingKeys.add(r.link)
+          existingKeys.add(`t:${r.title}`)
+        }
+        const unique = rawResults.filter((r) => {
+          if (r.link && existingKeys.has(r.link)) return false
+          if (existingKeys.has(`t:${r.title}`)) return false
+          return true
+        })
+        if (unique.length === 0) {
+          setHasMore(false)
+        }
+        return [...prev, ...unique]
+      })
+      setCurrentStart((prev) => prev + rawResults.length)
+      setHasMore(data.has_more === true || rawResults.length >= parseInt(filters.num))
     } catch {
       toast.error("Bağlantı Hatası", { description: "Sunucuya bağlanılamadı" })
     } finally {
