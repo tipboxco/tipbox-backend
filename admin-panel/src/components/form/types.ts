@@ -78,6 +78,8 @@ export interface EditableFormSectionProps {
   columns?: 1 | 2;
   /** Loading state */
   loading?: boolean;
+  /** Force drawer editing regardless of field count */
+  preferDrawer?: boolean;
 }
 
 /**

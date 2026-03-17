@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /d/tipbox-app/tipbox-backend/catalog-service/src/admin/routes/brands/[id]/)",
+      "Bash(grep -r \"Cannot create multiple\\\\|multiple links\\\\|already linked\\\\|already exists.*link\" d:/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/ --include=*.js -l)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules -path */admin/product-categories* -o -path */store/product-categories*)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules -path */product-categories/[id]* -name route.*)",
+      "Bash(cat /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/@medusajs+medusa@2.12.3_@me_8b6ca724be90cdbdaf6f1b1f826027e1/node_modules/@medusajs/medusa/dist/api/admin/product-categories/[id]/route.js)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules -path */admin/products/[id] -name route.js)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules -path *admin/products* -name route.d.ts)",
+      "Bash(cat /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/@medusajs+medusa@2.12.3_@me_8b6ca724be90cdbdaf6f1b1f826027e1/node_modules/@medusajs/medusa/dist/api/admin/products/[id]/route.js)",
+      "Bash(grep -r \"category_ids\\\\|categories\" /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/@medusajs+framework*/node_modules/@medusajs/framework/dist/types --include=*.d.ts)",
+      "Bash(ls -la /d/tipbox-app/tipbox-backend/catalog-service/src/api/admin/categories/[id]/)",
+      "Bash(xargs -I {} grep -l \"@medusajs/icons\" {})"
+    ]
+  }
+}

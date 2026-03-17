@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, unstable_usePrompt as usePrompt } from "react-router-dom"
 import { backendUrl } from "../../../lib/config"
-import { 
-  Container, 
-  Heading, 
-  Table, 
-  Button, 
-  Text, 
+import {
+  Container,
+  Heading,
+  Table,
+  Button,
+  Text,
   Input,
   Label,
   toast,
@@ -18,11 +18,11 @@ import {
   CommandBar,
   Select,
 } from "@medusajs/ui"
-import { 
-  TagSolid, 
-  PlusMini, 
+import {
+  TagSolid,
+  PlusMini,
   EllipsisHorizontal,
-  PencilSquare, 
+  PencilSquare,
   Trash,
   MagnifyingGlass,
   ArrowLeft,
@@ -32,11 +32,13 @@ import {
   Spinner,
   ChevronLeftMini,
   ChevronRightMini,
+  Check,
 } from "@medusajs/icons"
 import { ProductPickerModal } from "../../../components/product-picker"
 import { SerpSearchDrawer } from "../../../components/serp-search"
 import { EmptyState } from "../../../components/empty-state"
 import { Modal, ModalBody, ModalFooter } from "../../../components/modal"
+import { CategoryTreeSelect, useCategoryCache } from "../../../components/category-tree-select"
 
 type Brand = {
   id: string
@@ -65,6 +67,7 @@ type Product = {
   thumbnail?: string
   status: string
   variants?: { id: string }[]
+  categories?: { id: string; name: string }[]
 }
 
 type ProductsResponse = {
@@ -94,6 +97,17 @@ const BrandDetailPage = () => {
   // SERP search modal state
   const [serpModalOpen, setSerpModalOpen] = useState(false)
 
+  // Product categories (cached)
+  const { categories: productCategories, loading: categoriesLoading } = useCategoryCache()
+
+  // Pending category changes: productId → new categoryId (null = remove)
+  const [pendingCategoryChanges, setPendingCategoryChanges] = useState<Map<string, string | null>>(new Map())
+  const [savingCategories, setSavingCategories] = useState(false)
+
+  // Bulk category assign modal
+  const [bulkCategoryModalOpen, setBulkCategoryModalOpen] = useState(false)
+  const [bulkCategoryId, setBulkCategoryId] = useState<string | null>(null)
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -107,10 +121,26 @@ const BrandDetailPage = () => {
   const [deleteAllProductsDialogOpen, setDeleteAllProductsDialogOpen] = useState(false)
   const [deletingAllProducts, setDeletingAllProducts] = useState(false)
 
+  // Pending changes count
+  const pendingCount = pendingCategoryChanges.size
+
+  // Get effective category for a product (pending change or original)
+  const getEffectiveCategoryId = useCallback((product: Product): string | null => {
+    if (pendingCategoryChanges.has(product.id)) {
+      return pendingCategoryChanges.get(product.id) ?? null
+    }
+    return product.categories?.[0]?.id || null
+  }, [pendingCategoryChanges])
+
+  // Check if a product has a pending change
+  const hasChange = useCallback((productId: string): boolean => {
+    return pendingCategoryChanges.has(productId)
+  }, [pendingCategoryChanges])
+
   // Fetch brand data
   const fetchBrand = useCallback(async (page: number = currentPage, limit: number = itemsPerPage) => {
     if (!id) return
-    
+
     setLoading(true)
     try {
       const offset = (page - 1) * limit
@@ -118,10 +148,10 @@ const BrandDetailPage = () => {
         fetch(`${backendUrl}/admin/brands/${id}`, { credentials: "include" }),
         fetch(`${backendUrl}/admin/brands/${id}/products?limit=${limit}&offset=${offset}`, { credentials: "include" })
       ])
-      
+
       const brandData = await brandResponse.json()
       const productsData: ProductsResponse = await productsResponse.json()
-      
+
       setBrand(brandData.brand)
       setBrandProducts(productsData.products || [])
       setTotalProductCount(productsData.count || 0)
@@ -136,6 +166,27 @@ const BrandDetailPage = () => {
     fetchBrand(currentPage, itemsPerPage)
   }, [currentPage, itemsPerPage])
 
+  // Clear pending changes when page changes
+  useEffect(() => {
+    setPendingCategoryChanges(new Map())
+  }, [currentPage, itemsPerPage])
+
+  // Warn before leaving page with unsaved changes (SPA navigation)
+  usePrompt({
+    when: pendingCount > 0,
+    message: `${pendingCount} kaydedilmemiş kategori değişikliği var. Sayfadan ayrılmak istediğinize emin misiniz?`,
+  })
+
+  // Warn before closing tab/browser with unsaved changes
+  useEffect(() => {
+    if (pendingCount === 0) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [pendingCount])
 
   // Search with debounce
   useEffect(() => {
@@ -154,7 +205,7 @@ const BrandDetailPage = () => {
   const filteredBrandProducts = useMemo(() => {
     if (!searchQuery.trim()) return brandProducts
     const query = searchQuery.toLowerCase()
-    return brandProducts.filter(p => 
+    return brandProducts.filter(p =>
       p.title.toLowerCase().includes(query) ||
       p.handle.toLowerCase().includes(query)
     )
@@ -167,12 +218,20 @@ const BrandDetailPage = () => {
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
+      if (pendingCount > 0) {
+        const confirmed = window.confirm(`${pendingCount} kaydedilmemiş değişiklik var. Sayfa değiştirilsin mi?`)
+        if (!confirmed) return
+      }
       setCurrentPage(newPage)
       window.scrollTo({ top: 0, behavior: "smooth" })
     }
   }
 
   const handleItemsPerPageChange = (newLimit: number) => {
+    if (pendingCount > 0) {
+      const confirmed = window.confirm(`${pendingCount} kaydedilmemiş değişiklik var. Devam edilsin mi?`)
+      if (!confirmed) return
+    }
     setItemsPerPage(newLimit)
     setCurrentPage(1)
   }
@@ -181,39 +240,39 @@ const BrandDetailPage = () => {
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
     const maxVisible = 7
-    
+
     if (totalPages <= maxVisible) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i)
       }
     } else {
       pages.push(1)
-      
+
       if (currentPage > 3) {
         pages.push("...")
       }
-      
+
       const start = Math.max(2, currentPage - 1)
       const end = Math.min(totalPages - 1, currentPage + 1)
-      
+
       for (let i = start; i <= end; i++) {
         pages.push(i)
       }
-      
+
       if (currentPage < totalPages - 2) {
         pages.push("...")
       }
-      
+
       pages.push(totalPages)
     }
-    
+
     return pages
   }
 
 
   const handleDeleteBrand = async () => {
     if (!brand || !id) return
-    
+
     if (deleteConfirmName !== brand.name) {
       toast.error("Hata", { description: "Marka adı eşleşmiyor" })
       return
@@ -239,7 +298,7 @@ const BrandDetailPage = () => {
 
   const handleDeleteAllProducts = async () => {
     if (!id) return
-    
+
     setDeletingAllProducts(true)
     try {
       const response = await fetch(`${backendUrl}/admin/brands/${id}/products/all`, {
@@ -247,16 +306,16 @@ const BrandDetailPage = () => {
         credentials: "include",
       })
       const data = await response.json()
-      
+
       if (response.ok && data.success) {
-        toast.success("Başarılı", { 
-          description: `${data.deleted_count} ürün silindi` 
+        toast.success("Başarılı", {
+          description: `${data.deleted_count} ürün silindi`
         })
         setDeleteAllProductsDialogOpen(false)
         fetchBrand(currentPage, itemsPerPage)
       } else {
-        toast.error("Hata", { 
-          description: data.errors?.join(", ") || "Ürünler silinirken hata oluştu" 
+        toast.error("Hata", {
+          description: data.errors?.join(", ") || "Ürünler silinirken hata oluştu"
         })
       }
     } catch {
@@ -269,10 +328,10 @@ const BrandDetailPage = () => {
   // Product operations - add products from picker
   const handleAddProducts = async (productIds: string[]) => {
     if (productIds.length === 0 || !id) return
-    
+
     let successCount = 0
     const batchSize = 5
-    
+
     for (let i = 0; i < productIds.length; i += batchSize) {
       const batch = productIds.slice(i, i + batchSize)
       const results = await Promise.allSettled(
@@ -330,6 +389,101 @@ const BrandDetailPage = () => {
       toast.error("Hata", { description: "Ürünler kaldırılırken hata oluştu" })
     }
   }
+
+  // Stage a category change (don't save yet)
+  const handleStageCategoryChange = useCallback((productId: string, categoryId: string | null) => {
+    setPendingCategoryChanges(prev => {
+      const next = new Map(prev)
+      // Find the product's original category
+      const product = brandProducts.find(p => p.id === productId)
+      const originalCategoryId = product?.categories?.[0]?.id || null
+
+      // If the new value matches the original, remove the pending change
+      if (categoryId === originalCategoryId) {
+        next.delete(productId)
+      } else {
+        next.set(productId, categoryId)
+      }
+      return next
+    })
+  }, [brandProducts])
+
+  // Discard all pending changes
+  const handleDiscardChanges = useCallback(() => {
+    setPendingCategoryChanges(new Map())
+  }, [])
+
+  // Save all pending category changes
+  const handleSaveCategoryChanges = useCallback(async () => {
+    if (pendingCount === 0) return
+    setSavingCategories(true)
+
+    const entries = Array.from(pendingCategoryChanges.entries())
+    let successCount = 0
+    const batchSize = 5
+
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize)
+      const results = await Promise.allSettled(
+        batch.map(([productId, categoryId]) =>
+          fetch(`${backendUrl}/admin/products/${productId}`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              categories: categoryId ? [{ id: categoryId }] : [],
+            }),
+          })
+        )
+      )
+      successCount += results.filter(r => r.status === "fulfilled" && (r.value as Response).ok).length
+    }
+
+    // Update local state
+    setBrandProducts(prev =>
+      prev.map(p => {
+        const newCatId = pendingCategoryChanges.get(p.id)
+        if (newCatId === undefined) return p
+        const cat = newCatId ? productCategories.find(c => c.id === newCatId) : null
+        return { ...p, categories: cat ? [cat] : [] }
+      })
+    )
+
+    setPendingCategoryChanges(new Map())
+    setSavingCategories(false)
+
+    if (successCount === entries.length) {
+      toast.success("Başarılı", { description: `${successCount} ürünün kategorisi güncellendi` })
+    } else {
+      toast.warning("Kısmi başarı", {
+        description: `${successCount}/${entries.length} ürün güncellendi, ${entries.length - successCount} hata`,
+      })
+    }
+  }, [pendingCategoryChanges, pendingCount, productCategories])
+
+  // Bulk category: stage changes for all selected products
+  const handleBulkCategoryStage = useCallback(() => {
+    if (selectedBrandProducts.size === 0) return
+    setPendingCategoryChanges(prev => {
+      const next = new Map(prev)
+      for (const productId of selectedBrandProducts) {
+        const product = brandProducts.find(p => p.id === productId)
+        const originalCategoryId = product?.categories?.[0]?.id || null
+        if (bulkCategoryId === originalCategoryId) {
+          next.delete(productId)
+        } else {
+          next.set(productId, bulkCategoryId)
+        }
+      }
+      return next
+    })
+    toast.success("Değişiklikler eklendi", {
+      description: `${selectedBrandProducts.size} ürün için kategori değişikliği hazırlandı. Kaydetmek için "Değişiklikleri Kaydet" butonunu kullanın.`,
+    })
+    setBulkCategoryModalOpen(false)
+    setBulkCategoryId(null)
+    setSelectedBrandProducts(new Set())
+  }, [selectedBrandProducts, bulkCategoryId, brandProducts])
 
   // Selection handlers
   const toggleBrandProductSelection = (productId: string) => {
@@ -407,8 +561,8 @@ const BrandDetailPage = () => {
                 <PencilSquare className="mr-2 h-4 w-4" />Düzenle
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
-              <DropdownMenu.Item 
-                onClick={() => setDeleteAllProductsDialogOpen(true)} 
+              <DropdownMenu.Item
+                onClick={() => setDeleteAllProductsDialogOpen(true)}
                 className="text-ui-fg-error"
                 disabled={totalProductCount === 0}
               >
@@ -434,11 +588,56 @@ const BrandDetailPage = () => {
             <Button variant="secondary" size="small" onClick={() => setSerpModalOpen(true)}>
               <MagnifyingGlass />SERP ile Ara
             </Button>
+
+            {/* Save Changes Button — only visible when there are pending changes */}
+            {pendingCount > 0 && (
+              <>
+                <Button
+                  variant="transparent"
+                  size="small"
+                  onClick={handleDiscardChanges}
+                  disabled={savingCategories}
+                >
+                  Vazgeç
+                </Button>
+                <Button
+                  variant="primary"
+                  size="small"
+                  onClick={handleSaveCategoryChanges}
+                  disabled={savingCategories}
+                >
+                  {savingCategories ? (
+                    <>
+                      <Spinner className="animate-spin h-3.5 w-3.5" />
+                      Kaydediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Değişiklikleri Kaydet ({pendingCount})
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+
             <Button variant="secondary" size="small" onClick={() => setPickerModalOpen(true)}>
               <PlusMini />Ürün Ekle
             </Button>
           </div>
         </div>
+
+        {/* Pending changes info bar */}
+        {pendingCount > 0 && (
+          <div className="flex items-center gap-3 px-6 py-2.5 bg-ui-bg-highlight border-b border-ui-border-base">
+            <div className="flex items-center justify-center w-5 h-5 rounded-full bg-ui-tag-blue-bg">
+              <Text size="xsmall" weight="plus" className="text-ui-tag-blue-text">{pendingCount}</Text>
+            </div>
+            <Text size="small" className="text-ui-fg-subtle">
+              kaydedilmemiş kategori değişikliği var
+            </Text>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 px-6 py-4">
           <div className="relative flex-1 max-w-md">
@@ -459,8 +658,8 @@ const BrandDetailPage = () => {
             <EmptyState
               icon={<ShoppingBag className="text-ui-fg-muted h-8 w-8" />}
               title={searchQuery ? "Sonuç bulunamadı" : "Henüz ürün yok"}
-              description={searchQuery 
-                ? `"${searchQuery}" aramasına uygun ürün bulunamadı` 
+              description={searchQuery
+                ? `"${searchQuery}" aramasına uygun ürün bulunamadı`
                 : "Bu markaya ürün ekleyerek başlayın"
               }
               actionLabel={!searchQuery ? "Ürün Ekle" : undefined}
@@ -477,70 +676,95 @@ const BrandDetailPage = () => {
                     />
                   </Table.HeaderCell>
                   <Table.HeaderCell>Ürün</Table.HeaderCell>
+                  <Table.HeaderCell>Kategori</Table.HeaderCell>
                   <Table.HeaderCell>Durum</Table.HeaderCell>
                   <Table.HeaderCell>Varyant</Table.HeaderCell>
                   <Table.HeaderCell className="w-[60px]"></Table.HeaderCell>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {filteredBrandProducts.map((product) => (
-                  <Table.Row 
-                    key={product.id} 
-                    className="group hover:bg-ui-bg-subtle-hover cursor-pointer"
-                    onClick={(e) => {
-                      // Checkbox veya silme butonuna tıklanırsa yönlendirme yapma
-                      const target = e.target as HTMLElement
-                      if (target.closest('input[type="checkbox"]') || target.closest('button')) {
-                        return
-                      }
-                      navigate(`/products/${product.id}`)
-                    }}
-                  >
-                    <Table.Cell className="pl-6">
-                      <Checkbox
-                        checked={selectedBrandProducts.has(product.id)}
-                        onCheckedChange={() => toggleBrandProductSelection(product.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div className="flex items-center gap-3">
-                        {product.thumbnail ? (
-                          <Avatar src={product.thumbnail} fallback={product.title.charAt(0)} size="small" />
-                        ) : (
-                          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-ui-bg-component border border-ui-border-base">
-                            <Photo className="text-ui-fg-muted h-4 w-4" />
+                {filteredBrandProducts.map((product) => {
+                  const productHasChange = hasChange(product.id)
+                  const effectiveCategoryId = getEffectiveCategoryId(product)
+                  return (
+                    <Table.Row
+                      key={product.id}
+                      className={[
+                        "group cursor-pointer transition-colors",
+                        productHasChange
+                          ? "bg-ui-bg-highlight hover:bg-ui-bg-highlight-hover"
+                          : "hover:bg-ui-bg-subtle-hover",
+                      ].join(" ")}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement
+                        if (target.closest('input[type="checkbox"]') || target.closest('button') || target.closest('[role="combobox"]') || target.closest('[role="listbox"]')) {
+                          return
+                        }
+                        navigate(`/products/${product.id}`)
+                      }}
+                    >
+                      <Table.Cell className="pl-6">
+                        <Checkbox
+                          checked={selectedBrandProducts.has(product.id)}
+                          onCheckedChange={() => toggleBrandProductSelection(product.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <div className="flex items-center gap-3">
+                          {product.thumbnail ? (
+                            <Avatar src={product.thumbnail} fallback={product.title.charAt(0)} size="small" />
+                          ) : (
+                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-ui-bg-component border border-ui-border-base">
+                              <Photo className="text-ui-fg-muted h-4 w-4" />
+                            </div>
+                          )}
+                          <div className="flex flex-col">
+                            <Text weight="plus" size="small" className="text-ui-fg-base">{product.title}</Text>
+                            <Text size="xsmall" className="text-ui-fg-muted">{product.handle}</Text>
                           </div>
-                        )}
-                        <div className="flex flex-col">
-                          <Text weight="plus" size="small" className="text-ui-fg-base">{product.title}</Text>
-                          <Text size="xsmall" className="text-ui-fg-muted">{product.handle}</Text>
                         </div>
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Badge color={product.status === "published" ? "green" : "grey"} size="small">
-                        {product.status === "published" ? "Yayında" : "Taslak"}
-                      </Badge>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="small" className="text-ui-fg-subtle">{product.variants?.length || 0} varyant</Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <IconButton 
-                        variant="transparent" 
-                        size="small" 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRemoveProduct(product.id)
-                        }}
-                        className="opacity-0 group-hover:opacity-100"
-                      >
-                        <XMark className="text-ui-fg-error h-4 w-4" />
-                      </IconButton>
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
+                      </Table.Cell>
+                      <Table.Cell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <CategoryTreeSelect
+                            compact
+                            categories={productCategories}
+                            value={effectiveCategoryId}
+                            onChange={(value) => handleStageCategoryChange(product.id, value)}
+                            disabled={savingCategories}
+                            loading={categoriesLoading}
+                            placeholder="Kategori seç..."
+                          />
+                          {productHasChange && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-ui-tag-blue-icon shrink-0" title="Kaydedilmemiş değişiklik" />
+                          )}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Badge color={product.status === "published" ? "green" : "grey"} size="small">
+                          {product.status === "published" ? "Yayında" : "Taslak"}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="small" className="text-ui-fg-subtle">{product.variants?.length || 0} varyant</Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <IconButton
+                          variant="transparent"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveProduct(product.id)
+                          }}
+                          className="opacity-0 group-hover:opacity-100"
+                        >
+                          <XMark className="text-ui-fg-error h-4 w-4" />
+                        </IconButton>
+                      </Table.Cell>
+                    </Table.Row>
+                  )
+                })}
               </Table.Body>
             </Table>
           )}
@@ -570,7 +794,7 @@ const BrandDetailPage = () => {
                 <Text size="small" className="text-ui-fg-muted">
                   {startItem}-{endItem} / {totalProductCount.toLocaleString()}
                 </Text>
-                
+
                 <div className="flex items-center gap-1">
                   <IconButton
                     variant="transparent"
@@ -626,10 +850,60 @@ const BrandDetailPage = () => {
         <CommandBar.Bar>
           <CommandBar.Value>{selectedBrandProducts.size} ürün seçildi</CommandBar.Value>
           <CommandBar.Seperator />
+          <CommandBar.Command action={() => setBulkCategoryModalOpen(true)} label="Kategori Ata" shortcut="c" />
           <CommandBar.Command action={handleRemoveSelectedProducts} label="Kaldır" shortcut="d" />
           <CommandBar.Command action={() => setSelectedBrandProducts(new Set())} label="İptal" shortcut="esc" />
         </CommandBar.Bar>
       </CommandBar>
+
+      {/* Bulk Category Assign Modal */}
+      <Modal
+        open={bulkCategoryModalOpen}
+        onClose={() => {
+          setBulkCategoryModalOpen(false)
+          setBulkCategoryId(null)
+        }}
+        title="Toplu Kategori Ata"
+        size="md"
+      >
+        <ModalBody>
+          <div className="flex flex-col gap-4">
+            <Text size="small" className="text-ui-fg-subtle">
+              Seçili <strong className="text-ui-fg-base">{selectedBrandProducts.size}</strong> ürüne kategori atayın.
+              Değişiklikler hemen kaydedilmez, "Değişiklikleri Kaydet" butonuyla toplu olarak kaydedilir.
+            </Text>
+            <div className="flex flex-col gap-2">
+              <Label weight="plus">Kategori</Label>
+              <CategoryTreeSelect
+                categories={productCategories}
+                value={bulkCategoryId}
+                onChange={(value) => setBulkCategoryId(value)}
+                loading={categoriesLoading}
+                placeholder="Kategori seçin..."
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setBulkCategoryModalOpen(false)
+                setBulkCategoryId(null)
+              }}
+            >
+              İptal
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleBulkCategoryStage}
+            >
+              Değişiklikleri Hazırla
+            </Button>
+          </div>
+        </ModalFooter>
+      </Modal>
 
       {/* Delete Brand Modal */}
       <Modal
@@ -670,9 +944,9 @@ const BrandDetailPage = () => {
             }}>
               İptal
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteBrand} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteBrand}
               disabled={deleting || deleteConfirmName !== brand?.name}
             >
               {deleting ? "Siliniyor..." : "Sil"}
@@ -703,9 +977,9 @@ const BrandDetailPage = () => {
             <Button variant="secondary" onClick={() => setDeleteAllProductsDialogOpen(false)}>
               İptal
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteAllProducts} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteAllProducts}
               disabled={deletingAllProducts}
             >
               {deletingAllProducts ? "Siliniyor..." : "Tümünü Sil"}

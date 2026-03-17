@@ -104,7 +104,7 @@ export const GET = async (
     try {
       const { data: brandsWithProducts } = await query.graph({
         entity: "brand",
-        fields: ["id", "product.id"],
+        fields: ["id", "products.id"],
         filters: { id: brandIds },
       })
 
@@ -112,8 +112,8 @@ export const GET = async (
       const productCountMap = new Map<string, number>()
       for (const brandData of brandsWithProducts) {
         let count = 0
-        if (brandData.product) {
-          count = Array.isArray(brandData.product) ? brandData.product.length : 1
+        if (brandData.products) {
+          count = Array.isArray(brandData.products) ? brandData.products.length : 1
         }
         productCountMap.set(brandData.id, count)
       }

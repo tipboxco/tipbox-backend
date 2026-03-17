@@ -245,6 +245,8 @@ function BadgeSummaryTab({
         name: values.name as string,
         description: (values.description as string) || null,
         imageUrl: (values.imageUrl as string) || null,
+        highlightsImage: (values.highlightsImage as string) || null,
+        status: values.status as string,
       });
       antdMessage.success('Badge updated successfully');
       await onUpdated();
@@ -253,8 +255,17 @@ function BadgeSummaryTab({
     }
   };
 
+  const uploadConfig = {
+    accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
+    maxSize: 5 * 1024 * 1024,
+    onUpload: async (file: File) => {
+      const response = await uploadBadgeImage(file);
+      if (!response.data?.url) throw new Error('Upload failed');
+      return response.data.url;
+    },
+  };
+
   // Field configuration for editable form
-  // Logical order: Basic info → Classification → Associations → Visual → Description → Multipliers → Metadata
   const badgeFields: FieldConfig[] = [
     // 1. Basic Information
     {
@@ -275,6 +286,15 @@ function BadgeSummaryTab({
       label: 'Rarity',
       type: 'text',
       editable: false,
+    },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { label: 'Active', value: 'ACTIVE' },
+        { label: 'Inactive', value: 'INACTIVE' },
+      ],
     },
     {
       name: 'categoryName',
@@ -298,29 +318,28 @@ function BadgeSummaryTab({
         ),
     },
 
-    // 3. Visual
-    {
-      name: 'imageUrl',
-      label: 'Badge Image',
-      type: 'upload',
-      uploadConfig: {
-        accept: 'image/jpeg,image/jpg,image/png,image/gif,image/webp',
-        maxSize: 5 * 1024 * 1024,
-        onUpload: async (file: File) => {
-          const response = await uploadBadgeImage(file);
-          if (!response.data?.url) throw new Error('Upload failed');
-          return response.data.url;
-        },
-      },
-    },
-
-    // 4. Description
+    // 3. Description (full width)
     {
       name: 'description',
       label: 'Description',
       type: 'textarea',
       rows: 3,
       maxLength: 2000,
+      span: 2,
+    },
+
+    // 4. Visual (side by side)
+    {
+      name: 'imageUrl',
+      label: 'Badge Image',
+      type: 'upload',
+      uploadConfig,
+    },
+    {
+      name: 'highlightsImage',
+      label: 'Highlights Image',
+      type: 'upload',
+      uploadConfig,
     },
 
     // 5. Metadata (Read-only)
@@ -361,6 +380,7 @@ function BadgeSummaryTab({
             data={badge}
             fields={badgeFields}
             onSave={handleUpdateBadge}
+            preferDrawer
             bordered
             columns={2}
           />

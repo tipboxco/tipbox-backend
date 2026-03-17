@@ -1580,6 +1580,11 @@ router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response)
         }
       }
 
+      // createdAt'i ISO string'e çevir (grouper Date objesi döndürüyor, JSON serialize'da {} olabiliyor)
+      if (mutableNotif.createdAt instanceof Date) {
+        mutableNotif.createdAt = mutableNotif.createdAt.toISOString();
+      }
+
       // undefined değerleri kaldır (genel temizlik)
       Object.keys(mutableNotif).forEach((key) => {
         if (mutableNotif[key] === undefined) {

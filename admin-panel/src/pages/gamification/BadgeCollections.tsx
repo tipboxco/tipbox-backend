@@ -18,6 +18,7 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
@@ -123,6 +124,22 @@ function BadgeCollections() {
   };
 
   const columns: ColumnsType<AdminCollectionListItem> = [
+    {
+      title: 'Cover',
+      dataIndex: 'bannerUrl',
+      key: 'bannerUrl',
+      width: 60,
+      render: (url: string | null) =>
+        url ? (
+          <img
+            src={url}
+            alt="Cover"
+            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          <PictureOutlined style={{ fontSize: 20, color: '#555' }} />
+        ),
+    },
     {
       title: 'Name',
       dataIndex: 'name',

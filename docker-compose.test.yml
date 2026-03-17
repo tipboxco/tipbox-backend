@@ -132,6 +132,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     container_name: tipbox_backend_test
     restart: always
     env_file:
@@ -258,6 +259,7 @@ services:
     build:
       context: ./admin-panel
       dockerfile: Dockerfile
+      target: dev
     container_name: tipbox_admin_panel_test
     restart: always
     ports:
@@ -288,6 +290,7 @@ services:
     build:
       context: ./catalog-service
       dockerfile: Dockerfile
+      target: dev
     container_name: tipbox_catalog_service_test
     restart: always
     env_file:

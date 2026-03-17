@@ -1,17 +1,18 @@
-FROM node:20-alpine
+# ══════════════════════════════════════════════════════════════════
+# Multi-stage Dockerfile
+#   dev   → deps build'de yüklenir, /app-deps'e taşınır
+#   full  → deps + source baked-in
+# ══════════════════════════════════════════════════════════════════
+
+# ── Stage: base ──────────────────────────────────────────────────
+FROM node:20-alpine AS base
 
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Package files
-COPY package.json pnpm-lock.yaml .npmrc ./
-
-# Dependencies
-RUN pnpm install
-
-# Source
-COPY . .
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Entrypoint script'ini kopyala ve çalıştırılabilir yap
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -21,3 +22,20 @@ EXPOSE 5174
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "run", "dev"]
+
+# ── Stage: dev ───────────────────────────────────────────────────
+FROM base AS dev
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install
+
+RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
+    && mv node_modules /app-deps
+
+# ── Stage: full ──────────────────────────────────────────────────
+FROM base AS full
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install
+
+COPY . .
