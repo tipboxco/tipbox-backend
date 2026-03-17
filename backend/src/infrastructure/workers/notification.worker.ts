@@ -105,6 +105,7 @@ export class NotificationWorker {
           avatar: data.avatar || null,
           imageUrl: data.imageUrl || null,
           unreadCount,
+          createdAt: new Date().toISOString(),
           timestamp: new Date().toISOString(),
         };
         await this.sendSocketNotification(userId, socketNotification);

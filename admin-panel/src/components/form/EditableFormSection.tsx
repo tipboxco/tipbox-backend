@@ -41,6 +41,7 @@ export default function EditableFormSection({
   bordered = false,
   columns = 1,
   loading: externalLoading,
+  preferDrawer = false,
 }: EditableFormSectionProps) {
   const { form, isEditing, loading, error, startEdit, cancelEdit, submitForm, setError } = useEditableForm(data);
   const screens = useBreakpoint();
@@ -50,11 +51,12 @@ export default function EditableFormSection({
 
   // Determine edit strategy based on field count
   const editStrategy = useMemo(() => {
+    if (preferDrawer) return 'drawer';
     const count = editableFields.length;
     if (count >= 8) return 'drawer';
     if (count >= 6) return 'collapsible';
     return 'inline';
-  }, [editableFields.length]);
+  }, [editableFields.length, preferDrawer]);
 
   // Use single column on mobile
   const displayColumns = screens.md ? columns : 1;
@@ -241,7 +243,7 @@ export default function EditableFormSection({
       <Form form={form} {...FORM_LAYOUT_VERTICAL} onFinish={handleSubmit}>
         <Row gutter={16}>
           {editableFields.map((field) => (
-            <Col span={24 / displayColumns} key={field.name}>
+            <Col span={Math.min(24, (24 / displayColumns) * (field.span ?? 1))} key={field.name}>
               <Form.Item
                 name={field.name}
                 label={field.label}
