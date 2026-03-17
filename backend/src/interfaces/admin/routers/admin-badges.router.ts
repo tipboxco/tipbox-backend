@@ -155,6 +155,7 @@ router.get(
       id: c.id,
       name: c.name,
       bannerUrl: c.bannerUrl,
+      highlightsImage: c.highlightsImage,
       owner: c.owner,
       categoryId: c.categoryId,
       categoryName: c.category?.name ?? null,
@@ -587,6 +588,7 @@ router.get(
       id: collection.id,
       name: collection.name,
       bannerUrl: collection.bannerUrl,
+      highlightsImage: collection.highlightsImage,
       owner: collection.owner,
       categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
@@ -617,6 +619,7 @@ router.post(
       data: {
         name: body.name,
         bannerUrl: body.bannerUrl ?? null,
+        highlightsImage: body.highlightsImage ?? null,
         owner: body.owner ?? null,
         focusSector: body.focusSector ?? null,
         targetGroup: body.targetGroup ?? null,
@@ -641,6 +644,7 @@ router.post(
       id: collection.id,
       name: collection.name,
       bannerUrl: collection.bannerUrl,
+      highlightsImage: collection.highlightsImage,
       owner: collection.owner,
       categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
@@ -673,6 +677,7 @@ router.patch(
     const updateData: Record<string, unknown> = {};
     if (body.name !== undefined) updateData.name = body.name;
     if (body.bannerUrl !== undefined) updateData.bannerUrl = body.bannerUrl;
+    if (body.highlightsImage !== undefined) updateData.highlightsImage = body.highlightsImage;
     if (body.owner !== undefined) updateData.owner = body.owner;
     if (body.focusSector !== undefined) updateData.focusSector = body.focusSector;
     if (body.targetGroup !== undefined) updateData.targetGroup = body.targetGroup;
@@ -684,6 +689,10 @@ router.patch(
     // Clean up old banner from S3 if being replaced
     if (body.bannerUrl !== undefined && collection.bannerUrl && body.bannerUrl !== collection.bannerUrl) {
       try { await s3Service.deleteFile(collection.bannerUrl); } catch { /* ignore */ }
+    }
+    // Clean up old highlights image from S3 if being replaced
+    if (body.highlightsImage !== undefined && collection.highlightsImage && body.highlightsImage !== collection.highlightsImage) {
+      try { await s3Service.deleteFile(collection.highlightsImage); } catch { /* ignore */ }
     }
     const updated = await prisma.badgeCollection.update({
       where: { id },
@@ -703,6 +712,7 @@ router.patch(
       id: updated.id,
       name: updated.name,
       bannerUrl: updated.bannerUrl,
+      highlightsImage: updated.highlightsImage,
       owner: updated.owner,
       categoryId: updated.categoryId ?? undefined,
       categoryName: updated.category?.name ?? null,
@@ -767,6 +777,36 @@ router.post(
     const url = resolveMediaUrl(path);
     logger.info({
       message: 'Badge collection banner uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
+
+/**
+ * POST /admin/badges/collections/upload-highlights
+ * Upload badge collection highlights image to MinIO (collections/highlights/ folder)
+ */
+router.post(
+  '/collections/upload-highlights',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `collections/highlights/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Badge collection highlights image uploaded',
       fileName,
       url,
       adminId: req.user?.id,

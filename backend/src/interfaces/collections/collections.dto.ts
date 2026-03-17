@@ -7,6 +7,7 @@ export interface CollectionListItem {
   currentProgress: number;
   totalProgress: number;
   coverImage: string | null;
+  highlightsImage: string | null;
   category?: string | null;
 }
 
@@ -54,6 +55,7 @@ export interface UserCollectionProgressItem {
   currentProgress: number;
   totalProgress: number;
   coverImage: string | null;
+  highlightsImage: string | null;
   category: string | null;
   status: 'in_progress' | 'completed';
   totalBadges: number;
@@ -75,6 +77,7 @@ export interface CompletedCollectionItem {
   title: string;
   description: string;
   coverImage: string | null;
+  highlightsImage: string | null;
   category: string | null;
   completedAt: string | null;
   totalBadges: number;

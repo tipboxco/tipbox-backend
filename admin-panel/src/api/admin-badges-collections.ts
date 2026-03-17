@@ -63,6 +63,38 @@ export async function uploadMedia(file: File) {
   }
 }
 
+export async function uploadHighlightsImage(file: File) {
+  if (!file) {
+    throw new Error('No file selected');
+  }
+
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPG, PNG, GIF, and WebP are supported.');
+  }
+
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    throw new Error('File too large. Maximum size is 5MB.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await postFormData<{ url: string }>(`${prefix}/collections/upload-highlights`, formData);
+    if (!res.data?.url) {
+      throw new Error('Upload succeeded but no URL returned');
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error('Failed to upload image. Please try again.');
+  }
+}
+
 export async function uploadBadgeImage(file: File) {
   const formData = new FormData();
   formData.append('file', file);
@@ -99,6 +131,7 @@ export async function fetchCollection(id: string) {
 export async function createCollection(body: {
   name: string;
   bannerUrl?: string | null;
+  highlightsImage?: string | null;
   owner?: string | null;
   focusSector?: string | null;
   targetGroup?: string | null;
@@ -116,6 +149,7 @@ export async function updateCollection(
   body: Partial<{
     name: string;
     bannerUrl: string | null;
+    highlightsImage: string | null;
     owner: string | null;
     focusSector: string | null;
     targetGroup: string | null;

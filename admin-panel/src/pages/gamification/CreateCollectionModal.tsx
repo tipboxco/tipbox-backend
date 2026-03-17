@@ -5,6 +5,7 @@ import { InfoCircleOutlined, FileImageOutlined } from '@ant-design/icons';
 import {
   createCollection,
   uploadMedia,
+  uploadHighlightsImage,
   fetchCollectionCategories,
   type AdminCollectionCategoryMain,
 } from '../../api/admin-badges-collections';
@@ -137,6 +138,22 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
       },
     },
     {
+      name: 'highlightsImage',
+      label: 'Highlights image',
+      type: 'upload',
+      uploadConfig: {
+        accept: 'image/jpeg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024, // 5MB
+        onUpload: async (file: File) => {
+          const res = await uploadHighlightsImage(file);
+          if (!res.data?.url) {
+            throw new Error('Upload failed - no URL returned');
+          }
+          return res.data.url;
+        },
+      },
+    },
+    {
       name: 'unlockCondition',
       label: 'Unlock condition',
       type: 'text',
@@ -161,7 +178,7 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
     {
       title: 'Details and image',
       icon: <FileImageOutlined />,
-      fields: ['longDescription', 'bannerUrl', 'unlockCondition', 'completionBonus'],
+      fields: ['longDescription', 'bannerUrl', 'highlightsImage', 'unlockCondition', 'completionBonus'],
     },
   ];
 
@@ -193,6 +210,7 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
         shortDescription: trimString(values.shortDescription),
         longDescription: trimString(values.longDescription),
         bannerUrl: trimString(values.bannerUrl),
+        highlightsImage: trimString(values.highlightsImage),
         unlockCondition: trimString(values.unlockCondition),
         completionBonus: trimString(values.completionBonus),
         categoryId: categoryId,

@@ -291,6 +291,7 @@ export type AdminCollectionListItem = {
   id: string;
   name: string;
   bannerUrl: string | null;
+  highlightsImage: string | null;
   owner: string | null;
   categoryId?: string | null;
   categoryName?: string | null;

@@ -115,6 +115,7 @@ export class CollectionsService {
         currentProgress,
         totalProgress,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
+        highlightsImage: c.highlightsImage ? resolveMediaUrl(c.highlightsImage) : null,
         category: c.category?.handle ?? null,
       };
     });
@@ -299,6 +300,7 @@ export class CollectionsService {
         currentProgress: pd.current,
         totalProgress: pd.total,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
+        highlightsImage: c.highlightsImage ? resolveMediaUrl(c.highlightsImage) : null,
         category: c.category?.handle ?? null,
         status: isCompleted ? 'completed' : 'in_progress',
         totalBadges: c._count.badges,
@@ -433,6 +435,7 @@ export class CollectionsService {
         title: c.name,
         description: c.shortDescription ?? c.longDescription ?? '',
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
+        highlightsImage: c.highlightsImage ? resolveMediaUrl(c.highlightsImage) : null,
         category: c.category?.handle ?? null,
         completedAt: cd?.completedAt?.toISOString() ?? null,
         totalBadges: c._count.badges,
@@ -583,6 +586,7 @@ export class CollectionsService {
         currentProgress: collectionCurrentProgress,
         totalProgress: collectionTotalProgress,
         coverImage: collection.bannerUrl ? resolveMediaUrl(collection.bannerUrl) : null,
+        highlightsImage: collection.highlightsImage ? resolveMediaUrl(collection.highlightsImage) : null,
         category: collection.category?.handle ?? null,
       },
       badges,

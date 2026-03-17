@@ -15,6 +15,7 @@ export const AdminCollectionsQuerySchema = z.object({
 export const AdminCreateCollectionSchema = z.object({
   name: z.string().min(1).max(500),
   bannerUrl: z.string().url().optional().nullable(),
+  highlightsImage: z.string().url().optional().nullable(),
   owner: z.string().max(500).optional().nullable(),
   focusSector: z.string().max(500).optional().nullable(),
   targetGroup: z.string().max(500).optional().nullable(),
