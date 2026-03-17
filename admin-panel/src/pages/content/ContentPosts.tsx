@@ -11,7 +11,6 @@ import {
   Alert,
   Image,
   Modal,
-  Form,
   Button,
   message,
   Dropdown,
@@ -38,7 +37,6 @@ import IdDisplay from '../../components/IdDisplay';
 import {
   fetchContentPostsStats,
   fetchContentPosts,
-  createContentPost,
   deleteContentPost,
   updateContentPost,
 } from '../../api/admin-content';
@@ -49,6 +47,7 @@ import type {
 import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 import { exportToCSV, exportToJSON, exportToExcel, sanitizeFilename, formatDateForExport } from '../../utils/export';
+import CreatePostModal from '../../components/content/CreatePostModal';
 
 const PAGE_SIZE = 20;
 
@@ -80,7 +79,6 @@ function ContentPosts() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [form] = Form.useForm();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -148,37 +146,6 @@ function ContentPosts() {
       setError(e instanceof Error ? e.message : 'Failed to load list');
     } finally {
       setLoadingList(false);
-    }
-  };
-
-  const handleCreate = async (values: {
-    userId: string;
-    type: string;
-    title: string;
-    body: string;
-    categoryId?: string;
-    productId?: string;
-    eventId?: string;
-  }) => {
-    try {
-      await createContentPost({
-        userId: values.userId,
-        type: values.type,
-        title: values.title,
-        body: values.body,
-        categoryId: values.categoryId || null,
-        productId: values.productId || null,
-        eventId: values.eventId || null,
-        mainCategoryId: null,
-        subCategoryId: null,
-        productGroupId: null,
-      });
-      message.success('Content post created successfully');
-      setCreateModalOpen(false);
-      form.resetFields();
-      loadPosts();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create content post');
     }
   };
 
@@ -790,70 +757,11 @@ function ContentPosts() {
       </Card>
 
       {/* Create Post Modal */}
-      <Modal
-        title="Create Content Post"
+      <CreatePostModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
-        width={700}
-        okText="Create"
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="userId"
-            label="User ID"
-            rules={[{ required: true, message: 'Please enter user ID' }]}
-          >
-            <Input placeholder="e.g., 480f5de9-b691-4d70-a6a8-2789226f4e07" />
-          </Form.Item>
-
-          <Form.Item
-            name="type"
-            label="Post Type"
-            rules={[{ required: true, message: 'Please select post type' }]}
-          >
-            <Select placeholder="Select post type">
-              <Select.Option value="FREE">FREE</Select.Option>
-              <Select.Option value="TIPS">TIPS</Select.Option>
-              <Select.Option value="COMPARE">COMPARE</Select.Option>
-              <Select.Option value="QUESTION">QUESTION</Select.Option>
-              <Select.Option value="EXPERIENCE">EXPERIENCE</Select.Option>
-              <Select.Option value="UPDATE">UPDATE</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="title"
-            label="Title"
-            rules={[{ required: true, message: 'Please enter title' }]}
-          >
-            <Input placeholder="Post title" maxLength={500} />
-          </Form.Item>
-
-          <Form.Item
-            name="body"
-            label="Body"
-            rules={[{ required: true, message: 'Please enter body content' }]}
-          >
-            <Input.TextArea rows={6} placeholder="Post content" maxLength={10000} />
-          </Form.Item>
-
-          <Form.Item name="categoryId" label="Category ID (Optional)">
-            <Input placeholder="e.g., category-uuid" />
-          </Form.Item>
-
-          <Form.Item name="productId" label="Product ID (Optional)">
-            <Input placeholder="e.g., airpods-pro-2" />
-          </Form.Item>
-
-          <Form.Item name="eventId" label="Event ID (Optional)">
-            <Input placeholder="e.g., event-id" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={loadPosts}
+      />
     </div>
   );
 }

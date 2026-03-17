@@ -300,6 +300,8 @@ export async function updateBadge(
     imageUrl: string | null;
     type: string;
     rarity: string;
+    status: string;
+    displayOrder: number;
     boostMultiplier: number | null;
     rewardMultiplier: number | null;
     categoryId: string;
@@ -311,6 +313,14 @@ export async function updateBadge(
 
 export async function deleteBadge(id: string) {
   return del<{ message: string }>(`${prefix}/${id}`);
+}
+
+export async function bulkReorderBadges(badges: Array<{ id: string; displayOrder: number }>) {
+  return patch<{ message: string }>(`${prefix}/bulk/reorder`, { badges });
+}
+
+export async function bulkUpdateBadgeStatus(badgeIds: string[], status: 'ACTIVE' | 'INACTIVE') {
+  return patch<{ message: string }>(`${prefix}/bulk/status`, { badgeIds, status });
 }
 
 export async function fetchBadgeOwners(

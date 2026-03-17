@@ -7,6 +7,25 @@ import { z } from 'zod';
 import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 import { generateIdForModel } from '../../../infrastructure/ids/id.strategy';
 import logger from '../../../infrastructure/logger/logger';
+import { PostService, type AdminCreateOptions } from '../../../application/post/post.service';
+import { ContextType } from '../../../domain/content/context-type.enum';
+import { ExperienceStatus } from '../../../domain/content/experience-status.enum';
+import { createUpload } from '../../../infrastructure/config/file-upload.config';
+import { validateFileType } from '../../../infrastructure/middleware/file-type-validation.middleware';
+import { v4 as uuidv4 } from 'uuid';
+import { S3Service } from '../../../infrastructure/s3/s3.service';
+
+/** Map schema-level UPPER_CASE context type to domain enum (lowercase). */
+const toContextType = (schemaValue: string): ContextType => {
+  const map: Record<string, ContextType> = {
+    PRODUCT: ContextType.PRODUCT,
+    PRODUCT_GROUP: ContextType.PRODUCT_GROUP,
+    SUB_CATEGORY: ContextType.SUB_CATEGORY,
+  };
+  const result = map[schemaValue];
+  if (!result) throw new Error(`Unknown context type: ${schemaValue}`);
+  return result;
+};
 
 // Import schemas
 import {
@@ -28,6 +47,8 @@ import {
   AdminManualReviewFlagUpdateSchema,
   AdminModerationActionsQuerySchema,
   AdminContentTagsQuerySchema,
+  AdminExperienceSplitSchema,
+  AdminTransferOwnerSchema,
   type AdminContentPostCreateInput,
 } from '../schemas/admin-content.schemas';
 
@@ -56,6 +77,9 @@ import type { PaginationMeta } from '../dtos/admin-common.dto';
 
 const router = Router();
 const prisma = getPrisma();
+const postService = new PostService();
+const s3Service = new S3Service();
+const upload = createUpload('ADMIN_IMAGES', 'SMALL');
 
 const TRENDING_TTL_DAYS = 7;
 
@@ -306,6 +330,43 @@ router.get(
   })
 );
 
+/* ---- Experience Options (Duration, Location, Purpose) ---- */
+/* ---- Content Post Image Upload ---- */
+router.post(
+  '/posts/upload-image',
+  upload.single('file'),
+  validateFileType('ADMIN_IMAGES'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `content-posts/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Content post image uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
+
+/* IMPORTANT: Must be before /posts/:id to avoid :id capturing "experience" */
+router.get(
+  '/posts/experience/options',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const options = await postService.getExperienceOptions();
+    return res.json({ success: true, data: options });
+  })
+);
+
 /**
  * @openapi
  * /api/admin/content/posts/{id}:
@@ -456,24 +517,114 @@ router.post(
     const user = await prisma.user.findUnique({ where: { id: body.userId } });
     if (!user) throw new NotFoundError('User bulunamadı');
 
-    const postId = generateIdForModel('ContentPost');
+    const adminOptions: AdminCreateOptions = {
+      skipInventoryCheck: true,
+      skipEventMembershipCheck: true,
+      skipBoostPayment: true,
+      adminId,
+    };
 
-    const post = await prisma.contentPost.create({
+    let result: { id: string; message: string; success: boolean };
+
+    switch (body.type) {
+      case 'FREE':
+        result = await postService.createFreePost(body.userId, {
+          contextType: toContextType(body.contextType),
+          contextId: body.contextId,
+          description: body.description,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      case 'TIPS':
+        result = await postService.createTipsAndTricksPost(body.userId, {
+          contextType: toContextType(body.contextType),
+          contextId: body.contextId,
+          description: body.description,
+          benefitCategory: body.benefitCategory as import('../../../domain/content/tips-and-tricks-benefit-category.enum').TipsAndTricksBenefitCategory,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      case 'QUESTION':
+        result = await postService.createQuestionPost(body.userId, {
+          contextType: toContextType(body.contextType),
+          contextId: body.contextId,
+          description: body.description,
+          boostEnabled: body.boostEnabled,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      case 'COMPARE':
+        result = await postService.createBenchmarkPost(body.userId, {
+          contextType: toContextType(body.contextType),
+          contextId: body.contextId,
+          products: body.products,
+          description: body.description,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      case 'EXPERIENCE':
+        result = await postService.createExperiencePost(body.userId, {
+          contextType: toContextType(body.contextType),
+          contextId: body.contextId,
+          content: body.content,
+          experience: body.experience.map((e) => ({
+            type: e.type as import('../../../domain/content/experience-type.enum').ExperienceType,
+            content: e.content,
+            rating: e.rating,
+          })),
+          status: body.status as ExperienceStatus,
+          selectedDurationId: body.selectedDurationId,
+          selectedLocationId: body.selectedLocationId,
+          selectedPurposeId: body.selectedPurposeId,
+          experienceSnippetId: body.experienceSnippetId,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      case 'UPDATE':
+        result = await postService.createUpdatePost(body.userId, {
+          experiencePostId: body.experiencePostId,
+          content: body.content,
+          contextId: body.contextId,
+          images: body.images,
+          eventId: body.eventId ?? undefined,
+        }, adminOptions);
+        break;
+
+      default:
+        return res.status(400).json({ success: false, message: 'Unsupported post type' });
+    }
+
+    // Log admin action
+    await prisma.adminLog.create({
       data: {
-        id: postId,
-        userId: body.userId,
-        type: body.type,
-        title: body.title,
-        body: body.body,
-        mainCategoryId: body.mainCategoryId ?? null,
-        subCategoryId: body.subCategoryId ?? null,
-        categoryId: body.categoryId ?? null,
-        productId: body.productId ?? null,
-        productGroupId: body.productGroupId ?? null,
-        eventId: body.eventId ?? null,
-        inventoryRequired: false,
-        isBoosted: false,
+        adminId,
+        action: 'CONTENT_POST_CREATE',
+        description: `postId: ${result.id}, type: ${body.type}, userId: ${body.userId}`,
+        entityType: 'content_post',
+        entityId: 0,
       },
+    });
+
+    logger.info('Admin created content post via PostService', {
+      adminId,
+      postId: result.id,
+      userId: body.userId,
+      type: body.type,
+    });
+
+    // Fetch the created post with full details for response
+    const post = await prisma.contentPost.findUnique({
+      where: { id: result.id },
       include: {
         user: { include: { profile: { select: { displayName: true, userName: true } } } },
         mainCategory: { select: { id: true, name: true } },
@@ -483,26 +634,13 @@ router.post(
         productGroup: { select: { id: true, name: true } },
         event: { select: { id: true, title: true, status: true } },
         media: { select: { id: true, mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' } },
+        tags: { select: { tag: true } },
       },
     });
 
-    await prisma.adminLog.create({
-      data: {
-        adminId,
-        action: 'CONTENT_POST_CREATE',
-        description: `postId: ${post.id}, title: ${post.title}`,
-        entityType: 'content_post',
-        entityId: 0,
-      },
-    });
-
-    logger.info('Admin created content post', {
-      adminId,
-      postId: post.id,
-      userId: body.userId,
-      type: body.type,
-      title: body.title,
-    });
+    if (!post) {
+      return res.status(201).json({ success: true, data: { id: result.id, message: result.message } });
+    }
 
     const media = post.media?.map((m) => ({ id: m.id, mediaUrl: resolveMediaUrl(m.mediaUrl, true), orderIndex: m.orderIndex })) ?? [];
 
@@ -546,7 +684,7 @@ router.post(
       productGroup: post.productGroup ?? undefined,
       event: post.event ?? undefined,
       media,
-      tags: [],
+      tags: post.tags?.map((t) => t.tag) ?? [],
       experienceDurationId: post.experienceDurationId,
       experienceLocationId: post.experienceLocationId,
       experiencePurposeId: post.experiencePurposeId,
@@ -554,6 +692,128 @@ router.post(
     };
 
     return res.status(201).json({ success: true, data });
+  })
+);
+
+/* ---- Experience Split (AI) ---- */
+router.post(
+  '/posts/experience/split',
+  validateBody(AdminExperienceSplitSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId, productId, content } = req.body;
+    const result = await postService.splitExperience({ userId, productId, content });
+    return res.json({ success: true, data: result });
+  })
+);
+
+/* ---- Transfer Post Owner ---- */
+router.patch(
+  '/posts/:id/transfer-owner',
+  validateBody(AdminTransferOwnerSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { newUserId } = req.body;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const post = await tx.contentPost.findUnique({ where: { id } });
+      if (!post) throw new NotFoundError('Post not found');
+
+      const oldUserId = post.userId;
+      const newUser = await tx.user.findUnique({ where: { id: newUserId } });
+      if (!newUser) throw new NotFoundError('New user not found');
+
+      // 1. Post sahibini değiştir
+      await tx.contentPost.update({ where: { id }, data: { userId: newUserId } });
+
+      // 2. EXPERIENCE post ise inventory taşı
+      if (post.type === 'EXPERIENCE' && post.productId) {
+        // Eski kullanıcının bu ürün için başka experience postu var mı
+        const otherExperiencePosts = await tx.contentPost.count({
+          where: {
+            userId: oldUserId,
+            productId: post.productId,
+            type: 'EXPERIENCE',
+            id: { not: id },
+          },
+        });
+
+        // Başka experience post yoksa, eski kullanıcının inventory'sini sil
+        if (otherExperiencePosts === 0) {
+          await tx.inventory.deleteMany({
+            where: { userId: oldUserId, productId: post.productId },
+          });
+        }
+
+        // Yeni kullanıcıya inventory upsert
+        await tx.inventory.upsert({
+          where: {
+            userId_productId: { userId: newUserId, productId: post.productId },
+          },
+          create: {
+            userId: newUserId,
+            productId: post.productId,
+            hasOwned: post.productStatus === 'own',
+            experienceSnippetId: post.experienceSnippetId ?? null,
+            experienceDurationId: post.experienceDurationId ?? null,
+            experienceLocationId: post.experienceLocationId ?? null,
+            experiencePurposeId: post.experiencePurposeId ?? null,
+          },
+          update: {
+            hasOwned: post.productStatus === 'own',
+            experienceSnippetId: post.experienceSnippetId ?? undefined,
+          },
+        });
+      }
+
+      // 3. AiExperienceSplit userId güncelle
+      if (post.experienceSnippetId) {
+        await tx.aiExperienceSplit.update({
+          where: { id: post.experienceSnippetId },
+          data: { userId: newUserId },
+        });
+      }
+
+      // 4. Admin log
+      await tx.adminLog.create({
+        data: {
+          adminId,
+          action: 'POST_TRANSFER_OWNER',
+          description: `postId: ${id}, from: ${oldUserId}, to: ${newUserId}`,
+          entityType: 'content_post',
+          entityId: 0,
+        },
+      });
+
+      return { oldUserId, newUserId };
+    });
+
+    logger.info('Admin transferred post owner', {
+      adminId,
+      postId: id,
+      oldUserId: result.oldUserId,
+      newUserId: result.newUserId,
+    });
+
+    // Return updated post
+    const updatedPost = await prisma.contentPost.findUnique({
+      where: { id },
+      include: {
+        user: { include: { profile: { select: { displayName: true, userName: true } } } },
+        mainCategory: { select: { id: true, name: true } },
+        subCategory: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+        productGroup: { select: { id: true, name: true } },
+        event: { select: { id: true, title: true, status: true } },
+        media: { select: { id: true, mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' } },
+        tags: { select: { tag: true } },
+      },
+    });
+
+    return res.json({ success: true, data: updatedPost });
   })
 );
 

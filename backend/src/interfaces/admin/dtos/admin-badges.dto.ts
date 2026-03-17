@@ -34,6 +34,8 @@ export type AdminCollectionBadgeListItem = {
   imageUrl: string | null;
   type: string;
   rarity: string;
+  status: string;
+  displayOrder: number;
   categoryId: string;
   categoryName?: string | null;
   createdAt: string;
@@ -69,6 +71,8 @@ export type AdminBadgeListItem = {
   imageUrl: string | null;
   type: string;
   rarity: string;
+  status: string;
+  displayOrder: number;
   categoryId: string;
   categoryName?: string | null;
   collectionId: string | null;
