@@ -1,6 +1,6 @@
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile
-#   dev   → bind mount + named volume, build hızlı (~3s)
+#   dev   → deps build'de yüklenir, /app-deps'e taşınır
 #   full  → deps + source baked-in
 # ══════════════════════════════════════════════════════════════════
 
@@ -21,6 +21,12 @@ CMD ["pnpm", "run", "dev"]
 
 # ── Stage: dev ───────────────────────────────────────────────────
 FROM base AS dev
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install
+
+RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
+    && mv node_modules /app-deps
 
 # ── Stage: full ──────────────────────────────────────────────────
 FROM base AS full

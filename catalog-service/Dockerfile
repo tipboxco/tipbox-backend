@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile for Medusa (Catalog Service)
-#   dev   → bind mount + named volume, build hızlı (~3s)
+#   dev   → deps build'de yüklenir, /server-deps'e taşınır
 #   full  → deps + source baked-in
 # ══════════════════════════════════════════════════════════════════
 
@@ -23,6 +23,14 @@ CMD ["sh", "-c", "sh /server/start.sh"]
 
 # ── Stage: dev ───────────────────────────────────────────────────
 FROM base AS dev
+
+COPY .npmrc package.json pnpm-lock.yaml* ./
+
+RUN --mount=type=cache,id=pnpm-store-catalog,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile || pnpm install
+
+RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
+    && mv node_modules /server-deps
 
 # ── Stage: full ──────────────────────────────────────────────────
 FROM base AS full
