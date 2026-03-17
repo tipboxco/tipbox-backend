@@ -535,6 +535,7 @@ export function CategoryTreeSelect({
         type="button"
         onClick={handleOpen}
         disabled={disabled || loading}
+        title={hasValue ? displayText : undefined}
         className={[
           "group/trigger flex items-center gap-1.5 rounded-md border bg-ui-bg-field",
           "text-left transition-all duration-150",
@@ -705,6 +706,7 @@ export function CategoryTreeSelect({
                       <button
                         key={node.id}
                         type="button"
+                        title={parentPath ? `${parentPath} > ${node.name}` : node.name}
                         onClick={() => handleSelect(node.id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         className={[
@@ -787,6 +789,7 @@ export function CategoryTreeSelect({
                       <button
                         key={node.id}
                         type="button"
+                        title={node.name}
                         onClick={() => handleSelect(node.id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         className={[
