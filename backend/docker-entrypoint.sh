@@ -39,7 +39,8 @@ if [ $attempt -eq $max_attempts ]; then
 fi
 
 # ── node_modules kontrolü ──
-# pnpm-lock.yaml checksum'ı ile paket değişikliklerini tespit et
+# Build aşamasında deps /app-deps'e yüklendi.
+# Burada sadece volume ile karşılaştırıp gerekirse kopyalıyoruz.
 LOCK_CHECKSUM=""
 if [ -f "pnpm-lock.yaml" ]; then
   LOCK_CHECKSUM=$(md5sum pnpm-lock.yaml | cut -d' ' -f1)
@@ -49,38 +50,39 @@ if [ -f "node_modules/.lock-checksum" ]; then
   STORED_CHECKSUM=$(cat node_modules/.lock-checksum)
 fi
 
-install_deps() {
-  pnpm install --ignore-scripts
-  echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
-}
-
-if [ ! -d "node_modules/.pnpm" ]; then
-  echo "🔄 node_modules eksik, yükleniyor..."
-  install_deps
-  echo "✅ Bağımlılıklar yüklendi!"
-elif [ "$LOCK_CHECKSUM" != "$STORED_CHECKSUM" ]; then
-  echo "🔄 pnpm-lock.yaml değişti, paketler güncelleniyor..."
-  install_deps
-  echo "✅ Bağımlılıklar güncellendi!"
-else
-  echo "✅ node_modules checksum eşleşiyor."
+# Image'daki build-time checksum
+IMAGE_CHECKSUM=""
+if [ -f "/app-deps/.lock-checksum" ]; then
+  IMAGE_CHECKSUM=$(cat /app-deps/.lock-checksum)
 fi
 
-# ── Kurulum doğrulama ──
-# Named volume bozuk/eksik paket içerebilir — kritik paketleri kontrol et
-MISSING_PKGS=""
-for pkg in express expo-server-sdk bullmq socket.io @prisma/client; do
-  if [ ! -d "node_modules/$pkg" ] && [ ! -L "node_modules/$pkg" ]; then
-    MISSING_PKGS="$MISSING_PKGS $pkg"
-  fi
-done
+sync_from_image() {
+  echo "📦 Build cache'den node_modules senkronize ediliyor..."
+  # Volume'u temizle ve build'deki deps'i kopyala
+  rm -rf node_modules/.pnpm node_modules/.modules.yaml node_modules/.lock-checksum 2>/dev/null || true
+  cp -a /app-deps/. node_modules/
+  echo "✅ Bağımlılıklar senkronize edildi (build cache)!"
+}
 
-if [ -n "$MISSING_PKGS" ]; then
-  echo "⚠️  Eksik paketler tespit edildi:$MISSING_PKGS"
-  echo "🔄 node_modules temizlenip yeniden yükleniyor..."
-  rm -rf node_modules/.pnpm node_modules/.lock-checksum
-  install_deps
-  echo "✅ Bağımlılıklar temiz kurulumla yüklendi!"
+if [ "$LOCK_CHECKSUM" = "$STORED_CHECKSUM" ] && [ -d "node_modules/.pnpm" ]; then
+  # Volume güncel — hiçbir şey yapma
+  echo "✅ node_modules güncel (checksum eşleşiyor)."
+elif [ -d "/app-deps/.pnpm" ] && [ "$LOCK_CHECKSUM" = "$IMAGE_CHECKSUM" ]; then
+  # Volume eski ama image doğru deps'e sahip → kopyala (hızlı)
+  sync_from_image
+elif [ -d "/app-deps/.pnpm" ]; then
+  # Image de eski — ama yine de image'dan başla, sonra update yap
+  echo "⚠️  Hem volume hem image eski, image'dan senkronize edip güncelleniyor..."
+  sync_from_image
+  pnpm install --ignore-scripts
+  echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
+  echo "✅ Bağımlılıklar güncellendi!"
+else
+  # /app-deps yok (eski image veya full stage) → fallback: pnpm install
+  echo "🔄 node_modules yükleniyor (fallback)..."
+  pnpm install --ignore-scripts
+  echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
+  echo "✅ Bağımlılıklar yüklendi!"
 fi
 
 # Prisma Client her zaman üret — schema değişikliklerinin yansıması için zorunlu

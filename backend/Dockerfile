@@ -1,11 +1,11 @@
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile
-#   dev   → bind mount + named volume kullanır, build hızlı (~5s)
-#   full  → deps + source baked-in (CI veya standalone kullanım)
+#   dev   → deps build'de yüklenir, /app-deps'e taşınır
+#           runtime'da entrypoint volume'a kopyalar (pnpm install ÇALIŞMAZ)
+#   full  → deps + source baked-in (standalone kullanım)
 # ══════════════════════════════════════════════════════════════════
 
 # ── Stage: base ──────────────────────────────────────────────────
-# System deps + pnpm. Nadiren değişir → haftalarca cache'de kalır.
 FROM node:23-alpine AS base
 
 WORKDIR /app
@@ -17,12 +17,10 @@ RUN apk add --no-cache python3 make g++ netcat-openbsd \
 # pnpm aktif et
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# pnpm store path'i /app içine sabitle (root'a yazma hatasını önler)
 ENV PNPM_HOME=/app/.pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN pnpm config set store-dir /app/.pnpm-store
 
-# Entrypoint her stage'de lazım
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -31,27 +29,30 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "run", "dev"]
 
 # ── Stage: dev ───────────────────────────────────────────────────
-# Dev/test compose'da kullanılır.
-# Bind mount → source code, named volume → node_modules sağlar.
-# Entrypoint pnpm install + prisma generate'i runtime'da halleder.
-# Build süresi: ~5 saniye (cache hit) — deps yüklenmez, source kopyalanmaz.
 FROM base AS dev
-# Hiçbir şey eklemeye gerek yok — base yeterli.
 
-# ── Stage: full ──────────────────────────────────────────────────
-# Deps + source image'a baked-in. Standalone çalışır (bind mount gerektirmez).
-FROM base AS full
-
-# 1) Dependency dosyaları (layer cache için ayrı)
+# Dependency dosyaları
 COPY package.json .npmrc ./
 COPY pnpm-lock.yaml* ./
-
-# 2) Prisma schema (postinstall prisma generate çalıştırır)
 COPY prisma ./prisma
 
-# 3) Dependencies — BuildKit cache mount ile pnpm store kalıcı
+# Dependencies — BuildKit cache mount ile pnpm store kalıcı
 RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
     pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
-# 4) Source code (en sık değişen layer en sona)
+# Lock checksum'ı yaz + deps'i staging path'e taşı
+# /app-deps bind mount'tan etkilenmez — entrypoint buradan volume'a kopyalar
+RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
+    && mv node_modules /app-deps
+
+# ── Stage: full ──────────────────────────────────────────────────
+FROM base AS full
+
+COPY package.json .npmrc ./
+COPY pnpm-lock.yaml* ./
+COPY prisma ./prisma
+
+RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
 COPY . .
