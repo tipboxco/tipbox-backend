@@ -79,5 +79,18 @@ export function useCategoryCache() {
     _cacheTime = 0
   }, [])
 
-  return { categories, loading, invalidate }
+  const refetch = useCallback(() => {
+    _cache = null
+    _cacheTime = 0
+    setLoading(true)
+    fetchAllCategories()
+      .then((items) => {
+        _cache = items
+        _cacheTime = Date.now()
+        setCategories(items)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  return { categories, loading, invalidate, refetch }
 }

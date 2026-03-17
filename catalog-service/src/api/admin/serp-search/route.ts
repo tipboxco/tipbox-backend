@@ -98,6 +98,7 @@ function buildTbs(params: {
  *   price_min  – minimum price (SerpAPI only)
  *   price_max  – maximum price (SerpAPI only)
  *   sort_by    – "relevance" | "price_low" | "price_high" | "rating" | "reviews" (SerpAPI only)
+ *   start      – pagination offset (default: 0). For SerpAPI passed directly, for Serper converted to page number.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const q = req.query.q as string
@@ -105,6 +106,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const gl = (req.query.gl as string) || "us"
   const hl = (req.query.hl as string) || "en"
   const num = (req.query.num as string) || "20"
+  const start = parseInt((req.query.start as string) || "0")
   const priceMin = req.query.price_min as string | undefined
   const priceMax = req.query.price_max as string | undefined
   const sortBy = req.query.sort_by as string | undefined
@@ -133,6 +135,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
       const tbs = buildTbs({ priceMin, priceMax, sortBy })
       if (tbs) searchParams.tbs = tbs
+      if (start > 0) searchParams.start = start.toString()
 
       const response = await fetch(
         `https://serpapi.com/search.json?${new URLSearchParams(searchParams)}`
@@ -165,6 +168,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         gl,
         hl,
         num: parseInt(num) || 20,
+        ...(start > 0 && { page: Math.floor(start / (parseInt(num) || 20)) + 1 }),
       }
 
       const response = await fetch("https://google.serper.dev/shopping", {
@@ -202,6 +206,8 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       count: results.length,
       source,
       query: q.trim(),
+      start,
+      has_more: results.length >= parseInt(num),
       filters: { gl, hl, num, price_min: priceMin, price_max: priceMax, sort_by: sortBy },
     })
   } catch (error: unknown) {

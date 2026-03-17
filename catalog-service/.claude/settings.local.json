@@ -11,7 +11,11 @@
       "Bash(cat /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/@medusajs+medusa@2.12.3_@me_8b6ca724be90cdbdaf6f1b1f826027e1/node_modules/@medusajs/medusa/dist/api/admin/products/[id]/route.js)",
       "Bash(grep -r \"category_ids\\\\|categories\" /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm/@medusajs+framework*/node_modules/@medusajs/framework/dist/types --include=*.d.ts)",
       "Bash(ls -la /d/tipbox-app/tipbox-backend/catalog-service/src/api/admin/categories/[id]/)",
-      "Bash(xargs -I {} grep -l \"@medusajs/icons\" {})"
+      "Bash(xargs -I {} grep -l \"@medusajs/icons\" {})",
+      "Bash(grep -A 20 \"onCreateCategory\" /d/tipbox-app/tipbox-backend/catalog-service/src/admin/routes/brands/[id]/page.tsx)",
+      "Bash(grep -A 10 \"POST.*product\" /d/tipbox-app/tipbox-backend/catalog-service/src/api/admin/categories/[id]/metadata/route.ts)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules/@medusajs/medusa -type f -name *.d.ts)",
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm -type f -path */medusa/core-flows* -name *.d.ts)"
     ]
   }
 }

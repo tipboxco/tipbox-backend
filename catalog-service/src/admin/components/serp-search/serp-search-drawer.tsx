@@ -1,13 +1,11 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import {
   Drawer,
-  Heading,
   Button,
   Text,
   Input,
   Label,
   Badge,
-  IconButton,
   Checkbox,
   Select,
   Table,
@@ -22,6 +20,8 @@ import {
   CheckCircleSolid,
   EllipsisHorizontal,
   XMark,
+  ArrowDownTray,
+  ChevronDownMini,
 } from "@medusajs/icons"
 import { backendUrl } from "../../lib/config"
 
@@ -40,39 +40,24 @@ export type SerpResult = {
 }
 
 export type SerpFilters = {
-  gl: string       // country code
-  hl: string       // language code
-  num: string      // result count
+  gl: string
+  hl: string
+  num: string
   price_min: string
   price_max: string
-  sort_by: string  // "relevance" | "price_low" | "price_high" | "rating" | "reviews"
+  sort_by: string
 }
 
-/**
- * Props for SerpSearchDrawer.
- *
- * Import mode  → provide `brandId` (+ optional `onImportSuccess`)
- * Select mode  → provide `onSelect` to receive selected results externally
- * Browse mode  → neither; drawer is read-only with external links
- */
 export type SerpSearchDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Title shown in drawer header */
   title?: string
-  /** Subtitle shown below title */
   description?: string
-  /** If provided, enables "Import Et" button that creates Medusa products */
   brandId?: string
-  /** Called after a successful import */
   onImportSuccess?: () => void
-  /** If provided, enables "Seç" button that returns selected results to the caller */
   onSelect?: (results: SerpResult[]) => void
-  /** Label on the primary action button (auto-derived when not set) */
   confirmLabel?: string
-  /** Default source tab on open */
   defaultSource?: SerpSource
-  /** Default filter values */
   defaultFilters?: Partial<SerpFilters>
 }
 
@@ -81,7 +66,7 @@ export type SerpSearchDrawerProps = {
 const DEFAULT_FILTERS: SerpFilters = {
   gl: "us",
   hl: "en",
-  num: "20",
+  num: "40",
   price_min: "",
   price_max: "",
   sort_by: "relevance",
@@ -120,9 +105,9 @@ const LANGUAGE_OPTIONS = [
 ]
 
 const RESULT_COUNT_OPTIONS = [
-  { value: "10", label: "10 sonuç" },
   { value: "20", label: "20 sonuç" },
   { value: "40", label: "40 sonuç" },
+  { value: "60", label: "60 sonuç" },
   { value: "100", label: "100 sonuç" },
 ]
 
@@ -138,27 +123,51 @@ const SORT_OPTIONS = [
 
 type SerpTableRowProps = {
   result: SerpResult
+  index: number
   isSelected: boolean
+  isImported: boolean
   onToggle: () => void
   selectable: boolean
 }
 
-const SerpTableRow = ({ result, isSelected, onToggle, selectable }: SerpTableRowProps) => {
+const SerpTableRow = ({
+  result,
+  index,
+  isSelected,
+  isImported,
+  onToggle,
+  selectable,
+}: SerpTableRowProps) => {
   const [imgError, setImgError] = useState(false)
 
   return (
     <Table.Row
       className={clx(
-        "group cursor-pointer hover:bg-ui-bg-subtle-hover",
-        isSelected && "bg-ui-bg-highlight hover:bg-ui-bg-highlight-hover"
+        "group transition-colors",
+        isImported
+          ? "bg-ui-bg-subtle opacity-60"
+          : isSelected
+            ? "bg-ui-bg-highlight hover:bg-ui-bg-highlight-hover cursor-pointer"
+            : "hover:bg-ui-bg-subtle-hover cursor-pointer"
       )}
-      onClick={selectable ? onToggle : undefined}
+      onClick={selectable && !isImported ? onToggle : undefined}
     >
       {selectable && (
         <Table.Cell className="pl-6" onClick={(e) => e.stopPropagation()}>
-          <Checkbox checked={isSelected} onCheckedChange={onToggle} />
+          {isImported ? (
+            <CheckCircleSolid className="h-4 w-4 text-ui-tag-green-icon" />
+          ) : (
+            <Checkbox checked={isSelected} onCheckedChange={onToggle} />
+          )}
         </Table.Cell>
       )}
+
+      {/* Index */}
+      <Table.Cell>
+        <Text size="xsmall" className="text-ui-fg-muted font-mono tabular-nums">
+          {index + 1}
+        </Text>
+      </Table.Cell>
 
       {/* Thumbnail */}
       <Table.Cell>
@@ -169,6 +178,7 @@ const SerpTableRow = ({ result, isSelected, onToggle, selectable }: SerpTableRow
               alt={result.title}
               className="w-full h-full object-contain p-0.5"
               onError={() => setImgError(true)}
+              loading="lazy"
             />
           ) : (
             <Photo className="text-ui-fg-muted h-5 w-5" />
@@ -176,11 +186,25 @@ const SerpTableRow = ({ result, isSelected, onToggle, selectable }: SerpTableRow
         </div>
       </Table.Cell>
 
-      {/* Title */}
+      {/* Title + Imported badge */}
       <Table.Cell>
-        <Text size="small" weight="plus" className="text-ui-fg-base line-clamp-2 leading-snug">
-          {result.title}
-        </Text>
+        <div className="flex items-center gap-2">
+          <Text
+            size="small"
+            weight="plus"
+            className={clx(
+              "line-clamp-2 leading-snug",
+              isImported ? "text-ui-fg-muted" : "text-ui-fg-base"
+            )}
+          >
+            {result.title}
+          </Text>
+          {isImported && (
+            <Badge color="green" size="small" className="shrink-0">
+              İçe aktarıldı
+            </Badge>
+          )}
+        </div>
       </Table.Cell>
 
       {/* Price */}
@@ -205,9 +229,13 @@ const SerpTableRow = ({ result, isSelected, onToggle, selectable }: SerpTableRow
       <Table.Cell>
         {result.rating !== undefined ? (
           <div className="flex flex-col">
-            <Text size="small" className="text-ui-fg-subtle">★ {result.rating.toFixed(1)}</Text>
+            <Text size="small" className="text-ui-fg-subtle">
+              <span className="text-amber-500">★</span> {result.rating.toFixed(1)}
+            </Text>
             {result.reviews !== undefined && (
-              <Text size="xsmall" className="text-ui-fg-muted">({result.reviews.toLocaleString()})</Text>
+              <Text size="xsmall" className="text-ui-fg-muted">
+                ({result.reviews.toLocaleString()})
+              </Text>
             )}
           </div>
         ) : (
@@ -231,6 +259,17 @@ const SerpTableRow = ({ result, isSelected, onToggle, selectable }: SerpTableRow
       </Table.Cell>
     </Table.Row>
   )
+}
+
+// ─── Import result type from backend ──────────────────────────────────────────
+
+type ImportResult = {
+  title: string
+  product_id?: string
+  success: boolean
+  skipped?: boolean
+  reason?: string
+  error?: string
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -261,11 +300,28 @@ export const SerpSearchDrawer = ({
   const [hasSearched, setHasSearched] = useState(false)
   const [lastQuery, setLastQuery] = useState("")
 
+  // Pagination state
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [currentStart, setCurrentStart] = useState(0)
+
+  // Import tracking: links/titles of successfully imported items
+  const [importedKeys, setImportedKeys] = useState<Set<string>>(new Set())
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   const setFilter = <K extends keyof SerpFilters>(key: K, value: SerpFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
+
+  const isItemImported = useCallback(
+    (result: SerpResult) => {
+      if (result.link && importedKeys.has(result.link)) return true
+      if (result.title && importedKeys.has(`t:${result.title}`)) return true
+      return false
+    },
+    [importedKeys]
+  )
 
   const resetState = useCallback(() => {
     setSearchQuery("")
@@ -276,6 +332,10 @@ export const SerpSearchDrawer = ({
     setShowFilters(false)
     setFilters({ ...DEFAULT_FILTERS, ...defaultFilters })
     setActiveSource(defaultSource)
+    setHasMore(false)
+    setCurrentStart(0)
+    setImportedKeys(new Set())
+    setIsLoadingMore(false)
   }, [defaultFilters, defaultSource])
 
   const handleOpenChange = (next: boolean) => {
@@ -283,7 +343,29 @@ export const SerpSearchDrawer = ({
     onOpenChange(next)
   }
 
-  // ── Search ───────────────────────────────────────────────────────────────────
+  // ── Build search params ────────────────────────────────────────────────────
+
+  const buildSearchParams = useCallback(
+    (q: string, startOffset: number) => {
+      const params = new URLSearchParams({
+        q,
+        source: activeSource,
+        gl: filters.gl,
+        hl: filters.hl,
+        num: filters.num,
+      })
+      if (startOffset > 0) params.set("start", startOffset.toString())
+      if (filters.price_min) params.set("price_min", filters.price_min)
+      if (filters.price_max) params.set("price_max", filters.price_max)
+      if (filters.sort_by && filters.sort_by !== "relevance") {
+        params.set("sort_by", filters.sort_by)
+      }
+      return params
+    },
+    [activeSource, filters]
+  )
+
+  // ── Search ─────────────────────────────────────────────────────────────────
 
   const handleSearch = useCallback(async () => {
     const q = searchQuery.trim()
@@ -293,21 +375,11 @@ export const SerpSearchDrawer = ({
     setHasSearched(true)
     setLastQuery(q)
     setSelectedIndexes(new Set())
+    setImportedKeys(new Set())
+    setCurrentStart(0)
 
     try {
-      const params = new URLSearchParams({
-        q,
-        source: activeSource,
-        gl: filters.gl,
-        hl: filters.hl,
-        num: filters.num,
-      })
-      if (filters.price_min) params.set("price_min", filters.price_min)
-      if (filters.price_max) params.set("price_max", filters.price_max)
-      if (filters.sort_by && filters.sort_by !== "relevance") {
-        params.set("sort_by", filters.sort_by)
-      }
-
+      const params = buildSearchParams(q, 0)
       const response = await fetch(`${backendUrl}/admin/serp-search?${params}`, {
         credentials: "include",
       })
@@ -316,17 +388,59 @@ export const SerpSearchDrawer = ({
       if (!response.ok) {
         toast.error("Arama Hatası", { description: data.error || "Arama sırasında hata oluştu" })
         setResults([])
+        setHasMore(false)
         return
       }
 
-      setResults(data.results || [])
+      const newResults: SerpResult[] = data.results || []
+      setResults(newResults)
+      setCurrentStart(newResults.length)
+      setHasMore(data.has_more === true || newResults.length >= parseInt(filters.num))
     } catch {
       toast.error("Bağlantı Hatası", { description: "Sunucuya bağlanılamadı" })
       setResults([])
+      setHasMore(false)
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, activeSource, filters])
+  }, [searchQuery, buildSearchParams, filters.num])
+
+  // ── Load More ──────────────────────────────────────────────────────────────
+
+  const handleLoadMore = useCallback(async () => {
+    const q = lastQuery.trim()
+    if (!q || isLoadingMore) return
+
+    setIsLoadingMore(true)
+
+    try {
+      const params = buildSearchParams(q, currentStart)
+      const response = await fetch(`${backendUrl}/admin/serp-search?${params}`, {
+        credentials: "include",
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        toast.error("Yükleme Hatası", { description: data.error || "Daha fazla sonuç yüklenemedi" })
+        return
+      }
+
+      const newResults: SerpResult[] = data.results || []
+      if (newResults.length === 0) {
+        setHasMore(false)
+        toast.success("Tamamlandı", { description: "Daha fazla sonuç bulunamadı" })
+        return
+      }
+
+      setResults((prev) => [...prev, ...newResults])
+      setCurrentStart((prev) => prev + newResults.length)
+      setHasMore(data.has_more === true || newResults.length >= parseInt(filters.num))
+    } catch {
+      toast.error("Bağlantı Hatası", { description: "Sunucuya bağlanılamadı" })
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [lastQuery, currentStart, isLoadingMore, buildSearchParams, filters.num])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -340,11 +454,23 @@ export const SerpSearchDrawer = ({
     setResults([])
     setHasSearched(false)
     setSelectedIndexes(new Set())
+    setHasMore(false)
+    setCurrentStart(0)
   }
 
-  // ── Selection ────────────────────────────────────────────────────────────────
+  // ── Selection ──────────────────────────────────────────────────────────────
+
+  // Selectable indexes: exclude imported items
+  const selectableIndexes = useMemo(() => {
+    const set = new Set<number>()
+    results.forEach((r, i) => {
+      if (!isItemImported(r)) set.add(i)
+    })
+    return set
+  }, [results, isItemImported])
 
   const toggleRow = (index: number) => {
+    if (!selectableIndexes.has(index)) return
     setSelectedIndexes((prev) => {
       const next = new Set(prev)
       if (next.has(index)) next.delete(index)
@@ -354,30 +480,34 @@ export const SerpSearchDrawer = ({
   }
 
   const toggleAll = () => {
-    setSelectedIndexes(
-      selectedIndexes.size === results.length
-        ? new Set()
-        : new Set(results.map((_, i) => i))
-    )
+    if (selectedIndexes.size === selectableIndexes.size) {
+      setSelectedIndexes(new Set())
+    } else {
+      setSelectedIndexes(new Set(selectableIndexes))
+    }
   }
 
-  // ── Primary action (import or select) ────────────────────────────────────────
+  // ── Primary action (import or select) ──────────────────────────────────────
 
-  const selectedProducts = Array.from(selectedIndexes).map((i) => results[i])
+  const selectedProducts = useMemo(
+    () => Array.from(selectedIndexes).map((i) => results[i]),
+    [selectedIndexes, results]
+  )
 
-  const handleAction = async () => {
+  const handleAction = useCallback(async () => {
     if (selectedProducts.length === 0) return
 
-    // Select mode: return results to caller
+    // Select mode
     if (onSelect) {
       onSelect(selectedProducts)
       setSelectedIndexes(new Set())
       return
     }
 
-    // Import mode: create Medusa products + link to brand
+    // Import mode
     if (!brandId) return
     setIsActing(true)
+
     try {
       const response = await fetch(`${backendUrl}/admin/serp-search`, {
         method: "POST",
@@ -394,16 +524,38 @@ export const SerpSearchDrawer = ({
         return
       }
 
-      if (data.failed > 0) {
+      // Mark imported items
+      const importResults: ImportResult[] = data.results || []
+      const newKeys = new Set(importedKeys)
+      importResults.forEach((r: ImportResult, i: number) => {
+        if (r.success) {
+          const product = selectedProducts[i]
+          if (product?.link) newKeys.add(product.link)
+          if (product?.title) newKeys.add(`t:${product.title}`)
+        }
+      })
+      setImportedKeys(newKeys)
+
+      // Build descriptive toast
+      const created = data.created ?? 0
+      const skipped = data.skipped ?? 0
+      const failed = data.failed ?? 0
+
+      if (failed > 0 && created > 0) {
         toast.warning("Kısmen Başarılı", {
-          description: `${data.successful} ürün aktarıldı, ${data.failed} başarısız`,
+          description: `${created} ürün aktarıldı, ${skipped > 0 ? `${skipped} atlandı, ` : ""}${failed} başarısız`,
+        })
+      } else if (failed > 0 && created === 0) {
+        toast.error("İçe Aktarma Başarısız", {
+          description: `${failed} ürün aktarılamadı${skipped > 0 ? `, ${skipped} zaten mevcut` : ""}`,
         })
       } else {
         toast.success("Başarılı", {
-          description: `${data.successful} ürün markaya eklendi`,
+          description: `${created} ürün markaya eklendi${skipped > 0 ? `, ${skipped} zaten mevcut` : ""}`,
         })
       }
 
+      // Clear selection (keep results visible, imported items marked)
       setSelectedIndexes(new Set())
       onImportSuccess?.()
     } catch {
@@ -411,32 +563,37 @@ export const SerpSearchDrawer = ({
     } finally {
       setIsActing(false)
     }
-  }
+  }, [selectedProducts, onSelect, brandId, importedKeys, onImportSuccess])
 
-  // Resolve button label
-  const actionLabel = (() => {
+  // ── Derived state ──────────────────────────────────────────────────────────
+
+  const actionLabel = useMemo(() => {
     if (confirmLabel) return confirmLabel
     const count = selectedIndexes.size
     if (onSelect) return count > 0 ? `${count} Ürünü Seç` : "Ürünü Seç"
     if (brandId) return count > 0 ? `${count} Ürünü Import Et` : "Import Et"
     return undefined
-  })()
+  }, [confirmLabel, selectedIndexes.size, onSelect, brandId])
 
   const hasAction = Boolean(onSelect || brandId)
-  const allSelected = results.length > 0 && selectedIndexes.size === results.length
-  const someSelected = selectedIndexes.size > 0 && selectedIndexes.size < results.length
+  const allSelectable = selectableIndexes.size
+  const allSelected = allSelectable > 0 && selectedIndexes.size === allSelectable
+  const importedCount = useMemo(
+    () => results.filter((r) => isItemImported(r)).length,
+    [results, isItemImported]
+  )
 
-  // Active filter count (excluding defaults)
+  // Active filter count
   const activeFilterCount = [
     filters.gl !== "us",
     filters.hl !== "en",
-    filters.num !== "20",
+    filters.num !== "40",
     filters.price_min !== "",
     filters.price_max !== "",
     filters.sort_by !== "relevance",
   ].filter(Boolean).length
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <Drawer open={open} onOpenChange={handleOpenChange}>
@@ -453,6 +610,19 @@ export const SerpSearchDrawer = ({
                 {description}
               </Text>
             </div>
+            {/* Quick stats when results exist */}
+            {hasSearched && !isLoading && results.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Badge color="grey" size="small">
+                  {results.length} sonuç
+                </Badge>
+                {importedCount > 0 && (
+                  <Badge color="green" size="small">
+                    {importedCount} aktarıldı
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </Drawer.Header>
 
@@ -504,7 +674,7 @@ export const SerpSearchDrawer = ({
                 />
               </div>
 
-              {/* Filter toggle button */}
+              {/* Filter toggle */}
               <Button
                 variant={showFilters ? "primary" : "secondary"}
                 size="base"
@@ -540,18 +710,15 @@ export const SerpSearchDrawer = ({
               </Button>
             </div>
 
-            {/* Result summary */}
+            {/* Search info */}
             {hasSearched && !isLoading && (
               <div className="flex items-center justify-between">
                 <Text size="xsmall" className="text-ui-fg-muted">
-                  &ldquo;{lastQuery}&rdquo; ·{" "}
+                  &ldquo;{lastQuery}&rdquo; &middot;{" "}
                   <span className="font-medium">
                     {activeSource === "serpapi" ? "SerpAPI" : "Serper.dev"}
                   </span>
                 </Text>
-                <Badge color="grey" size="small">
-                  {results.length} sonuç
-                </Badge>
               </div>
             )}
           </div>
@@ -566,9 +733,7 @@ export const SerpSearchDrawer = ({
                 {activeFilterCount > 0 && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setFilters({ ...DEFAULT_FILTERS, ...defaultFilters })
-                    }
+                    onClick={() => setFilters({ ...DEFAULT_FILTERS, ...defaultFilters })}
                     className="flex items-center gap-1 text-xs text-ui-fg-muted hover:text-ui-fg-subtle"
                   >
                     <XMark className="h-3 w-3" />
@@ -580,18 +745,12 @@ export const SerpSearchDrawer = ({
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {/* Country */}
                 <div className="flex flex-col gap-1.5">
-                  <Label size="xsmall" className="text-ui-fg-subtle">
-                    Ülke
-                  </Label>
+                  <Label size="xsmall" className="text-ui-fg-subtle">Ülke</Label>
                   <Select value={filters.gl} onValueChange={(v) => setFilter("gl", v)}>
-                    <Select.Trigger>
-                      <Select.Value />
-                    </Select.Trigger>
+                    <Select.Trigger><Select.Value /></Select.Trigger>
                     <Select.Content>
                       {COUNTRY_OPTIONS.map((o) => (
-                        <Select.Item key={o.value} value={o.value}>
-                          {o.label}
-                        </Select.Item>
+                        <Select.Item key={o.value} value={o.value}>{o.label}</Select.Item>
                       ))}
                     </Select.Content>
                   </Select>
@@ -599,18 +758,12 @@ export const SerpSearchDrawer = ({
 
                 {/* Language */}
                 <div className="flex flex-col gap-1.5">
-                  <Label size="xsmall" className="text-ui-fg-subtle">
-                    Dil
-                  </Label>
+                  <Label size="xsmall" className="text-ui-fg-subtle">Dil</Label>
                   <Select value={filters.hl} onValueChange={(v) => setFilter("hl", v)}>
-                    <Select.Trigger>
-                      <Select.Value />
-                    </Select.Trigger>
+                    <Select.Trigger><Select.Value /></Select.Trigger>
                     <Select.Content>
                       {LANGUAGE_OPTIONS.map((o) => (
-                        <Select.Item key={o.value} value={o.value}>
-                          {o.label}
-                        </Select.Item>
+                        <Select.Item key={o.value} value={o.value}>{o.label}</Select.Item>
                       ))}
                     </Select.Content>
                   </Select>
@@ -618,18 +771,12 @@ export const SerpSearchDrawer = ({
 
                 {/* Result count */}
                 <div className="flex flex-col gap-1.5">
-                  <Label size="xsmall" className="text-ui-fg-subtle">
-                    Sonuç Sayısı
-                  </Label>
+                  <Label size="xsmall" className="text-ui-fg-subtle">Sonuç Sayısı</Label>
                   <Select value={filters.num} onValueChange={(v) => setFilter("num", v)}>
-                    <Select.Trigger>
-                      <Select.Value />
-                    </Select.Trigger>
+                    <Select.Trigger><Select.Value /></Select.Trigger>
                     <Select.Content>
                       {RESULT_COUNT_OPTIONS.map((o) => (
-                        <Select.Item key={o.value} value={o.value}>
-                          {o.label}
-                        </Select.Item>
+                        <Select.Item key={o.value} value={o.value}>{o.label}</Select.Item>
                       ))}
                     </Select.Content>
                   </Select>
@@ -637,18 +784,12 @@ export const SerpSearchDrawer = ({
 
                 {/* Sort */}
                 <div className="flex flex-col gap-1.5">
-                  <Label size="xsmall" className="text-ui-fg-subtle">
-                    Sıralama
-                  </Label>
+                  <Label size="xsmall" className="text-ui-fg-subtle">Sıralama</Label>
                   <Select value={filters.sort_by} onValueChange={(v) => setFilter("sort_by", v)}>
-                    <Select.Trigger>
-                      <Select.Value />
-                    </Select.Trigger>
+                    <Select.Trigger><Select.Value /></Select.Trigger>
                     <Select.Content>
                       {SORT_OPTIONS.map((o) => (
-                        <Select.Item key={o.value} value={o.value}>
-                          {o.label}
-                        </Select.Item>
+                        <Select.Item key={o.value} value={o.value}>{o.label}</Select.Item>
                       ))}
                     </Select.Content>
                   </Select>
@@ -750,38 +891,75 @@ export const SerpSearchDrawer = ({
                 </Text>
               </div>
             ) : (
-              <Table>
-                <Table.Header>
-                  <Table.Row className="bg-ui-bg-subtle">
-                    {hasAction && (
-                      <Table.HeaderCell className="w-[48px] pl-6">
-                        <Checkbox
-                          checked={allSelected}
-                          indeterminate={someSelected}
-                          onCheckedChange={toggleAll}
-                        />
-                      </Table.HeaderCell>
-                    )}
-                    <Table.HeaderCell className="w-[56px]">Görsel</Table.HeaderCell>
-                    <Table.HeaderCell>Ürün Adı</Table.HeaderCell>
-                    <Table.HeaderCell className="w-[110px]">Fiyat</Table.HeaderCell>
-                    <Table.HeaderCell className="w-[140px]">Kaynak</Table.HeaderCell>
-                    <Table.HeaderCell className="w-[90px]">Puan</Table.HeaderCell>
-                    <Table.HeaderCell className="w-[52px]" />
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {results.map((result, index) => (
-                    <SerpTableRow
-                      key={index}
-                      result={result}
-                      isSelected={selectedIndexes.has(index)}
-                      onToggle={() => toggleRow(index)}
-                      selectable={hasAction}
-                    />
-                  ))}
-                </Table.Body>
-              </Table>
+              <>
+                <Table>
+                  <Table.Header>
+                    <Table.Row className="bg-ui-bg-subtle">
+                      {hasAction && (
+                        <Table.HeaderCell className="w-[48px] pl-6">
+                          <Checkbox
+                            checked={allSelected ? true : selectedIndexes.size > 0 ? "indeterminate" : false}
+                            onCheckedChange={toggleAll}
+                          />
+                        </Table.HeaderCell>
+                      )}
+                      <Table.HeaderCell className="w-[44px]">#</Table.HeaderCell>
+                      <Table.HeaderCell className="w-[56px]">Görsel</Table.HeaderCell>
+                      <Table.HeaderCell>Ürün Adı</Table.HeaderCell>
+                      <Table.HeaderCell className="w-[110px]">Fiyat</Table.HeaderCell>
+                      <Table.HeaderCell className="w-[140px]">Kaynak</Table.HeaderCell>
+                      <Table.HeaderCell className="w-[90px]">Puan</Table.HeaderCell>
+                      <Table.HeaderCell className="w-[52px]" />
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {results.map((result, index) => (
+                      <SerpTableRow
+                        key={`${result.link || result.title}-${index}`}
+                        result={result}
+                        index={index}
+                        isSelected={selectedIndexes.has(index)}
+                        isImported={isItemImported(result)}
+                        onToggle={() => toggleRow(index)}
+                        selectable={hasAction}
+                      />
+                    ))}
+                  </Table.Body>
+                </Table>
+
+                {/* Load More button */}
+                {hasMore && (
+                  <div className="flex items-center justify-center py-4 border-t border-ui-border-base">
+                    <Button
+                      variant="secondary"
+                      size="base"
+                      onClick={handleLoadMore}
+                      disabled={isLoadingMore}
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Spinner className="animate-spin h-4 w-4" />
+                          Yükleniyor...
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDownMini className="h-4 w-4" />
+                          Daha Fazla Yükle
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* End of results message */}
+                {!hasMore && results.length > 0 && hasSearched && (
+                  <div className="flex items-center justify-center py-3 border-t border-ui-border-base">
+                    <Text size="xsmall" className="text-ui-fg-muted">
+                      Tüm sonuçlar yüklendi ({results.length} ürün)
+                    </Text>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -789,12 +967,12 @@ export const SerpSearchDrawer = ({
           <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-ui-border-base bg-ui-bg-subtle">
             <Text size="xsmall" className="text-ui-fg-muted">
               {activeSource === "serpapi"
-                ? "SerpAPI · Google Shopping Light"
+                ? "SerpAPI · Google Shopping"
                 : "Serper.dev · Google Shopping"}
             </Text>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={() => handleOpenChange(false)}>
-                İptal
+                {importedCount > 0 ? "Kapat" : "İptal"}
               </Button>
               {hasAction && actionLabel && (
                 <Button
@@ -805,10 +983,13 @@ export const SerpSearchDrawer = ({
                   {isActing ? (
                     <>
                       <Spinner className="animate-spin h-4 w-4" />
-                      İşleniyor...
+                      İçe aktarılıyor...
                     </>
                   ) : (
-                    actionLabel
+                    <>
+                      <ArrowDownTray className="h-4 w-4" />
+                      {actionLabel}
+                    </>
                   )}
                 </Button>
               )}

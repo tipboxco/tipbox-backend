@@ -98,7 +98,7 @@ const BrandDetailPage = () => {
   const [serpModalOpen, setSerpModalOpen] = useState(false)
 
   // Product categories (cached)
-  const { categories: productCategories, loading: categoriesLoading } = useCategoryCache()
+  const { categories: productCategories, loading: categoriesLoading, refetch: refetchCategories } = useCategoryCache()
 
   // Pending category changes: productId → new categoryId (null = remove)
   const [pendingCategoryChanges, setPendingCategoryChanges] = useState<Map<string, string | null>>(new Map())
@@ -413,6 +413,31 @@ const BrandDetailPage = () => {
     setPendingCategoryChanges(new Map())
   }, [])
 
+  // Create a new category from search input — returns new ID so the tree can auto-select it
+  const handleCreateCategory = useCallback(async (name: string): Promise<string | undefined> => {
+    try {
+      const response = await fetch(`${backendUrl}/admin/product-categories`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, is_active: true, is_internal: false }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        toast.error("Hata", { description: data?.message || "Kategori oluşturulamadı" })
+        return undefined
+      }
+      const data = await response.json()
+      const newId: string | undefined = data?.product_category?.id
+      toast.success("Kategori oluşturuldu", { description: name })
+      refetchCategories()
+      return newId
+    } catch {
+      toast.error("Hata", { description: "Kategori oluşturulurken bağlantı hatası" })
+      return undefined
+    }
+  }, [refetchCategories])
+
   // Save all pending category changes
   const handleSaveCategoryChanges = useCallback(async () => {
     if (pendingCount === 0) return
@@ -503,7 +528,7 @@ const BrandDetailPage = () => {
     }
   }
 
-  if (loading) {
+  if (loading && !brand) {
     return (
       <div className="flex items-center justify-center py-16">
         <Spinner className="animate-spin h-8 w-8 text-ui-fg-interactive" />
@@ -732,6 +757,7 @@ const BrandDetailPage = () => {
                             categories={productCategories}
                             value={effectiveCategoryId}
                             onChange={(value) => handleStageCategoryChange(product.id, value)}
+                            onCreateCategory={handleCreateCategory}
                             disabled={savingCategories}
                             loading={categoriesLoading}
                             placeholder="Kategori seç..."
@@ -878,6 +904,7 @@ const BrandDetailPage = () => {
                 categories={productCategories}
                 value={bulkCategoryId}
                 onChange={(value) => setBulkCategoryId(value)}
+                onCreateCategory={handleCreateCategory}
                 loading={categoriesLoading}
                 placeholder="Kategori seçin..."
               />

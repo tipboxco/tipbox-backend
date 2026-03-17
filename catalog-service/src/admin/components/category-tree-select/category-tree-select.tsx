@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Minus,
   Check,
+  Plus,
 } from "@medusajs/icons"
 import type { CategoryItem } from "./use-category-cache"
 
@@ -43,6 +44,7 @@ export type CategoryTreeSelectProps = {
   disabled?: boolean
   loading?: boolean
   compact?: boolean
+  onCreateCategory?: (name: string) => Promise<string | undefined> | void
 }
 
 // ─── HighlightedName ───
@@ -273,6 +275,7 @@ export function CategoryTreeSelect({
   disabled,
   loading,
   compact,
+  onCreateCategory,
 }: CategoryTreeSelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -312,8 +315,11 @@ export function CategoryTreeSelect({
     [searchActive, tree, expanded]
   )
 
-  // Active list length
-  const activeListLength = searchActive ? scoredRows.length : treeFlatRows.length
+  // Active list length — "create" row counts as 1 when search has no matches
+  const showCreateOption = searchActive && scoredRows.length === 0 && !!onCreateCategory
+  const activeListLength = searchActive
+    ? scoredRows.length + (showCreateOption ? 1 : 0)
+    : treeFlatRows.length
 
   // ─── Selected values set (for multi-select) ───
   const selectedSet = useMemo(() => {
@@ -400,10 +406,12 @@ export function CategoryTreeSelect({
   useEffect(() => {
     if (searchActive && scoredRows.length > 0) {
       setHighlightedIndex(0)
+    } else if (searchActive && showCreateOption) {
+      setHighlightedIndex(0)
     } else if (searchActive) {
       setHighlightedIndex(-1)
     }
-  }, [searchActive, scoredRows])
+  }, [searchActive, scoredRows, showCreateOption])
 
   // Scroll highlighted row into view
   useEffect(() => {
@@ -460,10 +468,25 @@ export function CategoryTreeSelect({
         setHighlightedIndex((prev) => Math.max(prev - 1, 0))
       } else if (key === "Enter" && highlightedIndex >= 0) {
         e.preventDefault()
-        const id = searchActive
-          ? scoredRows[highlightedIndex]?.node.id
-          : treeFlatRows[highlightedIndex]?.node.id
-        if (id) handleSelect(id)
+        if (searchActive) {
+          if (scoredRows.length > 0) {
+            const id = scoredRows[highlightedIndex]?.node.id
+            if (id) handleSelect(id)
+          } else if (showCreateOption && onCreateCategory) {
+            const result = onCreateCategory(search.trim())
+            if (result && typeof result.then === "function") {
+              result.then((newId) => {
+                if (newId) handleSelect(newId)
+                else setOpen(false)
+              })
+            } else {
+              setOpen(false)
+            }
+          }
+        } else {
+          const id = treeFlatRows[highlightedIndex]?.node.id
+          if (id) handleSelect(id)
+        }
       } else if (key === "Escape") {
         e.preventDefault()
         setOpen(false)
@@ -496,7 +519,7 @@ export function CategoryTreeSelect({
         }
       }
     },
-    [searchActive, scoredRows, treeFlatRows, highlightedIndex, activeListLength, handleSelect]
+    [searchActive, scoredRows, treeFlatRows, highlightedIndex, activeListLength, handleSelect, showCreateOption, onCreateCategory, search]
   )
 
   // ─── Render ───
@@ -628,12 +651,49 @@ export function CategoryTreeSelect({
             <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ maxHeight: 280 }}>
               {searchActive ? (
                 /* ─── Search mode: flat ranked list ─── */
-                scoredRows.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 gap-2">
-                    <MagnifyingGlass className="h-5 w-5 text-ui-fg-muted" />
-                    <Text size="small" className="text-ui-fg-muted">
-                      Sonuç bulunamadı
-                    </Text>
+              scoredRows.length === 0 ? (
+                  <div className="flex flex-col">
+                    <div className="flex flex-col items-center justify-center py-6 gap-1.5">
+                      <MagnifyingGlass className="h-5 w-5 text-ui-fg-muted" />
+                      <Text size="small" className="text-ui-fg-muted">
+                        Sonuç bulunamadı
+                      </Text>
+                    </div>
+                    {onCreateCategory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const result = onCreateCategory(search.trim())
+                          if (result && typeof result.then === "function") {
+                            result.then((newId) => {
+                              if (newId) handleSelect(newId)
+                              else setOpen(false)
+                            })
+                          } else {
+                            setOpen(false)
+                          }
+                        }}
+                        onMouseEnter={() => setHighlightedIndex(0)}
+                        className={[
+                          "flex items-center gap-2.5 w-full text-left text-sm py-[7px] px-3 transition-colors duration-75",
+                          "border-t border-ui-border-base",
+                          highlightedIndex === 0
+                            ? "bg-ui-bg-subtle-hover text-ui-fg-base"
+                            : "text-ui-fg-base hover:bg-ui-bg-subtle-hover",
+                        ].join(" ")}
+                      >
+                        <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-sm bg-ui-bg-interactive">
+                          <Plus className="h-3.5 w-3.5 text-ui-fg-on-color" />
+                        </span>
+                        <span>
+                          <span className="text-ui-fg-muted">Oluştur: </span>
+                          <span className="font-medium">"{search.trim()}"</span>
+                        </span>
+                        <span className="ml-auto shrink-0 text-[10px] text-ui-fg-muted bg-ui-bg-subtle border border-ui-border-base rounded px-1.5 py-0.5 font-mono leading-none">
+                          Enter
+                        </span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   scoredRows.map(({ node, matchStart, matchLength }, index) => {
