@@ -1,7 +1,7 @@
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile
-#   dev   → deps build'de yüklenir, /app-deps'e taşınır
-#           runtime'da entrypoint volume'a kopyalar (pnpm install ÇALIŞMAZ)
+#   dev   → deps /deps/ altında build edilir (bind mount /app'ı ezmez)
+#           runtime'da entrypoint volume'a kopyalar
 #   full  → deps + source baked-in (standalone kullanım)
 # ══════════════════════════════════════════════════════════════════
 
@@ -29,21 +29,20 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["pnpm", "run", "dev"]
 
 # ── Stage: dev ───────────────────────────────────────────────────
+# /deps altında install → bind mount /app'ı ezse bile /deps etkilenmez
+# mv/cp yok → overlay fs'de ekstra layer/disk kullanımı yok
 FROM base AS dev
 
-# Dependency dosyaları
+WORKDIR /deps
 COPY package.json .npmrc ./
 COPY pnpm-lock.yaml* ./
 COPY prisma ./prisma
 
-# Dependencies — BuildKit cache mount ile pnpm store kalıcı
 RUN --mount=type=cache,id=tipbox-pnpm-store,target=/app/.pnpm-store \
-    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install \
+    && md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum
 
-# Lock checksum'ı yaz + deps'i staging path'e taşı
-# /app-deps bind mount'tan etkilenmez — entrypoint buradan volume'a kopyalar
-RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
-    && mv node_modules /app-deps
+WORKDIR /app
 
 # ── Stage: full ──────────────────────────────────────────────────
 FROM base AS full

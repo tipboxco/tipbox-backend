@@ -39,7 +39,7 @@ if [ $attempt -eq $max_attempts ]; then
 fi
 
 # ── node_modules kontrolü ──
-# Build aşamasında deps /app-deps'e yüklendi.
+# Build aşamasında deps /deps/node_modules'e yüklendi.
 # Burada sadece volume ile karşılaştırıp gerekirse kopyalıyoruz.
 LOCK_CHECKSUM=""
 if [ -f "pnpm-lock.yaml" ]; then
@@ -52,25 +52,25 @@ fi
 
 # Image'daki build-time checksum
 IMAGE_CHECKSUM=""
-if [ -f "/app-deps/.lock-checksum" ]; then
-  IMAGE_CHECKSUM=$(cat /app-deps/.lock-checksum)
+if [ -f "/deps/node_modules/.lock-checksum" ]; then
+  IMAGE_CHECKSUM=$(cat /deps/node_modules/.lock-checksum)
 fi
 
 sync_from_image() {
   echo "📦 Build cache'den node_modules senkronize ediliyor..."
   # Volume'u temizle ve build'deki deps'i kopyala
   rm -rf node_modules/.pnpm node_modules/.modules.yaml node_modules/.lock-checksum 2>/dev/null || true
-  cp -a /app-deps/. node_modules/
+  cp -a /deps/node_modules/. node_modules/
   echo "✅ Bağımlılıklar senkronize edildi (build cache)!"
 }
 
 if [ "$LOCK_CHECKSUM" = "$STORED_CHECKSUM" ] && [ -d "node_modules/.pnpm" ]; then
   # Volume güncel — hiçbir şey yapma
   echo "✅ node_modules güncel (checksum eşleşiyor)."
-elif [ -d "/app-deps/.pnpm" ] && [ "$LOCK_CHECKSUM" = "$IMAGE_CHECKSUM" ]; then
+elif [ -d "/deps/node_modules/.pnpm" ] && [ "$LOCK_CHECKSUM" = "$IMAGE_CHECKSUM" ]; then
   # Volume eski ama image doğru deps'e sahip → kopyala (hızlı)
   sync_from_image
-elif [ -d "/app-deps/.pnpm" ]; then
+elif [ -d "/deps/node_modules/.pnpm" ]; then
   # Image de eski — ama yine de image'dan başla, sonra update yap
   echo "⚠️  Hem volume hem image eski, image'dan senkronize edip güncelleniyor..."
   sync_from_image
@@ -78,7 +78,7 @@ elif [ -d "/app-deps/.pnpm" ]; then
   echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum
   echo "✅ Bağımlılıklar güncellendi!"
 else
-  # /app-deps yok (eski image veya full stage) → fallback: pnpm install
+  # /deps/node_modules yok (eski image veya full stage) → fallback: pnpm install
   echo "🔄 node_modules yükleniyor (fallback)..."
   pnpm install --ignore-scripts
   echo "$LOCK_CHECKSUM" > node_modules/.lock-checksum

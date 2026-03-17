@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile for Medusa (Catalog Service)
-#   dev   → deps build'de yüklenir, /server-deps'e taşınır
+#   dev   → deps /deps/ altında build edilir
 #   full  → deps + source baked-in
 # ══════════════════════════════════════════════════════════════════
 
@@ -24,13 +24,14 @@ CMD ["sh", "-c", "sh /server/start.sh"]
 # ── Stage: dev ───────────────────────────────────────────────────
 FROM base AS dev
 
+WORKDIR /deps
 COPY .npmrc package.json pnpm-lock.yaml* ./
 
 RUN --mount=type=cache,id=pnpm-store-catalog,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile || pnpm install
+    pnpm install --frozen-lockfile || pnpm install \
+    && md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum
 
-RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
-    && mv node_modules /server-deps
+WORKDIR /server
 
 # ── Stage: full ──────────────────────────────────────────────────
 FROM base AS full

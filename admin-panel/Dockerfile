@@ -1,6 +1,6 @@
 # ══════════════════════════════════════════════════════════════════
 # Multi-stage Dockerfile
-#   dev   → deps build'de yüklenir, /app-deps'e taşınır
+#   dev   → deps /deps/ altında build edilir
 #   full  → deps + source baked-in
 # ══════════════════════════════════════════════════════════════════
 
@@ -14,10 +14,6 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Entrypoint script'ini kopyala ve çalıştırılabilir yap
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 EXPOSE 5174
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
@@ -26,11 +22,12 @@ CMD ["pnpm", "run", "dev"]
 # ── Stage: dev ───────────────────────────────────────────────────
 FROM base AS dev
 
+WORKDIR /deps
 COPY package.json pnpm-lock.yaml .npmrc ./
-RUN pnpm install
+RUN pnpm install \
+    && md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum
 
-RUN md5sum pnpm-lock.yaml | cut -d' ' -f1 > node_modules/.lock-checksum \
-    && mv node_modules /app-deps
+WORKDIR /app
 
 # ── Stage: full ──────────────────────────────────────────────────
 FROM base AS full
