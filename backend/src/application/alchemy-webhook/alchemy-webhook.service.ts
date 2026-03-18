@@ -178,19 +178,21 @@ export class AlchemyWebhookService {
       // DEPOSIT: EOA → smart wallet (bizim wallet)
       // Alchemy sadece DEPOSIT'ten sorumludur; TIP_RECEIVE thirdweb webhook tarafından yönetilir.
       if (toWallet && !fromWallet && !isMint) {
-        // txHash ile var olan DEPOSIT transaction kontrolü (duplicate engelle)
-        const existingByHash = await prisma.transaction.findFirst({
-          where: {
-            walletId: toWallet.id,
-            txHash: transfer.transactionHash,
-            actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
-          },
-          select: { id: true },
+        // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction (TIP_SEND, TIP_RECEIVE vb.)
+        // zaten varsa, bu bir tip transferinin alt-event'idir — DEPOSIT oluşturma.
+        const anyExistingByHash = await prisma.transaction.findFirst({
+          where: { txHash: transfer.transactionHash },
+          select: { id: true, actionType: true },
         });
 
         let depositTransactionId: string;
-        if (existingByHash) {
-          depositTransactionId = existingByHash.id;
+        if (anyExistingByHash) {
+          depositTransactionId = anyExistingByHash.id;
+          logger.info({
+            txHash: transfer.transactionHash,
+            existingActionType: anyExistingByHash.actionType,
+            message: 'Alchemy: txHash already tracked by another transaction, skipping DEPOSIT creation',
+          });
         } else {
           const pendingTx = await prisma.transaction.findFirst({
             where: {
@@ -233,30 +235,32 @@ export class AlchemyWebhookService {
           }
         }
 
-        // Deposit bildirimi (gönderen sistemdeyse avatar + username)
-        const fromWalletForAvatar = await this.walletRepo.findByAddressForTracking(transfer.from);
-        const fromProfile = fromWalletForAvatar
-          ? await this.profileRepo.findByUserId(fromWalletForAvatar.userId)
-          : null;
-        this.notificationService
-          .sendNotification(toWallet.userId, NotificationType.TRANSACTION_CONFIRMED, {
-            amount,
-            actionType: TransactionActionType.DEPOSIT,
-            transactionId: depositTransactionId,
-            fromAddress: transfer.from,
-            ...(fromWalletForAvatar && {
-              senderUserId: fromWalletForAvatar.userId,
-              senderUsername: fromProfile?.userName || fromProfile?.displayName || null,
-            }),
-          })
-          .catch((err) => {
-            logger.warn({
-              userId: toWallet.userId,
+        // Deposit bildirimi — sadece gerçek yeni DEPOSIT oluşturulduysa gönder (cross-source duplicate ise skip)
+        if (!anyExistingByHash || anyExistingByHash.actionType === ('DEPOSIT' as string)) {
+          const fromWalletForAvatar = await this.walletRepo.findByAddressForTracking(transfer.from);
+          const fromProfile = fromWalletForAvatar
+            ? await this.profileRepo.findByUserId(fromWalletForAvatar.userId)
+            : null;
+          this.notificationService
+            .sendNotification(toWallet.userId, NotificationType.TRANSACTION_CONFIRMED, {
+              amount,
+              actionType: TransactionActionType.DEPOSIT,
               transactionId: depositTransactionId,
-              error: String(err),
-              message: 'Alchemy DEPOSIT notification failed',
+              fromAddress: transfer.from,
+              ...(fromWalletForAvatar && {
+                senderUserId: fromWalletForAvatar.userId,
+                senderUsername: fromProfile?.userName || fromProfile?.displayName || null,
+              }),
+            })
+            .catch((err) => {
+              logger.warn({
+                userId: toWallet.userId,
+                transactionId: depositTransactionId,
+                error: String(err),
+                message: 'Alchemy DEPOSIT notification failed',
+              });
             });
-          });
+        }
 
         await this.upsertEventLog(transfer, block, blockTimestamp, toWallet.id, chainId);
         processed++;
@@ -274,17 +278,14 @@ export class AlchemyWebhookService {
       // WITHDRAW: smart wallet → EOA
       // Alchemy sadece WITHDRAW'dan sorumludur; TIP_SEND thirdweb webhook tarafından yönetilir.
       if (fromWallet && !toWallet && !isBurn) {
-        // txHash ile var olan WITHDRAW transaction kontrolü (duplicate engelle)
-        const existingByHash = await prisma.transaction.findFirst({
-          where: {
-            walletId: fromWallet.id,
-            txHash: transfer.transactionHash,
-            actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
-          },
-          select: { id: true },
+        // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction (TIP_SEND, TIP_RECEIVE vb.)
+        // zaten varsa, bu bir tip transferinin alt-event'idir — WITHDRAW oluşturma.
+        const anyExistingByHash = await prisma.transaction.findFirst({
+          where: { txHash: transfer.transactionHash },
+          select: { id: true, actionType: true },
         });
 
-        if (!existingByHash) {
+        if (!anyExistingByHash) {
           const pendingTx = await prisma.transaction.findFirst({
             where: {
               walletId: fromWallet.id,
@@ -322,6 +323,12 @@ export class AlchemyWebhookService {
               reason: `Withdraw to ${transfer.to} (tx: ${transfer.transactionHash})`,
             });
           }
+        } else {
+          logger.info({
+            txHash: transfer.transactionHash,
+            existingActionType: anyExistingByHash.actionType,
+            message: 'Alchemy: txHash already tracked by another transaction, skipping WITHDRAW creation',
+          });
         }
 
         await this.upsertEventLog(transfer, block, blockTimestamp, fromWallet.id, chainId);

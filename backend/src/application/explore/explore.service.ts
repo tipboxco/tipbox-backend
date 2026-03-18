@@ -501,7 +501,7 @@ export class ExploreService {
 
         return {
           eventId: event.id,
-          eventType: 'SURVEY',
+          eventType: event.feedType,
           image: resolveMediaUrl(event.imageUrl) || null,
           title: event.title,
           description: event.description || '',

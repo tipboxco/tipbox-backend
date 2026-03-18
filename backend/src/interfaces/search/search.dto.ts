@@ -20,10 +20,17 @@ export interface SearchProductData {
   image: string | null;
 }
 
+export interface SearchPagination {
+  cursor?: string;
+  hasMore: boolean;
+  limit: number;
+}
+
 export interface SearchData {
   userData: SearchUserData[];
   brandData: SearchBrandData[];
   productData: SearchProductData[];
+  pagination: SearchPagination;
 }
 
 

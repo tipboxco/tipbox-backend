@@ -489,7 +489,6 @@ router.post(
     const recentPosts = await prisma.contentPost.findMany({
       where: {
         createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
-        deletedAt: null,
       },
       select: {
         id: true,
@@ -597,7 +596,6 @@ router.post(
     const recentPosts = await prisma.contentPost.findMany({
       where: {
         createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        deletedAt: null,
         userId: { not: userId },
       },
       select: {
@@ -772,7 +770,6 @@ router.post(
     const recentPosts = await prisma.contentPost.findMany({
       where: {
         createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        deletedAt: null,
       },
       select: {
         id: true,

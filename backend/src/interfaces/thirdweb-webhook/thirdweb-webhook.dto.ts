@@ -91,9 +91,9 @@ export interface WalletBalanceAlertPayload {
  */
 export const WEBHOOK_STATUS_PRIORITY: Record<string, number> = {
   'mined': 4,
+  'errored': 3,
   'cancelled': 3,
   'sent': 2,
-  'errored': 1
 };
 
 /**

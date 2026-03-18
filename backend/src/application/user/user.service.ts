@@ -77,6 +77,7 @@ type CollectionResponse = {
   nftAddress: string | null;
   totalEarned: number;
   earnedDate: string | null;
+  category: 'event' | 'collection';
   tasks: CollectionTask[];
 };
 
@@ -1137,7 +1138,7 @@ export class UserService {
               },
             },
             _count: {
-              select: { userBadges: true },
+              select: { userBadges: true, eventBadges: true },
             },
           },
         },
@@ -1163,6 +1164,8 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
+      const isEvent = (badge?._count?.eventBadges ?? 0) > 0;
+
       return {
         id: String(badge?.id || ''),
         title: badge?.name || '',
@@ -1172,6 +1175,7 @@ export class UserService {
         nftAddress: (badge as { nftAddress?: string | null })?.nftAddress ?? null,
         earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
         totalEarned: badge?._count?.userBadges ?? 0,
+        category: isEvent ? 'event' : 'collection',
         tasks,
       } as CollectionResponse;
     });
@@ -1440,6 +1444,7 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
+      const badgeType = badge?.type ?? '';
       const item: CollectionResponse = {
         id: String(badge?.id || ''),
         title: badge?.name || '',
@@ -1449,9 +1454,9 @@ export class UserService {
         nftAddress: rw.nftAddress ?? null,
         earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
         totalEarned: badge?._count?.bridgeRewards ?? 0,
+        category: badgeType === 'EVENT' ? 'event' : 'collection',
         tasks,
       };
-      const badgeType = badge?.type ?? '';
       return { item, badgeType };
     });
 
@@ -5141,41 +5146,49 @@ export class UserService {
       orderBy: { displayOrder: 'asc' },
     });
 
-    // Separate by type
-    const eventBadges: Array<{
+    // Separate by badge type
+    type BadgeItem = {
       id: string;
       title: string;
       image: string | null;
       rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
-    }> = [];
-    const collectionBadges: Array<{
-      id: string;
-      title: string;
-      image: string | null;
-      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
-    }> = [];
+    };
+    const collectionBadges: BadgeItem[] = [];
+    const eventBadges: BadgeItem[] = [];
+    const cosmeticBadges: BadgeItem[] = [];
+    const brandBadges: BadgeItem[] = [];
 
     for (const ub of allBadges) {
-      const category = BadgeResponseMapper.mapBadgeCategory(ub.badge.type);
-      const item = {
+      const item: BadgeItem = {
         id: ub.badgeId,
         title: ub.badge.name,
         image: resolveMediaUrl(ub.badge.imageUrl ?? null),
         rarity: BadgeResponseMapper.mapRarity(ub.badge.rarity),
       };
 
-      if (category === 'bridge') {
-        collectionBadges.push(item);
-      } else {
-        eventBadges.push(item);
+      switch (ub.badge.type) {
+        case 'COLLECTION':
+          collectionBadges.push(item);
+          break;
+        case 'EVENT':
+          eventBadges.push(item);
+          break;
+        case 'COSMETIC':
+          cosmeticBadges.push(item);
+          break;
+        case 'BRAND':
+          brandBadges.push(item);
+          break;
       }
     }
 
     return {
       selectedBadgeIds: currentHighlights.map((ub) => ub.badgeId),
       availableBadges: {
-        event: eventBadges,
         collection: collectionBadges,
+        event: eventBadges,
+        cosmetic: cosmeticBadges,
+        brand: brandBadges,
       },
     };
   }

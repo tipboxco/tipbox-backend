@@ -171,25 +171,39 @@ export class TipSendWorker {
           receiveTransactionId: hasReceiveTx ? receiveTransactionId : undefined,
           txHash,
           error: err instanceof Error ? err.message : String(err),
-          message: 'Tip send confirmTransaction failed; forcing status to CONFIRMED so tx does not stay PENDING',
+          message: 'Tip send confirmTransaction failed; retrying confirm with balance update',
         });
+
+        // Retry: confirmTransaction'ı bir kez daha dene (geçici DB hatası olabilir)
         try {
-          await this.transactionRepo.updateStatus(sendTransactionId, TransactionStatus.CONFIRMED, { txHash });
+          await this.transactionService.confirmTransaction(sendTransactionId, txHash);
           if (hasReceiveTx) {
-            await this.transactionRepo.updateStatus(receiveTransactionId!, TransactionStatus.CONFIRMED, { txHash });
+            await this.transactionService.confirmTransaction(receiveTransactionId!, txHash);
           }
           logger.info({
             sendTransactionId,
             receiveTransactionId: hasReceiveTx ? receiveTransactionId : undefined,
-            message: 'Tip send status forced to CONFIRMED after confirmTransaction error',
+            message: 'Tip send confirmed on retry',
           });
-        } catch (forceErr) {
+        } catch (retryErr) {
+          // Retry da başarısız — sadece status güncelle ama balance update'i de eklemeye çalış
           logger.error({
             sendTransactionId,
-            receiveTransactionId: hasReceiveTx ? receiveTransactionId : undefined,
-            error: forceErr instanceof Error ? forceErr.message : String(forceErr),
-            message: 'Failed to force CONFIRMED status',
+            error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+            message: 'Tip send confirm retry also failed; forcing CONFIRMED status',
           });
+          try {
+            await this.transactionRepo.updateStatus(sendTransactionId, TransactionStatus.CONFIRMED, { txHash });
+            if (hasReceiveTx) {
+              await this.transactionRepo.updateStatus(receiveTransactionId!, TransactionStatus.CONFIRMED, { txHash });
+            }
+          } catch (forceErr) {
+            logger.error({
+              sendTransactionId,
+              error: forceErr instanceof Error ? forceErr.message : String(forceErr),
+              message: 'Failed to force CONFIRMED status',
+            });
+          }
         }
       }
     } else {

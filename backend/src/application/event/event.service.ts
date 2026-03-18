@@ -686,6 +686,12 @@ export class EventService {
           media: {
             orderBy: { orderIndex: 'asc' },
           },
+          votes: userId
+            ? {
+                where: { userId },
+                take: 1,
+              }
+            : false,
         },
         orderBy: { createdAt: 'desc' },
         take: limit + 1,
@@ -722,6 +728,7 @@ export class EventService {
           comments: post.commentsCount,
           shares: post.sharesCount,
           bookmarks: post.favoritesCount,
+          upvotes: post.upvotesCount,
         };
 
         const contextData: ContextData = {
@@ -730,6 +737,8 @@ export class EventService {
           subName: post.productGroup?.name || '',
           image: resolveMediaUrl(imagePath),
         };
+
+        const hasUpvoted = userId && Array.isArray(post.votes) ? post.votes.length > 0 : false;
 
         const postData: Post = {
           id: post.id,
@@ -740,6 +749,7 @@ export class EventService {
           contextData,
           content: post.body,
           images: (post.media || []).map((m) => resolveMediaUrl(m.mediaUrl)).filter((url): url is string => url !== null),
+          hasUpvoted,
         };
 
         return {

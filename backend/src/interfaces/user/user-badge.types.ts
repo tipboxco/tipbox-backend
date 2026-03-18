@@ -43,8 +43,10 @@ export interface HighlightBadgeItem {
 export interface HighlightBadgeSelectionData {
   selectedBadgeIds: string[]; // max 4
   availableBadges: {
-    event: HighlightBadgeItem[];
     collection: HighlightBadgeItem[];
+    event: HighlightBadgeItem[];
+    cosmetic: HighlightBadgeItem[];
+    brand: HighlightBadgeItem[];
   };
 }
 

@@ -78,7 +78,7 @@ router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     let { keyword } = req.query as { keyword?: string };
-    const { types, limit } = req.query as { types?: string; limit?: string };
+    const { types, limit, cursor } = req.query as { types?: string; limit?: string; cursor?: string };
 
     // Keyword optional - eğer yoksa veya boşsa default veriler döner
     keyword = keyword?.trim();
@@ -105,7 +105,8 @@ router.get(
       }
     }
 
-    const result = await searchService.searchAll(keyword, limitPerType, selectedTypes);
+    const cursorParam = typeof cursor === 'string' && cursor.trim().length > 0 ? cursor.trim() : undefined;
+    const result = await searchService.searchAll(keyword, limitPerType, selectedTypes, cursorParam);
     return res.json(result);
   })
 );

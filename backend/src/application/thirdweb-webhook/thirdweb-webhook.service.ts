@@ -204,71 +204,104 @@ export class ThirdwebWebhookService {
         const status = isMined ? TransactionStatus.CONFIRMED : TransactionStatus.PENDING;
         const txHash = payload.transactionHash ?? null;
 
-        // DEPOSIT: to = bizim wallet (smartAccount), from = external → alıcı bizim sistemde
-        if (toWallet && !fromWallet) {
-          const depositTx = await prisma.transaction.create({
-            data: {
-              walletId: toWallet.id,
-              actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
-              status,
-              amount: null,
-              fromAddress: payload.fromAddress,
-              toAddress: payload.toAddress,
-              txHash,
-              provider: 'thirdweb',
-              errorMessage: null,
-              confirmedAt: isMined ? new Date() : null,
-              failedAt: null,
-              metadata: {
-                source: 'thirdweb_webhook',
-                queueId: payload.queueId,
-                chainId: payload.chainId,
-                blockNumber: payload.blockNumber,
-              },
-            },
+        // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction (TIP_SEND, TIP_RECEIVE, DEPOSIT, WITHDRAW vb.)
+        // zaten varsa, bu transfer başka bir webhook source tarafından zaten işlenmiştir — tekrar DEPOSIT/WITHDRAW oluşturma.
+        let txHashAlreadyTracked = false;
+        if (txHash) {
+          const existingByHash = await prisma.transaction.findFirst({
+            where: { txHash },
+            select: { id: true, actionType: true },
           });
-          transactionId = depositTx.id;
+          if (existingByHash) {
+            transactionId = existingByHash.id;
+            txHashAlreadyTracked = true;
+            logger.info({
+              txHash,
+              existingTransactionId: existingByHash.id,
+              existingActionType: existingByHash.actionType,
+              message: 'Thirdweb webhook: txHash already tracked by another transaction, skipping DEPOSIT/WITHDRAW creation',
+            });
+          }
+        }
+
+        // Internal transfer guard: hem from hem to bizim wallet ise, bu bir TIP_SEND — DEPOSIT/WITHDRAW oluşturma.
+        const isBothInternal = !!(fromWallet && toWallet);
+        if (isBothInternal && !txHashAlreadyTracked) {
           logger.info({
-            transactionId: depositTx.id,
-            walletId: toWallet.id,
-            fromAddress: payload.fromAddress,
-            toAddress: payload.toAddress,
+            fromWalletId: fromWallet!.id,
+            toWalletId: toWallet!.id,
             txHash,
-            message: 'DEPOSIT transaction created from webhook (to = our wallet)',
+            message: 'Thirdweb webhook: internal transfer detected (both wallets in system), skipping DEPOSIT/WITHDRAW creation',
           });
         }
-        // WITHDRAW: from = bizim wallet (smartAccount), to = external → gönderen bizim sistemde
-        else if (fromWallet && !toWallet) {
-          const withdrawTx = await prisma.transaction.create({
-            data: {
-              walletId: fromWallet.id,
-              actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
-              status,
-              amount: null,
+
+        if (!txHashAlreadyTracked && !isBothInternal) {
+          // DEPOSIT: to = bizim wallet (smartAccount), from = external → alıcı bizim sistemde
+          if (toWallet && !fromWallet) {
+            const depositTx = await prisma.transaction.create({
+              data: {
+                walletId: toWallet.id,
+                actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
+                status,
+                amount: null,
+                fromAddress: payload.fromAddress,
+                toAddress: payload.toAddress,
+                txHash,
+                provider: 'thirdweb',
+                errorMessage: null,
+                confirmedAt: isMined ? new Date() : null,
+                failedAt: null,
+                metadata: {
+                  source: 'thirdweb_webhook',
+                  queueId: payload.queueId,
+                  chainId: payload.chainId,
+                  blockNumber: payload.blockNumber,
+                },
+              },
+            });
+            transactionId = depositTx.id;
+            logger.info({
+              transactionId: depositTx.id,
+              walletId: toWallet.id,
               fromAddress: payload.fromAddress,
               toAddress: payload.toAddress,
               txHash,
-              provider: 'thirdweb',
-              errorMessage: null,
-              confirmedAt: isMined ? new Date() : null,
-              failedAt: null,
-              metadata: {
-                source: 'thirdweb_webhook',
-                queueId: payload.queueId,
-                chainId: payload.chainId,
-                blockNumber: payload.blockNumber,
+              message: 'DEPOSIT transaction created from webhook (to = our wallet)',
+            });
+          }
+          // WITHDRAW: from = bizim wallet (smartAccount), to = external → gönderen bizim sistemde
+          else if (fromWallet && !toWallet) {
+            const withdrawTx = await prisma.transaction.create({
+              data: {
+                walletId: fromWallet.id,
+                actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
+                status,
+                amount: null,
+                fromAddress: payload.fromAddress,
+                toAddress: payload.toAddress,
+                txHash,
+                provider: 'thirdweb',
+                errorMessage: null,
+                confirmedAt: isMined ? new Date() : null,
+                failedAt: null,
+                metadata: {
+                  source: 'thirdweb_webhook',
+                  queueId: payload.queueId,
+                  chainId: payload.chainId,
+                  blockNumber: payload.blockNumber,
+                },
               },
-            },
-          });
-          transactionId = withdrawTx.id;
-          logger.info({
-            transactionId: withdrawTx.id,
-            walletId: fromWallet.id,
-            fromAddress: payload.fromAddress,
-            toAddress: payload.toAddress,
-            txHash,
-            message: 'WITHDRAW transaction created from webhook (from = our wallet)',
-          });
+            });
+            transactionId = withdrawTx.id;
+            logger.info({
+              transactionId: withdrawTx.id,
+              walletId: fromWallet.id,
+              fromAddress: payload.fromAddress,
+              toAddress: payload.toAddress,
+              txHash,
+              message: 'WITHDRAW transaction created from webhook (from = our wallet)',
+            });
+          }
         }
       }
 
@@ -399,7 +432,7 @@ export class ThirdwebWebhookService {
 
     // Tip send/receive çifti: bağlı kaydı da aynı txHash ve pending ile güncelle
     const linkedId =
-      (existingMeta?.receiveTransactionId as string) || (existingMeta?.linkedTransactionId as string);
+      (existingMeta?.pairedTransactionId as string) || (existingMeta?.receiveTransactionId as string) || (existingMeta?.linkedTransactionId as string);
     if (linkedId) {
       const linkedMeta = await this.getExistingMetadata(linkedId);
       await prisma.transaction.update({
@@ -555,7 +588,7 @@ export class ThirdwebWebhookService {
     if (!transactionId) return [];
     const meta = await this.getExistingMetadata(transactionId);
     const linkedId =
-      (meta?.receiveTransactionId as string) || (meta?.linkedTransactionId as string);
+      (meta?.pairedTransactionId as string) || (meta?.receiveTransactionId as string) || (meta?.linkedTransactionId as string);
     const ids = [transactionId];
     if (linkedId) ids.push(linkedId);
     return ids;

@@ -55,11 +55,12 @@ export class TransactionNotificationService {
           const toProfile = recipientUserId
             ? await this.profileRepo.findByUserId(recipientUserId)
             : null;
-          const recipientName = toProfile?.displayName || toProfile?.userName || 'Kullanıcı';
+          const recipientName = toProfile?.displayName || toProfile?.userName || 'User';
           await this.notificationService.sendNotification(userId, NotificationType.TIPS_SENT, {
             amount,
             recipientUserId: recipientUserId ?? null,
             recipientName,
+            senderUserId: userId,
             transactionId: transaction.id,
           });
           break;
@@ -98,7 +99,7 @@ export class TransactionNotificationService {
             nftId: nftId ?? null,
             nftName: nft?.name ?? 'NFT',
             price: amount,
-            sellerName: sellerProfile?.displayName || sellerProfile?.userName || 'Kullanıcı',
+            sellerName: sellerProfile?.displayName || sellerProfile?.userName || 'User',
             sellerId: sellerId ?? null,
             transactionId: transaction.id,
           });
@@ -116,7 +117,7 @@ export class TransactionNotificationService {
             nftName: nft?.name ?? 'NFT',
             price: amount + gasFee,
             receivedAmount: amount,
-            buyerName: buyerProfile?.displayName || buyerProfile?.userName || 'Kullanıcı',
+            buyerName: buyerProfile?.displayName || buyerProfile?.userName || 'User',
             buyerId: buyerId ?? null,
             transactionId: transaction.id,
             gasFee,
@@ -126,13 +127,24 @@ export class TransactionNotificationService {
 
         case TransactionActionType.DEPOSIT:
         case TransactionActionType.WITHDRAW:
-          // Wallet→wallet: biri DB'de değilse sadece transaction yazılır; notification tablosuna yazılmaz
+        case TransactionActionType.FEE:
+          // DEPOSIT/WITHDRAW: biri DB'de değilse sadece transaction yazılır; notification yok
+          // FEE: platform komisyonu; sadece transaction history'de gösterilir, ayrı notification gönderilmez
           break;
+
+        case TransactionActionType.BOOST_POST: {
+          await this.notificationService.sendNotification(userId, NotificationType.TRANSACTION_CONFIRMED, {
+            amount,
+            actionType: transaction.actionType,
+            transactionId: transaction.id,
+            postId: (metadata.postId as string) ?? null,
+          });
+          break;
+        }
 
         case TransactionActionType.SWAP_TIP_TO_SOL:
         case TransactionActionType.SWAP_SOL_TO_TIP:
         case TransactionActionType.AIRDROP:
-        case TransactionActionType.FEE:
         case TransactionActionType.CLAIM_BADGE: {
           await this.notificationService.sendNotification(userId, NotificationType.TRANSACTION_CONFIRMED, {
             amount,
@@ -170,8 +182,11 @@ export class TransactionNotificationService {
   ): Promise<void> {
     if (
       transaction.actionType === TransactionActionType.DEPOSIT ||
-      transaction.actionType === TransactionActionType.WITHDRAW
+      transaction.actionType === TransactionActionType.WITHDRAW ||
+      transaction.actionType === TransactionActionType.TIP_RECEIVE
     ) {
+      // DEPOSIT/WITHDRAW: sadece transaction kaydı; notification yok
+      // TIP_RECEIVE: alıcı henüz tip'ten haberdar değil; fail bildirimi kafa karıştırıcı
       return;
     }
 

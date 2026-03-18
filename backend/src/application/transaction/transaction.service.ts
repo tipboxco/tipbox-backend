@@ -15,6 +15,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
 import { WalletService } from '../wallet/wallet.service';
+import { getThirdwebSdkService } from '../wallet/thirdweb-sdk/thirdweb-sdk.service';
 import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 
@@ -117,57 +118,138 @@ export class TransactionService {
       throw new NotFoundError('Recipient wallet not found');
     }
 
-    // Check balance - artık DB'den okuyoruz
-    if (!fromWallet.hasBalance(request.amount)) {
-      throw new ValidationError(
-        `Insufficient balance. Available: ${fromWallet.getAvailableBalance()} TIPS`
-      );
-    }
-
     const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
 
     // Wallet adresine gönderim = WITHDRAW; Tipbox kullanıcısına gönderim = TIP_SEND
     const isWithdrawToAddress = !toWallet;
     const sendActionType = isWithdrawToAddress ? TransactionActionType.WITHDRAW : TransactionActionType.TIP_SEND;
 
-    // 1) Gönderim kaydı oluştur (status: created)
-    const sendTransaction = await this.transactionRepo.create({
-      walletId: fromWallet.id,
-      actionType: sendActionType,
-      amount: request.amount,
-      fromAddress,
-      toAddress,
-      metadata: {
-        reason: request.reason || null,
-        recipientUserId: toWallet ? toWallet.userId : null,
-        recipientAddress: toWallet ? null : toAddress,
-        source: 'thirdweb_sdk',
-      },
-      provider: 'thirdweb',
-    });
+    // Atomic balance lock — double spend önleme.
+    // Balance check + lockedBalance artırma tek atomic operasyonda yapılır.
+    const walletRepo = this.walletRepo as WalletPrismaRepository;
+    const lockedWallet = await walletRepo.lockBalance(fromWallet.id, request.amount);
+    if (!lockedWallet) {
+      // lockBalance null → yetersiz available balance
+      const freshWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.fromUserId);
+      const available = freshWallet ? freshWallet.getAvailableBalance() : 0;
+      throw new ValidationError(
+        `Insufficient balance. Available: ${available} TIPS`
+      );
+    }
+
+    // 1) Fee hesapla — contract'tan feePercentage oku (orn. 25 = %25)
+    let feePercentage = 0;
+    let feeAmount = 0;
+    let netAmount = request.amount;
 
     if (toWallet) {
-      const receiveTransaction = await this.transactionRepo.create({
-        walletId: toWallet.id,
-        actionType: TransactionActionType.TIP_RECEIVE,
-        amount: request.amount,
-        fromAddress,
-        toAddress,
-        metadata: {
-          reason: request.reason || null,
-          senderUserId: request.fromUserId,
-          linkedTransactionId: sendTransaction.id,
-          source: 'thirdweb_sdk',
-        },
-        provider: 'thirdweb',
+      // Sadece internal tip (TIP_SEND via Tipbox contract) için fee var;
+      // external adrese gönderim (WITHDRAW / ERC20 transfer) için fee yok.
+      try {
+        const sdk = getThirdwebSdkService();
+        if (sdk.isConfigured()) {
+          feePercentage = await sdk.getFeePercentage();
+          if (feePercentage > 0 && feePercentage <= 100) {
+            feeAmount = Math.floor(request.amount * feePercentage / 100);
+            netAmount = request.amount - feeAmount;
+          }
+        }
+      } catch (err) {
+        logger.warn({
+          error: err instanceof Error ? err.message : String(err),
+          message: 'Failed to read feePercentage from contract; using gross amount for RECEIVE',
+        });
+        // Fee okunamazsa güvenli tarafta kal: netAmount = grossAmount (contract event düzeltir)
+        feePercentage = 0;
+        feeAmount = 0;
+        netAmount = request.amount;
+      }
+    }
+
+    // 2) SEND + RECEIVE kaydını atomic $transaction ile oluştur
+    const prisma = getPrisma();
+    let sendTransaction: Transaction;
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const sendTx = await tx.transaction.create({
+          data: {
+            walletId: fromWallet.id,
+            actionType: sendActionType,
+            amount: request.amount,
+            fromAddress,
+            toAddress,
+            metadata: {
+              reason: request.reason || null,
+              recipientUserId: toWallet ? toWallet.userId : null,
+              recipientAddress: toWallet ? null : toAddress,
+              source: 'thirdweb_sdk',
+              ...(feeAmount > 0 && { feeAmount, feePercentage }),
+            },
+            provider: 'thirdweb',
+          },
+        });
+
+        let receiveTxId: string | undefined;
+        if (toWallet) {
+          const receiveTx = await tx.transaction.create({
+            data: {
+              walletId: toWallet.id,
+              actionType: TransactionActionType.TIP_RECEIVE,
+              amount: netAmount,
+              fromAddress,
+              toAddress,
+              metadata: {
+                reason: request.reason || null,
+                senderUserId: request.fromUserId,
+                pairedTransactionId: sendTx.id,
+                source: 'thirdweb_sdk',
+                grossAmount: request.amount,
+                ...(feeAmount > 0 && { feeAmount, feePercentage }),
+              },
+              provider: 'thirdweb',
+            },
+          });
+          receiveTxId = receiveTx.id;
+
+          // SEND metadata'sına RECEIVE ID'yi ekle
+          await tx.transaction.update({
+            where: { id: sendTx.id },
+            data: {
+              metadata: {
+                reason: request.reason || null,
+                recipientUserId: toWallet.userId,
+                source: 'thirdweb_sdk',
+                pairedTransactionId: receiveTx.id,
+                ...(feeAmount > 0 && { feeAmount, feePercentage }),
+              },
+            },
+          });
+        }
+
+        return { sendTx, receiveTxId };
       });
-      receiveTransactionId = receiveTransaction.id;
-      await this.transactionRepo.updateMetadata(sendTransaction.id, {
-        reason: request.reason || null,
-        recipientUserId: toWallet.userId,
-        source: 'thirdweb_sdk',
-        receiveTransactionId: receiveTransaction.id,
-      });
+
+      sendTransaction = new Transaction(
+        result.sendTx.id,
+        result.sendTx.walletId,
+        result.sendTx.actionType as TransactionActionType,
+        result.sendTx.status as TransactionStatus,
+        result.sendTx.amount,
+        result.sendTx.fromAddress,
+        result.sendTx.toAddress,
+        result.sendTx.metadata as Record<string, unknown> | null,
+        result.sendTx.txHash,
+        result.sendTx.provider,
+        result.sendTx.errorMessage,
+        result.sendTx.createdAt,
+        result.sendTx.confirmedAt,
+        result.sendTx.failedAt,
+      );
+      receiveTransactionId = result.receiveTxId;
+    } catch (err) {
+      // Transaction oluşturma başarısız — lock'u geri al
+      await walletRepo.unlockBalance(fromWallet.id, request.amount);
+      throw err;
     }
 
     // 2) Tip send işini Redis kuyruğuna ekle
@@ -237,13 +319,35 @@ export class TransactionService {
       throw new ValidationError('You can only cancel your own tip send transaction');
     }
 
-    const receiveTransactionId = (transaction.metadata?.receiveTransactionId as string) || undefined;
+    const receiveTransactionId =
+      (transaction.metadata?.pairedTransactionId as string) ||
+      (transaction.metadata?.receiveTransactionId as string) ||
+      undefined;
     const errorMessage = 'Cancelled by user';
 
+    // Cancel işleminde metadata'ya cancelledByUser flag'i ekle (FAILED ile ayırt etmek için)
+    const prisma = getPrisma();
     await Promise.all([
       this.transactionRepo.updateStatus(transactionId, TransactionStatus.FAILED, { errorMessage }),
+      prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          metadata: { ...((transaction.metadata as Record<string, unknown>) || {}), cancelledByUser: true },
+        },
+      }),
       ...(receiveTransactionId
-        ? [this.transactionRepo.updateStatus(receiveTransactionId, TransactionStatus.FAILED, { errorMessage })]
+        ? [
+            this.transactionRepo.updateStatus(receiveTransactionId, TransactionStatus.FAILED, { errorMessage }),
+            prisma.transaction.update({
+              where: { id: receiveTransactionId },
+              data: {
+                metadata: {
+                  ...((await prisma.transaction.findUnique({ where: { id: receiveTransactionId }, select: { metadata: true } }))?.metadata as Record<string, unknown> || {}),
+                  cancelledByUser: true,
+                },
+              },
+            }),
+          ]
         : []),
     ]);
 
@@ -369,10 +473,35 @@ export class TransactionService {
       return transaction;
     }
 
+    // BUG-21 fix: Atomic guard — sadece henüz confirmed olmayan transaction'ı güncelle.
+    // Worker ve contract event aynı anda confirm etmeye çalışırsa, sadece biri başarılı olur.
+    const prisma = getPrisma();
+    const atomicResult = await prisma.transaction.updateMany({
+      where: {
+        id: transactionId,
+        status: { not: 'confirmed' as TransactionStatus },
+      },
+      data: {
+        status: 'confirmed' as TransactionStatus,
+        confirmedAt: new Date(),
+        ...(txHash ? { txHash } : {}),
+      },
+    });
+
+    if (atomicResult.count === 0) {
+      // Başka bir thread/process zaten confirm etti — çift notification/balance update önle
+      logger.warn({
+        transactionId,
+        message: 'Transaction already confirmed by another process (atomic guard)',
+      });
+      const existing = await this.transactionRepo.findById(transactionId);
+      return existing!;
+    }
+
     if (!transaction.amount) {
       logger.warn(`Transaction ${transactionId} has no amount, skipping balance update`);
-      await this.transactionRepo.updateStatus(transactionId, TransactionStatus.CONFIRMED, { txHash });
-      return (await this.transactionRepo.findById(transactionId))!;
+      const confirmed = await this.transactionRepo.findById(transactionId);
+      return confirmed!;
     }
 
     // Transaction type'a göre balance'ı güncelle
@@ -434,15 +563,10 @@ export class TransactionService {
       }
     }
 
-    // Transaction'ı confirm et
-    const confirmedTx = await this.transactionRepo.updateStatus(
-      transactionId,
-      TransactionStatus.CONFIRMED,
-      { txHash }
-    );
-
+    // Confirmed transaction'ı DB'den oku (atomic update sonrası güncel hali)
+    const confirmedTx = await this.transactionRepo.findById(transactionId);
     if (!confirmedTx) {
-      throw new Error('Failed to confirm transaction');
+      throw new Error('Failed to read confirmed transaction');
     }
 
     // Transaction'a ait notification webhook akışı üzerinden kaydedilir (tips, transfer, deposit, withdraw vb.)
@@ -719,9 +843,9 @@ export class TransactionService {
     ]);
 
     const senderName =
-      fromProfile?.displayName || fromProfile?.userName || 'Kullanıcı';
+      fromProfile?.displayName || fromProfile?.userName || 'User';
     const recipientName =
-      toProfile?.displayName || toProfile?.userName || 'Kullanıcı';
+      toProfile?.displayName || toProfile?.userName || 'User';
 
     // Atomic transfer: update owner + create nft_transaction
     const nftTx = await prisma.$transaction(async (tx) => {
@@ -761,8 +885,8 @@ export class TransactionService {
       nftTransactionId: nftTx.id,
     });
 
-    // Invalidate caches (best-effort)
-    Promise.all([
+    // Invalidate caches (best-effort, awaited to avoid unhandled rejections)
+    await Promise.all([
       invalidateNFTCache(nftId),
       invalidateUserNFTCache(fromUserId),
       invalidateUserNFTCache(toUserId),
@@ -770,8 +894,8 @@ export class TransactionService {
       logger.error('Error invalidating NFT transfer cache:', error);
     });
 
-    // Notifications (best-effort)
-    Promise.all([
+    // Notifications (best-effort, awaited to avoid unhandled rejections)
+    await Promise.all([
       this.notificationService.sendNotification(fromUserId, NotificationType.NFT_SENT, {
         nftId,
         nftName: nft.name,
