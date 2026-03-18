@@ -14,7 +14,7 @@ set -euo pipefail
 DOMAIN="api-test.tipbox.co"
 EMAIL="admin@tipbox.co"
 COMPOSE_FILE="docker-compose.test.yml"
-CERT_DIR="./certbot/conf/live/${DOMAIN}"
+CERTBOT_CONF="./certbot/conf"
 
 # Renk kodları
 RED='\033[0;31m'
@@ -27,30 +27,61 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Helper: certbot komutlarını doğru entrypoint ile çalıştır
-# (docker-compose'daki certbot servisi custom entrypoint kullanıyor,
-#  one-off komutlar için --entrypoint override gerekli)
 run_certbot() {
   docker compose -f "${COMPOSE_FILE}" run --rm --entrypoint "certbot" certbot "$@"
 }
 
+# Sertifika dizinini bul (certbot -0001 suffix ekleyebilir)
+find_cert_dir() {
+  local found=""
+  for dir in ${CERTBOT_CONF}/live/${DOMAIN}*/; do
+    if [ -f "${dir}fullchain.pem" ] && [ -f "${dir}privkey.pem" ]; then
+      found="${dir%/}"
+    fi
+  done
+  echo "$found"
+}
+
+# ── Tüm sertifika dosyalarını temizle (certbot delete + filesystem fallback) ──
+cleanup_all_certs() {
+  log_info "Tüm sertifika dosyaları temizleniyor..."
+
+  # certbot delete dene (renewal config varsa çalışır)
+  run_certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
+
+  # Filesystem temizlik — renewal config olmasa bile çalışır
+  for dir in ${CERTBOT_CONF}/live/${DOMAIN}*; do
+    [ -d "$dir" ] && rm -rf "$dir" && log_info "  Silindi: live/$(basename "$dir")"
+  done
+  for dir in ${CERTBOT_CONF}/archive/${DOMAIN}*; do
+    [ -d "$dir" ] && rm -rf "$dir" && log_info "  Silindi: archive/$(basename "$dir")"
+  done
+  for conf in ${CERTBOT_CONF}/renewal/${DOMAIN}*.conf; do
+    [ -f "$conf" ] && rm -f "$conf" && log_info "  Silindi: renewal/$(basename "$conf")"
+  done
+
+  log_info "Temizlik tamamlandı."
+}
+
 # ── Eski sertifikayı iptal et ──
 revoke_old_cert() {
-  if [ -f "${CERT_DIR}/fullchain.pem" ]; then
-    log_info "Eski sertifika iptal ediliyor..."
+  local cert_dir
+  cert_dir=$(find_cert_dir)
+
+  if [ -n "$cert_dir" ] && [ -f "${cert_dir}/fullchain.pem" ]; then
+    # Container içindeki path'i hesapla
+    local container_path="/etc/letsencrypt/live/$(basename "$cert_dir")/fullchain.pem"
+    log_info "Eski sertifika iptal ediliyor (${container_path})..."
     run_certbot revoke \
-      --cert-path "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" \
+      --cert-path "$container_path" \
       --non-interactive \
       --reason superseded 2>/dev/null || log_warn "Eski sertifika zaten iptal edilmiş veya bulunamadı."
-
-    # Eski sertifika dosyalarını temizle
-    run_certbot delete \
-      --cert-name "${DOMAIN}" \
-      --non-interactive 2>/dev/null || true
-
-    log_info "Eski sertifika iptal edildi ve temizlendi."
   else
-    log_warn "İptal edilecek eski sertifika bulunamadı."
+    log_warn "İptal edilecek sertifika bulunamadı."
   fi
+
+  # certbot delete + filesystem temizlik
+  cleanup_all_certs
 }
 
 # ── Yeni sertifika al ──
@@ -60,16 +91,13 @@ obtain_new_cert() {
   sleep 3
 
   log_info "${DOMAIN} için yeni Let's Encrypt sertifikası alınıyor..."
-  run_certbot certonly \
+  if run_certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "${EMAIL}" \
     --agree-tos \
     --no-eff-email \
-    --force-renewal \
-    -d "${DOMAIN}"
-
-  if [ $? -eq 0 ]; then
+    -d "${DOMAIN}"; then
     log_info "Sertifika başarıyla alındı!"
   else
     log_error "Sertifika alınamadı!"
@@ -97,11 +125,13 @@ restart_nginx() {
 
 # ── Sertifika bilgilerini göster ──
 show_cert_info() {
-  if [ -f "${CERT_DIR}/fullchain.pem" ]; then
+  local cert_dir
+  cert_dir=$(find_cert_dir)
+  if [ -n "$cert_dir" ] && [ -f "${cert_dir}/fullchain.pem" ]; then
     log_info "Sertifika bilgileri:"
     echo "---"
     run_certbot certificates 2>/dev/null || \
-      openssl x509 -in "${CERT_DIR}/fullchain.pem" -noout -dates -subject 2>/dev/null || true
+      openssl x509 -in "${cert_dir}/fullchain.pem" -noout -dates -subject 2>/dev/null || true
     echo "---"
   fi
 }
@@ -109,7 +139,11 @@ show_cert_info() {
 # ── Sadece yenileme (certbot renew) ──
 renew_cert() {
   log_info "Sertifika yenileme kontrolü yapılıyor..."
-  run_certbot renew --quiet
+  run_certbot renew --quiet || {
+    log_warn "certbot renew başarısız. Temiz sertifika alınıyor..."
+    cleanup_all_certs
+    obtain_new_cert
+  }
   docker compose -f "${COMPOSE_FILE}" restart nginx
   show_cert_info
   log_info "Yenileme tamamlandı."
@@ -131,12 +165,12 @@ main() {
     *)
       log_info "=== Let's Encrypt SSL sertifika kurulumu ==="
 
-      # Eğer mevcut sertifika varsa uyar
-      if [ -f "${CERT_DIR}/fullchain.pem" ]; then
-        log_warn "Mevcut sertifika bulundu. Eski sertifikayı iptal edip yenisini almak için:"
-        log_warn "  ./cert-init.sh --revoke-old"
-        log_warn ""
-        log_warn "Devam ediliyor (force-renewal ile yeni sertifika alınacak)..."
+      # Eğer mevcut sertifika varsa temizle
+      local cert_dir
+      cert_dir=$(find_cert_dir)
+      if [ -n "$cert_dir" ]; then
+        log_warn "Mevcut sertifika bulundu. Temizlenip yeniden alınacak..."
+        cleanup_all_certs
       fi
 
       obtain_new_cert

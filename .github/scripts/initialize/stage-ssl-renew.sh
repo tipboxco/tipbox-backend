@@ -6,6 +6,7 @@ cd "$PROJECT_DIR" || exit 1
 
 DOMAIN="api-test.tipbox.co"
 EMAIL="admin@tipbox.co"
+CERTBOT_CONF="./certbot/conf"
 
 # Helper: certbot komutlarını doğru entrypoint ile çalıştır
 run_certbot() {
@@ -15,7 +16,7 @@ run_certbot() {
 # Sertifika dizinini bul (certbot -0001 suffix ekleyebilir)
 find_cert_path() {
   local found=""
-  for dir in ./certbot/conf/live/${DOMAIN}*/; do
+  for dir in ${CERTBOT_CONF}/live/${DOMAIN}*/; do
     if [ -f "${dir}fullchain.pem" ] && [ -f "${dir}privkey.pem" ]; then
       found="${dir}fullchain.pem"
     fi
@@ -23,11 +24,35 @@ find_cert_path() {
   echo "$found"
 }
 
+# Tüm eski sertifika dosyalarını temizle (certbot delete + filesystem fallback)
+cleanup_all_certs() {
+  echo "🧹 Cleaning up old certificates..."
+
+  # certbot delete dene (renewal config varsa çalışır)
+  run_certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
+
+  # Filesystem temizlik — renewal config olmasa bile çalışır
+  for dir in ${CERTBOT_CONF}/live/${DOMAIN}*; do
+    [ -d "$dir" ] && rm -rf "$dir" && echo "   Removed live/$( basename "$dir" )"
+  done
+  for dir in ${CERTBOT_CONF}/archive/${DOMAIN}*; do
+    [ -d "$dir" ] && rm -rf "$dir" && echo "   Removed archive/$( basename "$dir" )"
+  done
+  for conf in ${CERTBOT_CONF}/renewal/${DOMAIN}*.conf; do
+    [ -f "$conf" ] && rm -f "$conf" && echo "   Removed renewal/$( basename "$conf" )"
+  done
+
+  echo "✅ Cleanup complete."
+}
+
 CERT_PATH=$(find_cert_path)
 
 # 1. Sertifika kontrol et
 if [ -z "$CERT_PATH" ]; then
   echo "⚠️  No SSL certificate found. Obtaining new certificate..."
+
+  # Olası orphan dizinleri temizle
+  cleanup_all_certs
 
   run_certbot certonly \
     --webroot \
@@ -49,16 +74,11 @@ else
     echo "📋 Certificate expires: $EXPIRY_DATE ($DAYS_LEFT days left)"
 
     if [ "$DAYS_LEFT" -lt 30 ]; then
-      echo "⚠️  Certificate expires in less than 30 days. Cleaning up and renewing..."
+      echo "⚠️  Certificate expires in less than 30 days. Renewing..."
 
-      # Tüm eski sertifikaları sil (-0001 suffix sorununu önle)
-      run_certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
-      # -0001 gibi suffix'li olanları da temizle
-      for cert_name in $(run_certbot certificates 2>/dev/null | grep "Certificate Name:" | awk '{print $3}' | grep "^${DOMAIN}"); do
-        run_certbot delete --cert-name "$cert_name" --non-interactive 2>/dev/null || true
-      done
+      # Temizle + yeniden al (suffix sorununu önler)
+      cleanup_all_certs
 
-      # Temiz sertifika al (doğru path'e yazılır)
       run_certbot certonly \
         --webroot \
         --webroot-path=/var/www/certbot \
@@ -72,8 +92,16 @@ else
       echo "✅ Certificate is valid for $DAYS_LEFT more days. No renewal needed."
     fi
   else
-    echo "⚠️  Could not read certificate expiry. Running renewal check..."
-    run_certbot renew --quiet
+    echo "⚠️  Could not read certificate expiry. Cleaning up and obtaining fresh cert..."
+    cleanup_all_certs
+
+    run_certbot certonly \
+      --webroot \
+      --webroot-path=/var/www/certbot \
+      --email "$EMAIL" \
+      --agree-tos \
+      --no-eff-email \
+      -d "$DOMAIN"
   fi
 fi
 
@@ -103,4 +131,3 @@ for i in $(seq 1 5); do
 done
 
 echo "⚠️  HTTPS not responding yet. Check nginx logs for details."
-echo "    Manual fix: ssh into server and run ./cert-init.sh --revoke-old"
