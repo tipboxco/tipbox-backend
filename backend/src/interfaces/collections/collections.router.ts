@@ -109,6 +109,12 @@ router.use(authMiddleware);
  *                       totalProgress:
  *                         type: integer
  *                         description: Collection'ın toplam ilerleme hedefi
+ *                       totalBadges:
+ *                         type: integer
+ *                         description: Collection'daki toplam badge sayısı
+ *                       earnedBadges:
+ *                         type: integer
+ *                         description: Kullanıcının kazandığı badge sayısı
  *                       coverImage:
  *                         type: string
  *                         nullable: true

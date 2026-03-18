@@ -5124,11 +5124,11 @@ export class UserService {
    * EP-05: Get highlight badge selection data
    */
   async getHighlightBadgeSelectionData(userId: string) {
-    // Get all claimed badges
+    // Get all user badges (claimed or not)
     const allBadges = await this.prisma.userBadge.findMany({
-      where: { userId, claimed: true },
+      where: { userId },
       include: { badge: true },
-      orderBy: { claimedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     // Get current highlights
@@ -5188,17 +5188,16 @@ export class UserService {
       throw new ValidationError('Maximum 4 highlight badges allowed');
     }
 
-    // Validate all badges are owned and claimed
+    // Validate all badges are owned by the user
     const ownedBadges = await this.prisma.userBadge.findMany({
       where: {
         userId,
         badgeId: { in: badgeIds },
-        claimed: true,
       },
     });
 
     if (ownedBadges.length !== badgeIds.length) {
-      throw new ValidationError('Some badges are not owned or not claimed');
+      throw new ValidationError('Some badges are not owned by the user');
     }
 
     await this.prisma.$transaction(async (tx) => {

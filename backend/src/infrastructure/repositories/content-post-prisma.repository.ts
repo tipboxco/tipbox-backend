@@ -124,6 +124,9 @@ export class ContentPostPrismaRepository {
 
       if (!post) return false;
 
+      // Remove from all users' feeds before deleting
+      await this.prisma.feed.deleteMany({ where: { postId: id } });
+
       await this.prisma.contentPost.delete({ where: { id } });
 
       // Decrement user's postsCount

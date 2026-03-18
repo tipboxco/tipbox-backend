@@ -175,7 +175,7 @@ router.get(
     if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
     const badges = await prisma.badge.findMany({
       where: { collectionId: id },
-      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
       include: { category: { select: { id: true, name: true } } },
     });
     const data: AdminCollectionBadgeListItem[] = badges.map((b) => ({

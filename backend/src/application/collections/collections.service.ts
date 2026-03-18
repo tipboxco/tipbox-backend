@@ -7,6 +7,7 @@ import type {
   CollectionsListResponse,
   CollectionCategory,
   CollectionCategoriesResponse,
+  CollectionCategoryInfo,
   CollectionBadge,
   CollectionBadgeStatus,
   CollectionDetailResponse,
@@ -15,6 +16,49 @@ import type {
   UserCollectionProgressItem,
   UserCollectionProgressResponse,
 } from '../../interfaces/collections/collections.dto';
+
+/** Reusable select for category with parent info */
+const categoryWithParentSelect = {
+  select: {
+    id: true,
+    name: true,
+    handle: true,
+    parentId: true,
+    parent: { select: { id: true, name: true } },
+  },
+} as const;
+
+type CategoryWithParent = {
+  id: string;
+  name: string;
+  handle: string | null;
+  parentId: string | null;
+  parent: { id: string; name: string } | null;
+};
+
+/**
+ * Resolves nested category hierarchy into mainCategory / subCategory.
+ * - If category has a parent → parent = mainCategory, category = subCategory
+ * - If category has no parent → category = mainCategory, subCategory = null
+ */
+function resolveCategoryHierarchy(category: CategoryWithParent | null): {
+  mainCategory: CollectionCategoryInfo | null;
+  subCategory: CollectionCategoryInfo | null;
+} {
+  if (!category) return { mainCategory: null, subCategory: null };
+
+  if (category.parentId && category.parent) {
+    return {
+      mainCategory: { id: category.parent.id, name: category.parent.name },
+      subCategory: { id: category.id, name: category.name },
+    };
+  }
+
+  return {
+    mainCategory: { id: category.id, name: category.name },
+    subCategory: null,
+  };
+}
 
 export class CollectionsService {
   private cache: CacheService;
@@ -72,10 +116,11 @@ export class CollectionsService {
         take: fetchLimit + 1,
         orderBy: { createdAt: 'desc' },
         include: {
-          category: { select: { id: true, name: true, handle: true } },
+          category: categoryWithParentSelect,
           achievementGoals: {
             select: { id: true, pointsRequired: true },
           },
+          _count: { select: { badges: true } },
         },
       }),
       prisma.badgeCollection.count({ where }),
@@ -98,6 +143,29 @@ export class CollectionsService {
       userAchievements.map((ua) => [ua.goalId, ua.progress]),
     );
 
+    // Fetch earned badge counts per collection
+    const collectionIds = collections.map((c) => c.id);
+    const earnedBadges =
+      collectionIds.length > 0
+        ? await prisma.userBadge.findMany({
+            where: {
+              userId,
+              badge: { collectionId: { in: collectionIds } },
+            },
+            select: { badge: { select: { collectionId: true } } },
+          })
+        : [];
+
+    const earnedByCollection = new Map<string, number>();
+    for (const ub of earnedBadges) {
+      if (ub.badge.collectionId) {
+        earnedByCollection.set(
+          ub.badge.collectionId,
+          (earnedByCollection.get(ub.badge.collectionId) ?? 0) + 1,
+        );
+      }
+    }
+
     let items: CollectionListItem[] = collections.map((c) => {
       const totalProgress = c.achievementGoals.reduce(
         (sum, g) => sum + g.pointsRequired,
@@ -108,14 +176,20 @@ export class CollectionsService {
         return sum + Math.min(p, g.pointsRequired);
       }, 0);
 
+      const { mainCategory, subCategory } = resolveCategoryHierarchy(c.category);
+
       return {
         id: c.id,
         title: c.name,
         description: c.shortDescription ?? c.longDescription ?? '',
         currentProgress,
         totalProgress,
+        totalBadges: c._count.badges,
+        earnedBadges: earnedByCollection.get(c.id) ?? 0,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
+        mainCategory,
+        subCategory,
       };
     });
 
@@ -256,7 +330,7 @@ export class CollectionsService {
       take: params.limit + 1,
       orderBy: { createdAt: 'desc' },
       include: {
-        category: { select: { handle: true } },
+        category: categoryWithParentSelect,
         _count: { select: { badges: true } },
       },
     });
@@ -291,6 +365,7 @@ export class CollectionsService {
     const items: UserCollectionProgressItem[] = paginatedCollections.map((c) => {
       const pd = progressData.get(c.id) ?? { current: 0, total: 0 };
       const isCompleted = pd.total > 0 && pd.current >= pd.total;
+      const { mainCategory, subCategory } = resolveCategoryHierarchy(c.category);
 
       return {
         id: c.id,
@@ -299,7 +374,9 @@ export class CollectionsService {
         currentProgress: pd.current,
         totalProgress: pd.total,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
+        mainCategory,
+        subCategory,
         status: isCompleted ? 'completed' : 'in_progress',
         totalBadges: c._count.badges,
         earnedBadges: earnedByCollection.get(c.id) ?? 0,
@@ -393,7 +470,7 @@ export class CollectionsService {
       take: params.limit + 1,
       orderBy: { createdAt: 'desc' },
       include: {
-        category: { select: { handle: true } },
+        category: categoryWithParentSelect,
         badges: { select: { id: true } },
         _count: { select: { badges: true } },
       },
@@ -428,12 +505,15 @@ export class CollectionsService {
 
     const items: CompletedCollectionItem[] = paginatedCollections.map((c) => {
       const cd = completionData.get(c.id);
+      const { mainCategory, subCategory } = resolveCategoryHierarchy(c.category);
       return {
         id: c.id,
         title: c.name,
         description: c.shortDescription ?? c.longDescription ?? '',
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
+        mainCategory,
+        subCategory,
         completedAt: cd?.completedAt?.toISOString() ?? null,
         totalBadges: c._count.badges,
         earnedBadges: earnedByCollection.get(c.id) ?? 0,
@@ -464,7 +544,7 @@ export class CollectionsService {
     const collection = await prisma.badgeCollection.findUnique({
       where: { id: collectionId },
       include: {
-        category: { select: { id: true, name: true, handle: true } },
+        category: categoryWithParentSelect,
         achievementGoals: {
           select: { id: true, pointsRequired: true, rewardBadgeId: true },
         },
@@ -477,13 +557,16 @@ export class CollectionsService {
                 ],
               }
             : undefined,
-          orderBy: { name: 'asc' as const },
+          orderBy: [{ displayOrder: 'asc' as const }, { createdAt: 'asc' as const }],
           select: {
             id: true,
             name: true,
             description: true,
             imageUrl: true,
             highlightsImage: true,
+            status: true,
+            displayOrder: true,
+            createdAt: true,
           },
         },
       },
@@ -561,7 +644,15 @@ export class CollectionsService {
         currentProgress,
         totalProgress,
         status,
+        isActive: badge.status === 'ACTIVE',
+        displayOrder: 0, // will be assigned after sorting
+        createdAt: badge.createdAt.toISOString(),
       };
+    });
+
+    // Assign sequential displayOrder based on sorted position
+    badges.forEach((badge, index) => {
+      badge.displayOrder = index + 1;
     });
 
     // Collection-level progress
@@ -577,6 +668,11 @@ export class CollectionsService {
       0,
     );
 
+    const totalBadgesCount = collection.badges.length;
+    const earnedBadgesCount = ownedBadges.size;
+
+    const { mainCategory, subCategory } = resolveCategoryHierarchy(collection.category);
+
     return {
       collection: {
         id: collection.id,
@@ -584,8 +680,12 @@ export class CollectionsService {
         description: collection.longDescription ?? collection.shortDescription ?? '',
         currentProgress: collectionCurrentProgress,
         totalProgress: collectionTotalProgress,
+        totalBadges: totalBadgesCount,
+        earnedBadges: earnedBadgesCount,
         coverImage: collection.bannerUrl ? resolveMediaUrl(collection.bannerUrl) : null,
-        category: collection.category?.handle ?? null,
+        category: collection.category?.name ?? null,
+        mainCategory,
+        subCategory,
       },
       badges,
     };
