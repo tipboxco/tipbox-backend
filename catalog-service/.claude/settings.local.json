@@ -15,7 +15,8 @@
       "Bash(grep -A 20 \"onCreateCategory\" /d/tipbox-app/tipbox-backend/catalog-service/src/admin/routes/brands/[id]/page.tsx)",
       "Bash(grep -A 10 \"POST.*product\" /d/tipbox-app/tipbox-backend/catalog-service/src/api/admin/categories/[id]/metadata/route.ts)",
       "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules/@medusajs/medusa -type f -name *.d.ts)",
-      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm -type f -path */medusa/core-flows* -name *.d.ts)"
+      "Bash(find /d/tipbox-app/tipbox-backend/catalog-service/node_modules/.pnpm -type f -path */medusa/core-flows* -name *.d.ts)",
+      "Bash(grep -r product-categories /d/tipbox-app/tipbox-backend/catalog-service/src --include=*.ts --include=*.tsx)"
     ]
   }
 }

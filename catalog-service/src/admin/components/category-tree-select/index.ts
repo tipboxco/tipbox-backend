@@ -1,4 +1,6 @@
 export { CategoryTreeSelect } from "./category-tree-select"
 export type { CategoryTreeSelectProps, CategoryNode } from "./category-tree-select"
+export { CategoryEditModal } from "./category-edit-modal"
+export type { CategoryEditData } from "./category-edit-modal"
 export { useCategoryCache } from "./use-category-cache"
 export type { CategoryItem } from "./use-category-cache"

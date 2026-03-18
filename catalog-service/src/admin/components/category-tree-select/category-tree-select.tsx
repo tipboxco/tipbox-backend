@@ -11,8 +11,11 @@ import {
   Minus,
   Check,
   Plus,
+  PencilSquare,
 } from "@medusajs/icons"
 import type { CategoryItem } from "./use-category-cache"
+import { CategoryEditModal } from "./category-edit-modal"
+import type { CategoryEditData } from "./category-edit-modal"
 
 // ─── Types ───
 
@@ -44,7 +47,8 @@ export type CategoryTreeSelectProps = {
   disabled?: boolean
   loading?: boolean
   compact?: boolean
-  onCreateCategory?: (name: string) => Promise<string | undefined> | void
+  onCreateCategory?: (name: string, parentId?: string) => Promise<string | undefined> | void
+  onEditCategory?: (id: string, data: CategoryEditData) => Promise<void>
 }
 
 // ─── HighlightedName ───
@@ -263,6 +267,159 @@ function buildParentBreadcrumb(
     : parts.join(" > ")
 }
 
+// ─── Path query parsing (e.g. "Electronics > Cell Phones > ...") ───
+
+type PathQueryResult = {
+  isPathQuery: boolean
+  /** Successfully resolved parent categories along the path */
+  resolvedPath: CategoryItem[]
+  /** The last segment text (for filtering or creating) */
+  lastSegment: string
+  /** Matched leaf categories (children of all resolved parents) */
+  filteredChildren: CategoryItem[]
+  /** Parent ID to use when creating a new category (from best single match) */
+  createParentId: string | undefined
+}
+
+function parsePathQuery(
+  query: string,
+  items: CategoryItem[],
+  _nodeMap: Map<string, CategoryNode>
+): PathQueryResult {
+  const empty: PathQueryResult = {
+    isPathQuery: false,
+    resolvedPath: [],
+    lastSegment: query.trim(),
+    filteredChildren: [],
+    createParentId: undefined,
+  }
+
+  if (!query.includes(">")) return empty
+
+  // Keep empty last segment — "Oral Care > " means show all children
+  const rawSegments = query.split(">").map((s) => s.trim())
+  const lastSegment = rawSegments[rawSegments.length - 1] // may be ""
+  const parentSegments = rawSegments.slice(0, -1).filter(Boolean)
+  if (parentSegments.length === 0) return empty
+
+  // Build parent lookup
+  const childrenOf = new Map<string | null, CategoryItem[]>()
+  for (const item of items) {
+    const pid = item.parent_category_id ?? null
+    if (!childrenOf.has(pid)) childrenOf.set(pid, [])
+    childrenOf.get(pid)!.push(item)
+  }
+
+  // Resolve parent segments: first segment matches ANY level
+  let currentParents: CategoryItem[] = []
+  const firstSeg = parentSegments[0].toLowerCase()
+
+  // Exact → startsWith → includes
+  currentParents = items.filter((item) => item.name.toLowerCase() === firstSeg)
+  if (currentParents.length === 0) {
+    currentParents = items.filter((item) => item.name.toLowerCase().startsWith(firstSeg))
+  }
+  if (currentParents.length === 0) {
+    currentParents = items.filter((item) => item.name.toLowerCase().includes(firstSeg))
+  }
+  if (currentParents.length === 0) {
+    return { isPathQuery: true, resolvedPath: [], lastSegment: rawSegments.join(" > "), filteredChildren: [], createParentId: undefined }
+  }
+
+  // Walk remaining parent segments (narrowing)
+  for (let i = 1; i < parentSegments.length; i++) {
+    const seg = parentSegments[i].toLowerCase()
+    const nextParents: CategoryItem[] = []
+    const seen = new Set<string>()
+
+    for (const parent of currentParents) {
+      const children = childrenOf.get(parent.id) || []
+      for (const child of children) {
+        const n = child.name.toLowerCase()
+        if ((n === seg || n.startsWith(seg) || n.includes(seg)) && !seen.has(child.id)) {
+          seen.add(child.id)
+          nextParents.push(child)
+        }
+      }
+    }
+
+    if (nextParents.length === 0) {
+      return {
+        isPathQuery: true,
+        resolvedPath: currentParents,
+        lastSegment: parentSegments.slice(i).join(" > ") + (lastSegment ? " > " + lastSegment : ""),
+        filteredChildren: [],
+        createParentId: currentParents.length === 1 ? currentParents[0].id : undefined,
+      }
+    }
+
+    currentParents = nextParents
+  }
+
+  // Collect children of resolved parents, filter by last segment
+  const lower = lastSegment.toLowerCase()
+  const allChildren: CategoryItem[] = []
+  const seen = new Set<string>()
+
+  for (const parent of currentParents) {
+    const children = childrenOf.get(parent.id) || []
+    const matching = lower
+      ? children.filter((c) => c.name.toLowerCase().includes(lower))
+      : children
+    for (const c of matching) {
+      if (!seen.has(c.id)) { seen.add(c.id); allChildren.push(c) }
+    }
+  }
+
+  // Also search deeper descendants when last segment has text
+  if (lower) {
+    const collectDescendants = (parentId: string) => {
+      const ch = childrenOf.get(parentId) || []
+      for (const c of ch) {
+        if (!seen.has(c.id) && c.name.toLowerCase().includes(lower)) {
+          seen.add(c.id)
+          allChildren.push(c)
+        }
+        collectDescendants(c.id)
+      }
+    }
+    for (const parent of currentParents) {
+      collectDescendants(parent.id)
+    }
+  }
+
+  return {
+    isPathQuery: true,
+    resolvedPath: currentParents,
+    lastSegment,
+    filteredChildren: allChildren,
+    createParentId: currentParents.length === 1 ? currentParents[0].id : undefined,
+  }
+}
+
+// ─── Build full path for autocomplete (no truncation) ───
+
+function buildFullPath(
+  id: string,
+  items: CategoryItem[],
+  nameMap: Map<string, string>
+): string {
+  const parentMap = new Map<string, string | null>()
+  for (const item of items) {
+    parentMap.set(item.id, item.parent_category_id ?? null)
+  }
+
+  const parts: string[] = []
+  let current: string | null = id
+  while (current) {
+    const name = nameMap.get(current)
+    if (name) parts.unshift(name)
+    current = parentMap.get(current) ?? null
+  }
+
+  return parts.join(" > ")
+}
+
 // ─── Component ───
 
 export function CategoryTreeSelect({
@@ -276,6 +433,7 @@ export function CategoryTreeSelect({
   loading,
   compact,
   onCreateCategory,
+  onEditCategory,
 }: CategoryTreeSelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -286,6 +444,7 @@ export function CategoryTreeSelect({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 })
+  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null)
 
   // ─── Memoized computations ───
   const tree = useMemo(() => buildTree(categories), [categories])
@@ -304,11 +463,41 @@ export function CategoryTreeSelect({
 
   const searchActive = search.trim().length > 0
 
+  // ─── Path query detection (e.g. "Electronics > Cell Phones > ...") ───
+  const pathQuery = useMemo(
+    () => (searchActive ? parsePathQuery(search, categories, nodeMap) : null),
+    [searchActive, search, categories, nodeMap]
+  )
+  const isPathMode = !!pathQuery?.isPathQuery
+
   // ─── Dual-mode data ───
   const scoredRows = useMemo(
-    () => (searchActive ? scoreAndRankCategories(categories, nodeMap, search.trim()) : []),
-    [searchActive, categories, nodeMap, search]
+    () => {
+      if (!searchActive) return []
+      if (isPathMode) return [] // path mode uses its own list
+      return scoreAndRankCategories(categories, nodeMap, search.trim())
+    },
+    [searchActive, isPathMode, categories, nodeMap, search]
   )
+
+  // Path mode: scored rows from filtered children
+  const pathScoredRows = useMemo(() => {
+    if (!isPathMode || !pathQuery) return []
+    const list = pathQuery.filteredChildren
+    return list.map((item: CategoryItem) => {
+      const node = nodeMap.get(item.id)
+      if (!node) return null
+      const lower = pathQuery.lastSegment.toLowerCase()
+      const nameLower = item.name.toLowerCase()
+      const matchStart = lower ? nameLower.indexOf(lower) : -1
+      return {
+        node,
+        score: 100,
+        matchStart: matchStart >= 0 ? matchStart : -1,
+        matchLength: lower.length,
+      }
+    }).filter(Boolean) as ScoredRow[]
+  }, [isPathMode, pathQuery, nodeMap])
 
   const treeFlatRows = useMemo(
     () => (searchActive ? [] : flattenTree(tree, expanded)),
@@ -316,9 +505,10 @@ export function CategoryTreeSelect({
   )
 
   // Active list length — "create" row counts as 1 when search has no matches
-  const showCreateOption = searchActive && scoredRows.length === 0 && !!onCreateCategory
+  const effectiveRows = isPathMode ? pathScoredRows : scoredRows
+  const showCreateOption = searchActive && effectiveRows.length === 0 && !!onCreateCategory
   const activeListLength = searchActive
-    ? scoredRows.length + (showCreateOption ? 1 : 0)
+    ? effectiveRows.length + (showCreateOption ? 1 : 0)
     : treeFlatRows.length
 
   // ─── Selected values set (for multi-select) ───
@@ -355,21 +545,70 @@ export function CategoryTreeSelect({
     })
   }, [compact])
 
+  // ─── Collect ancestor IDs for a given category ───
+  const getAncestorIds = useCallback((id: string): string[] => {
+    const parentMap = new Map<string, string | null>()
+    for (const item of categories) {
+      parentMap.set(item.id, item.parent_category_id ?? null)
+    }
+    const ids: string[] = []
+    let current = parentMap.get(id) ?? null
+    while (current) {
+      ids.push(current)
+      current = parentMap.get(current) ?? null
+    }
+    return ids
+  }, [categories])
+
   // ─── Open/close ───
   const handleOpen = useCallback(() => {
     if (disabled || loading) return
     updatePosition()
+
+    // Auto-expand the path to the selected category
+    const selectedIds = Array.isArray(value) ? value : value ? [value] : []
+    if (selectedIds.length > 0) {
+      const toExpand = new Set<string>()
+      for (const id of selectedIds) {
+        for (const ancestorId of getAncestorIds(id)) {
+          toExpand.add(ancestorId)
+        }
+      }
+      if (toExpand.size > 0) {
+        setExpanded((prev) => {
+          const next = new Set(prev)
+          for (const id of toExpand) next.add(id)
+          return next
+        })
+      }
+    }
+
     setOpen(true)
     setSearch("")
     setHighlightedIndex(-1)
-  }, [disabled, loading, updatePosition])
+  }, [disabled, loading, updatePosition, value, getAncestorIds])
 
-  // Focus search when dropdown opens
+  // Focus search and scroll to selected item when dropdown opens
   useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => searchInputRef.current?.focus())
-    }
-  }, [open])
+    if (!open) return
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+
+      // Scroll to first selected item in the list
+      if (!listRef.current || !value) return
+      const firstSelected = Array.isArray(value) ? value[0] : value
+      if (!firstSelected) return
+
+      const items = listRef.current.children
+      for (let i = 0; i < items.length; i++) {
+        const el = items[i] as HTMLElement
+        if (el.dataset.categoryId === firstSelected) {
+          el.scrollIntoView({ block: "center" })
+          break
+        }
+      }
+    })
+  }, [open, value])
 
   // Click outside to close
   useEffect(() => {
@@ -404,14 +643,14 @@ export function CategoryTreeSelect({
 
   // Auto-highlight best match when search results change
   useEffect(() => {
-    if (searchActive && scoredRows.length > 0) {
+    if (searchActive && effectiveRows.length > 0) {
       setHighlightedIndex(0)
     } else if (searchActive && showCreateOption) {
       setHighlightedIndex(0)
     } else if (searchActive) {
       setHighlightedIndex(-1)
     }
-  }, [searchActive, scoredRows, showCreateOption])
+  }, [searchActive, effectiveRows, showCreateOption])
 
   // Scroll highlighted row into view
   useEffect(() => {
@@ -421,8 +660,8 @@ export function CategoryTreeSelect({
   }, [highlightedIndex])
 
   // ─── Handlers ───
-  const toggleExpand = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const toggleExpand = useCallback((id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
     setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -444,6 +683,17 @@ export function CategoryTreeSelect({
       }
     },
     [multiple, onMultiChange, onChange, selectedSet]
+  )
+
+  // Drill into a parent category: fill search with "Path > " to show its children
+  const drillIntoCategory = useCallback(
+    (id: string) => {
+      const path = buildFullPath(id, categories, nameMap)
+      setSearch(path + " > ")
+      setHighlightedIndex(0)
+      requestAnimationFrame(() => searchInputRef.current?.focus())
+    },
+    [categories, nameMap]
   )
 
   const handleClear = useCallback(
@@ -469,11 +719,20 @@ export function CategoryTreeSelect({
       } else if (key === "Enter" && highlightedIndex >= 0) {
         e.preventDefault()
         if (searchActive) {
-          if (scoredRows.length > 0) {
-            const id = scoredRows[highlightedIndex]?.node.id
-            if (id) handleSelect(id)
+          if (effectiveRows.length > 0) {
+            const row = effectiveRows[highlightedIndex]
+            if (row) {
+              if (row.node.children.length > 0) {
+                drillIntoCategory(row.node.id)
+              } else {
+                handleSelect(row.node.id)
+              }
+            }
           } else if (showCreateOption && onCreateCategory) {
-            const result = onCreateCategory(search.trim())
+            // For path mode, extract last segment name and resolve parent
+            const createName = isPathMode && pathQuery ? pathQuery.lastSegment : search.trim()
+            const createParentId = isPathMode && pathQuery ? pathQuery.createParentId : undefined
+            const result = onCreateCategory(createName, createParentId)
             if (result && typeof result.then === "function") {
               result.then((newId) => {
                 if (newId) handleSelect(newId)
@@ -484,8 +743,14 @@ export function CategoryTreeSelect({
             }
           }
         } else {
-          const id = treeFlatRows[highlightedIndex]?.node.id
-          if (id) handleSelect(id)
+          const row = treeFlatRows[highlightedIndex]
+          if (row) {
+            if (row.hasChildren) {
+              drillIntoCategory(row.node.id)
+            } else {
+              handleSelect(row.node.id)
+            }
+          }
         }
       } else if (key === "Escape") {
         e.preventDefault()
@@ -519,7 +784,7 @@ export function CategoryTreeSelect({
         }
       }
     },
-    [searchActive, scoredRows, treeFlatRows, highlightedIndex, activeListLength, handleSelect, showCreateOption, onCreateCategory, search]
+    [searchActive, effectiveRows, treeFlatRows, highlightedIndex, activeListLength, handleSelect, drillIntoCategory, showCreateOption, onCreateCategory, search, isPathMode, pathQuery]
   )
 
   // ─── Render ───
@@ -547,7 +812,7 @@ export function CategoryTreeSelect({
             : "border-ui-border-base shadow-borders-base hover:shadow-borders-strong",
           hasValue ? "text-ui-fg-base" : "text-ui-fg-muted",
         ].join(" ")}
-        style={{ minWidth: compact ? 160 : 220, maxWidth: compact ? 220 : 360, width: "100%" }}
+        style={{ minWidth: compact ? 180 : 240, maxWidth: compact ? 400 : 400, width: "100%" }}
       >
         {loading ? (
           <SpinnerIcon className="animate-spin h-3.5 w-3.5 text-ui-fg-muted shrink-0" />
@@ -579,12 +844,12 @@ export function CategoryTreeSelect({
         createPortal(
           <div
             ref={dropdownRef}
-            className="fixed z-[9999] flex flex-col rounded-lg border border-ui-border-base bg-ui-bg-base shadow-elevation-flyout overflow-hidden"
+            className="fixed z-[99999] flex flex-col rounded-lg border border-ui-border-base bg-ui-bg-base shadow-elevation-flyout overflow-hidden"
             style={{
               top: position.top,
               left: position.left,
               width: position.width,
-              maxHeight: 380,
+              maxHeight: 480,
               animation: "categoryTreeFadeIn 120ms ease-out",
             }}
           >
@@ -649,22 +914,35 @@ export function CategoryTreeSelect({
             )}
 
             {/* List */}
-            <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ maxHeight: 280 }}>
+            <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ maxHeight: 380 }}>
               {searchActive ? (
                 /* ─── Search mode: flat ranked list ─── */
-              scoredRows.length === 0 ? (
+              effectiveRows.length === 0 ? (
                   <div className="flex flex-col">
+                    {/* Path breadcrumb when in path mode */}
+                    {isPathMode && pathQuery && pathQuery.resolvedPath.length > 0 && (
+                      <div className="flex items-center gap-1 px-3 py-2 border-b border-ui-border-base bg-ui-bg-subtle">
+                        <Text size="xsmall" className="text-ui-fg-muted truncate">
+                          {pathQuery.resolvedPath.map((c) => c.name).join(" > ")}
+                          {pathQuery.lastSegment ? ` > ${pathQuery.lastSegment}` : ""}
+                        </Text>
+                      </div>
+                    )}
                     <div className="flex flex-col items-center justify-center py-6 gap-1.5">
                       <MagnifyingGlass className="h-5 w-5 text-ui-fg-muted" />
                       <Text size="small" className="text-ui-fg-muted">
-                        Sonuç bulunamadı
+                        {isPathMode ? "Bu yolda kategori bulunamadı" : "Sonuç bulunamadı"}
                       </Text>
                     </div>
                     {onCreateCategory && (
                       <button
                         type="button"
                         onClick={() => {
-                          const result = onCreateCategory(search.trim())
+                          const createName = isPathMode && pathQuery ? pathQuery.lastSegment : search.trim()
+                          const createParentId = isPathMode && pathQuery?.resolvedPath.length
+                            ? pathQuery.resolvedPath[pathQuery.resolvedPath.length - 1].id
+                            : undefined
+                          const result = onCreateCategory(createName, createParentId)
                           if (result && typeof result.then === "function") {
                             result.then((newId) => {
                               if (newId) handleSelect(newId)
@@ -686,9 +964,16 @@ export function CategoryTreeSelect({
                         <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-sm bg-ui-bg-interactive">
                           <Plus className="h-3.5 w-3.5 text-ui-fg-on-color" />
                         </span>
-                        <span>
+                        <span className="truncate">
                           <span className="text-ui-fg-muted">Oluştur: </span>
-                          <span className="font-medium">"{search.trim()}"</span>
+                          <span className="font-medium">
+                            "{isPathMode && pathQuery ? pathQuery.lastSegment : search.trim()}"
+                          </span>
+                          {isPathMode && pathQuery && pathQuery.resolvedPath.length > 0 && (
+                            <span className="text-ui-fg-muted text-xs ml-1">
+                              ({pathQuery.resolvedPath[pathQuery.resolvedPath.length - 1].name} altında)
+                            </span>
+                          )}
                         </span>
                         <span className="ml-auto shrink-0 text-[10px] text-ui-fg-muted bg-ui-bg-subtle border border-ui-border-base rounded px-1.5 py-0.5 font-mono leading-none">
                           Enter
@@ -697,7 +982,19 @@ export function CategoryTreeSelect({
                     )}
                   </div>
                 ) : (
-                  scoredRows.map(({ node, matchStart, matchLength }, index) => {
+                  <>
+                  {/* Path breadcrumb when in path mode with results */}
+                  {isPathMode && pathQuery && pathQuery.resolvedPath.length > 0 && (
+                    <div className="flex items-center gap-1 px-3 py-2 border-b border-ui-border-base bg-ui-bg-subtle">
+                      <Text size="xsmall" className="text-ui-fg-muted truncate">
+                        {pathQuery.resolvedPath.map((c) => c.name).join(" > ")}
+                      </Text>
+                      <Text size="xsmall" className="text-ui-fg-subtle ml-auto shrink-0">
+                        {effectiveRows.length} sonuç
+                      </Text>
+                    </div>
+                  )}
+                  {effectiveRows.map(({ node, matchStart, matchLength }, index) => {
                     const isSelected = selectedSet.has(node.id)
                     const isHighlighted = index === highlightedIndex
                     const hasChildren = node.children.length > 0
@@ -705,12 +1002,13 @@ export function CategoryTreeSelect({
                     return (
                       <button
                         key={node.id}
+                        data-category-id={node.id}
                         type="button"
                         title={parentPath ? `${parentPath} > ${node.name}` : node.name}
-                        onClick={() => handleSelect(node.id)}
+                        onClick={() => hasChildren ? drillIntoCategory(node.id) : handleSelect(node.id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         className={[
-                          "flex items-center w-full text-left text-sm py-[7px] px-3 transition-colors duration-75 gap-2",
+                          "group/row flex items-center w-full text-left text-sm py-[7px] px-3 transition-colors duration-75 gap-2",
                           isSelected
                             ? "bg-ui-bg-interactive text-ui-fg-on-color"
                             : isHighlighted
@@ -749,6 +1047,27 @@ export function CategoryTreeSelect({
                           isSelected={isSelected}
                         />
 
+                        {/* Edit button */}
+                        {onEditCategory && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingCategory(node)
+                              setOpen(false)
+                            }}
+                            title="Düzenle"
+                            className={[
+                              "shrink-0 flex items-center justify-center w-5 h-5 rounded-sm transition-all duration-75",
+                              "opacity-0 group-hover/row:opacity-100",
+                              isSelected
+                                ? "hover:bg-white/20"
+                                : "hover:bg-ui-bg-base-hover",
+                            ].join(" ")}
+                          >
+                            <PencilSquare className="h-3 w-3" />
+                          </span>
+                        )}
+
                         {/* Parent breadcrumb */}
                         {parentPath && (
                           <span
@@ -770,7 +1089,8 @@ export function CategoryTreeSelect({
                         )}
                       </button>
                     )
-                  })
+                  })}
+                  </>
                 )
               ) : (
                 /* ─── Tree mode: hierarchical view ─── */
@@ -786,14 +1106,12 @@ export function CategoryTreeSelect({
                     const isSelected = selectedSet.has(node.id)
                     const isHighlighted = index === highlightedIndex
                     return (
-                      <button
+                      <div
                         key={node.id}
-                        type="button"
-                        title={node.name}
-                        onClick={() => handleSelect(node.id)}
+                        data-category-id={node.id}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         className={[
-                          "flex items-center w-full text-left text-sm py-[7px] pr-3 transition-colors duration-75",
+                          "group/row flex items-center w-full text-sm py-[7px] pr-1 transition-colors duration-75",
                           isSelected
                             ? "bg-ui-bg-interactive text-ui-fg-on-color"
                             : isHighlighted
@@ -805,9 +1123,9 @@ export function CategoryTreeSelect({
                         {/* Expand/collapse icon */}
                         {hasChildren ? (
                           <span
-                            onClick={(e) => toggleExpand(node.id, e)}
+                            onClick={() => toggleExpand(node.id)}
                             className={[
-                              "shrink-0 flex items-center justify-center w-5 h-5 rounded-sm mr-1 transition-colors",
+                              "shrink-0 flex items-center justify-center w-5 h-5 rounded-sm mr-1 cursor-pointer transition-colors",
                               isSelected
                                 ? "hover:bg-white/20"
                                 : "hover:bg-ui-bg-base-hover",
@@ -841,24 +1159,71 @@ export function CategoryTreeSelect({
                           </span>
                         )}
 
-                        {/* Folder icon for parent categories */}
-                        {hasChildren && !isSelected && (
-                          <FolderOpen className="h-3.5 w-3.5 text-ui-fg-muted shrink-0 mr-1.5" />
-                        )}
-                        <span className="truncate">{node.name}</span>
+                        {/* Category name — click to drill into children or select */}
+                        <span
+                          onClick={hasChildren ? () => drillIntoCategory(node.id) : () => handleSelect(node.id)}
+                          className="flex items-center gap-1.5 truncate min-w-0 cursor-pointer"
+                          title={node.name}
+                        >
+                          {hasChildren && !isSelected && (
+                            <FolderOpen className="h-3.5 w-3.5 text-ui-fg-muted shrink-0" />
+                          )}
+                          <span className="truncate">{node.name}</span>
+                        </span>
 
-                        {/* Selected check mark (single mode) */}
-                        {isSelected && !multiple && (
-                          <Check className="h-3.5 w-3.5 ml-auto shrink-0" />
-                        )}
+                        {/* Spacer to push right-side actions */}
+                        <span className="flex-1 min-w-2" />
 
                         {/* Child count badge */}
                         {hasChildren && !isSelected && (
-                          <span className="ml-auto shrink-0 text-[10px] leading-none text-ui-fg-muted bg-ui-bg-subtle rounded-full px-1.5 py-0.5 font-mono">
+                          <span className="shrink-0 text-[10px] leading-none text-ui-fg-muted bg-ui-bg-subtle rounded-full px-1.5 py-0.5 font-mono">
                             {node.children.length}
                           </span>
                         )}
-                      </button>
+
+                        {/* Edit button */}
+                        {onEditCategory && (
+                          <span
+                            onClick={() => {
+                              setEditingCategory(node)
+                              setOpen(false)
+                            }}
+                            title="Düzenle"
+                            className={[
+                              "shrink-0 flex items-center justify-center w-5 h-5 rounded-sm ml-1 cursor-pointer transition-all duration-75",
+                              "opacity-0 group-hover/row:opacity-100",
+                              isSelected
+                                ? "hover:bg-white/20"
+                                : "hover:bg-ui-bg-base-hover",
+                            ].join(" ")}
+                          >
+                            <PencilSquare className="h-3 w-3" />
+                          </span>
+                        )}
+
+                        {/* Select button (far right) */}
+                        <span
+                          onClick={() => handleSelect(node.id)}
+                          title={isSelected ? "Seçimi kaldır" : "Seç"}
+                          className={[
+                            "shrink-0 flex items-center justify-center w-6 h-5 rounded-sm ml-1 cursor-pointer transition-colors",
+                            isSelected
+                              ? "hover:bg-white/20"
+                              : "hover:bg-ui-bg-base-hover",
+                          ].join(" ")}
+                        >
+                          {isSelected ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <span className={[
+                              "flex items-center justify-center w-3.5 h-3.5 rounded-sm border transition-colors",
+                              isHighlighted
+                                ? "border-ui-fg-muted"
+                                : "border-ui-border-strong opacity-0 group-hover/row:opacity-100",
+                            ].join(" ")} />
+                          )}
+                        </span>
+                      </div>
                     )
                   })
                 )
@@ -907,6 +1272,16 @@ export function CategoryTreeSelect({
           `}</style>,
           document.head
         )}
+
+      {/* Edit category modal */}
+      {editingCategory && onEditCategory && (
+        <CategoryEditModal
+          category={editingCategory}
+          categories={categories}
+          onSave={onEditCategory}
+          onClose={() => setEditingCategory(null)}
+        />
+      )}
     </>
   )
 }

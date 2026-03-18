@@ -414,13 +414,18 @@ const BrandDetailPage = () => {
   }, [])
 
   // Create a new category from search input — returns new ID so the tree can auto-select it
-  const handleCreateCategory = useCallback(async (name: string): Promise<string | undefined> => {
+  const handleCreateCategory = useCallback(async (name: string, parentId?: string): Promise<string | undefined> => {
     try {
       const response = await fetch(`${backendUrl}/admin/product-categories`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, is_active: true, is_internal: false }),
+        body: JSON.stringify({
+          name,
+          is_active: true,
+          is_internal: false,
+          ...(parentId && { parent_category_id: parentId }),
+        }),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => null)
@@ -436,6 +441,26 @@ const BrandDetailPage = () => {
       toast.error("Hata", { description: "Kategori oluşturulurken bağlantı hatası" })
       return undefined
     }
+  }, [refetchCategories])
+
+  // Edit an existing category (name, parent)
+  const handleEditCategory = useCallback(async (id: string, data: { name: string; parent_category_id: string | null }) => {
+    const response = await fetch(`${backendUrl}/admin/product-categories/${id}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: data.name,
+        parent_category_id: data.parent_category_id,
+      }),
+    })
+    if (!response.ok) {
+      const err = await response.json().catch(() => null)
+      toast.error("Hata", { description: err?.message || "Kategori güncellenemedi" })
+      throw new Error("Update failed")
+    }
+    toast.success("Kategori güncellendi", { description: data.name })
+    refetchCategories()
   }, [refetchCategories])
 
   // Save all pending category changes
@@ -758,6 +783,7 @@ const BrandDetailPage = () => {
                             value={effectiveCategoryId}
                             onChange={(value) => handleStageCategoryChange(product.id, value)}
                             onCreateCategory={handleCreateCategory}
+                            onEditCategory={handleEditCategory}
                             disabled={savingCategories}
                             loading={categoriesLoading}
                             placeholder="Kategori seç..."
@@ -905,6 +931,7 @@ const BrandDetailPage = () => {
                 value={bulkCategoryId}
                 onChange={(value) => setBulkCategoryId(value)}
                 onCreateCategory={handleCreateCategory}
+                onEditCategory={handleEditCategory}
                 loading={categoriesLoading}
                 placeholder="Kategori seçin..."
               />
