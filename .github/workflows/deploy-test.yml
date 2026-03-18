@@ -208,7 +208,17 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
 
-      # ── 7. Seed (sadece manuel + istenirse) ──
+      # ── 7. SSL certificate renewal ──
+      - name: SSL certificate check & renewal
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: ssl-renew
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      # ── 8. Seed (sadece manuel + istenirse) ──
       - name: Run seeds
         if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.run_seed == 'true'
         uses: ./.github/actions/execute-remote-stage
@@ -220,7 +230,7 @@ jobs:
           db_user: tipbox_user
           db_name: tipbox_test
 
-      # ── 8. Cleanup ──
+      # ── 9. Cleanup ──
       - name: Cleanup deployment
         if: always() && steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage

@@ -211,6 +211,9 @@ services:
       - -c
       - |
         chmod +x /docker-entrypoint.d/40-ssl-init.sh 2>/dev/null
+        # Her 6 saatte bir SSL config'i yeniden oluştur ve nginx'i reload et
+        # (certbot yenileme yaptığında yeni sertifika otomatik alınır)
+        (while true; do sleep 6h; /docker-entrypoint.d/40-ssl-init.sh; nginx -s reload 2>/dev/null; done) &
         /docker-entrypoint.sh nginx -g "daemon off;"
     depends_on:
       backend:
@@ -285,6 +288,28 @@ services:
           memory: 128M
     networks:
       - tipbox_network
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: tipbox_certbot_test
+    restart: always
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Her 12 saatte bir renewal kontrolü yapar
+    # Let's Encrypt sertifikası 90 gün geçerli, 60. günde yenilenir
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done;'"
+    depends_on:
+      nginx:
+        condition: service_started
+    networks:
+      - tipbox_network
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
 
   catalog-service:
     build:
