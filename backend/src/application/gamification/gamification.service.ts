@@ -94,6 +94,7 @@ export class GamificationService {
           badgeName: badge.name,
           badgeIcon: badge.imageUrl || '🏆',
           badgeId: badge.id,
+          collectionId: badge.collectionId ?? null,
         }
       );
 
