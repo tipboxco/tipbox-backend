@@ -564,9 +564,10 @@ export class ExploreService {
 
     const brands = await this.prisma.brand.findMany({
       where: {
-        ...(search && {
-          name: { contains: search, mode: 'insensitive' },
-        }),
+        name: {
+          not: 'Generic',
+          ...(search && { contains: search, mode: 'insensitive' as const }),
+        },
       },
       orderBy: {
         products: { _count: 'desc' },
