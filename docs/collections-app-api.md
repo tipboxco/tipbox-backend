@@ -40,7 +40,15 @@ Collections tab'indaki ana liste. Arama, kategori chip filtresi, bottom sheet fi
       "totalBadges": 8,
       "earnedBadges": 3,
       "coverImage": "https://cdn.example.com/collections/banner.jpg",
-      "category": "Elektronik"
+      "category": "Elektronik",
+      "mainCategory": {
+        "id": "cat_main_001",
+        "name": "Teknoloji"
+      },
+      "subCategory": {
+        "id": "cat_sub_001",
+        "name": "Elektronik"
+      }
     }
   ],
   "pagination": {
@@ -65,6 +73,12 @@ Collections tab'indaki ana liste. Arama, kategori chip filtresi, bottom sheet fi
 | `collections[].earnedBadges` | `number` | Kullanicinin kazandigi badge sayisi |
 | `collections[].coverImage` | `string \| null` | Kapak gorseli URL'i |
 | `collections[].category` | `string \| null` | Kategori adi |
+| `collections[].mainCategory` | `object \| null` | Ana kategori bilgisi (filtreleme icin) |
+| `collections[].mainCategory.id` | `string` | Ana kategori ID — `mainCategoryId` query param olarak kullanilir |
+| `collections[].mainCategory.name` | `string` | Ana kategori adi |
+| `collections[].subCategory` | `object \| null` | Alt kategori bilgisi (filtreleme icin) |
+| `collections[].subCategory.id` | `string` | Alt kategori ID — `subCategoryId` query param olarak kullanilir |
+| `collections[].subCategory.name` | `string` | Alt kategori adi |
 | `pagination.cursor` | `string \| null` | Sonraki sayfa cursor'i. `null` = son sayfa |
 | `pagination.hasMore` | `boolean` | Daha fazla sayfa var mi |
 | `pagination.limit` | `number` | Sayfa basina item sayisi |
@@ -76,6 +90,22 @@ Collections tab'indaki ana liste. Arama, kategori chip filtresi, bottom sheet fi
 - `totalProgress` = Tum goal'lerin `pointsRequired` toplami
 - `currentProgress` = Kullanicinin her goal'deki ilerlemesi (goal limitini asmaz)
 - Progress bar: `currentProgress / totalProgress`
+
+### Kategori Hiyerarsisi (mainCategory / subCategory)
+
+Kategoriler ic ice (nested) yapidadir. Backend, collection'in bagli oldugu kategorinin hiyerarsisini cozer:
+
+- **Kategori bir alt kategoriyse** (parent'i var):
+  - `mainCategory` = parent kategori (`{ id, name }`)
+  - `subCategory` = collection'in dogrudan bagli oldugu kategori (`{ id, name }`)
+- **Kategori bir ana kategoriyse** (parent'i yok):
+  - `mainCategory` = collection'in dogrudan bagli oldugu kategori (`{ id, name }`)
+  - `subCategory` = `null`
+- **Kategori yoksa**: Her ikisi de `null`
+
+**Filtreleme icin kullanim:**
+- Bottom sheet'te ana kategori secildiyse: `mainCategoryId={mainCategory.id}` gonderin
+- Alt kategori secildiyse: `mainCategoryId={mainCategory.id}&subCategoryId={subCategory.id}` gonderin
 
 ---
 
@@ -155,7 +185,15 @@ Bir collection'in detayini ve badge listesini getirir. Badge'ler icinde arama de
     "totalBadges": 8,
     "earnedBadges": 3,
     "coverImage": "https://cdn.example.com/collections/banner.jpg",
-    "category": "Elektronik"
+    "category": "Elektronik",
+    "mainCategory": {
+      "id": "cat_main_001",
+      "name": "Teknoloji"
+    },
+    "subCategory": {
+      "id": "cat_sub_001",
+      "name": "Elektronik"
+    }
   },
   "badges": [
     {
@@ -201,6 +239,8 @@ Bir collection'in detayini ve badge listesini getirir. Badge'ler icinde arama de
 | `earnedBadges` | `number` | Kazanilan badge sayisi |
 | `coverImage` | `string \| null` | Kapak gorseli |
 | `category` | `string \| null` | Kategori adi |
+| `mainCategory` | `object \| null` | Ana kategori (`{ id, name }`) |
+| `subCategory` | `object \| null` | Alt kategori (`{ id, name }`) |
 
 ### Response Fields — `badges[]`
 
@@ -262,6 +302,8 @@ Kullanicinin tamamladigi collection'lar. Profil sayfasinda "Tamamlanan Koleksiyo
       "description": "Elektronik kategorisindeki badge'leri topla",
       "coverImage": "https://cdn.example.com/collections/banner.jpg",
       "category": "Elektronik",
+      "mainCategory": { "id": "cat_main_001", "name": "Teknoloji" },
+      "subCategory": { "id": "cat_sub_001", "name": "Elektronik" },
       "completedAt": "2026-03-10T14:30:00.000Z",
       "totalBadges": 8,
       "earnedBadges": 8
@@ -285,6 +327,8 @@ Kullanicinin tamamladigi collection'lar. Profil sayfasinda "Tamamlanan Koleksiyo
 | `collections[].description` | `string` | Kisa aciklama |
 | `collections[].coverImage` | `string \| null` | Kapak gorseli |
 | `collections[].category` | `string \| null` | Kategori adi |
+| `collections[].mainCategory` | `object \| null` | Ana kategori (`{ id, name }`) |
+| `collections[].subCategory` | `object \| null` | Alt kategori (`{ id, name }`) |
 | `collections[].completedAt` | `string (ISO 8601) \| null` | Son goal'un tamamlandigi tarih |
 | `collections[].totalBadges` | `number` | Toplam badge sayisi |
 | `collections[].earnedBadges` | `number` | Kazanilan badge sayisi |
@@ -321,6 +365,8 @@ Kullanicinin herhangi bir ilerleme kaydettigi collection'lar (in_progress + comp
       "totalProgress": 100,
       "coverImage": "https://cdn.example.com/collections/banner.jpg",
       "category": "Elektronik",
+      "mainCategory": { "id": "cat_main_001", "name": "Teknoloji" },
+      "subCategory": { "id": "cat_sub_001", "name": "Elektronik" },
       "status": "in_progress",
       "totalBadges": 8,
       "earnedBadges": 3
@@ -346,6 +392,8 @@ Kullanicinin herhangi bir ilerleme kaydettigi collection'lar (in_progress + comp
 | `collections[].totalProgress` | `number` | Toplam hedef |
 | `collections[].coverImage` | `string \| null` | Kapak gorseli |
 | `collections[].category` | `string \| null` | Kategori adi |
+| `collections[].mainCategory` | `object \| null` | Ana kategori (`{ id, name }`) |
+| `collections[].subCategory` | `object \| null` | Alt kategori (`{ id, name }`) |
 | `collections[].status` | `string` | `"in_progress"` \| `"completed"` |
 | `collections[].totalBadges` | `number` | Toplam badge sayisi |
 | `collections[].earnedBadges` | `number` | Kazanilan badge sayisi |

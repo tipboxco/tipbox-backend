@@ -1,5 +1,10 @@
 /* ========== Collections (User-facing) DTOs ========== */
 
+export interface CollectionCategoryInfo {
+  id: string;
+  name: string;
+}
+
 export interface CollectionListItem {
   id: string;
   title: string;
@@ -10,6 +15,8 @@ export interface CollectionListItem {
   earnedBadges: number;
   coverImage: string | null;
   category?: string | null;
+  mainCategory: CollectionCategoryInfo | null;
+  subCategory: CollectionCategoryInfo | null;
 }
 
 export interface CollectionsListResponse {
@@ -61,6 +68,8 @@ export interface UserCollectionProgressItem {
   totalProgress: number;
   coverImage: string | null;
   category: string | null;
+  mainCategory: CollectionCategoryInfo | null;
+  subCategory: CollectionCategoryInfo | null;
   status: 'in_progress' | 'completed';
   totalBadges: number;
   earnedBadges: number;
@@ -82,6 +91,8 @@ export interface CompletedCollectionItem {
   description: string;
   coverImage: string | null;
   category: string | null;
+  mainCategory: CollectionCategoryInfo | null;
+  subCategory: CollectionCategoryInfo | null;
   completedAt: string | null;
   totalBadges: number;
   earnedBadges: number;
