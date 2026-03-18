@@ -3,18 +3,29 @@
 # Yoksa nginx sadece HTTP modunda çalışır
 
 SSL_CONF="/etc/nginx/conf.d/ssl-tipbox.conf"
-CERT_DIR="/etc/letsencrypt/live/api-test.tipbox.co"
+DOMAIN="api-test.tipbox.co"
 
-if [ -f "$CERT_DIR/fullchain.pem" ] && [ -f "$CERT_DIR/privkey.pem" ]; then
-  echo "SSL certificate found, enabling HTTPS..."
+# Certbot force-renewal sonrası -0001, -0002 gibi suffix ekleyebilir
+# En güncel sertifika dizinini bul
+CERT_DIR=""
+for dir in /etc/letsencrypt/live/${DOMAIN}*/; do
+  if [ -f "${dir}fullchain.pem" ] && [ -f "${dir}privkey.pem" ]; then
+    CERT_DIR="$dir"
+  fi
+done
+# Trailing slash'i kaldır
+CERT_DIR="${CERT_DIR%/}"
+
+if [ -n "$CERT_DIR" ] && [ -f "$CERT_DIR/fullchain.pem" ] && [ -f "$CERT_DIR/privkey.pem" ]; then
+  echo "SSL certificate found at $CERT_DIR, enabling HTTPS..."
   cat > "$SSL_CONF" << 'SSLEOF'
 server {
     listen 443 ssl;
     http2 on;
-    server_name api-test.tipbox.co;
+    server_name __DOMAIN__;
 
-    ssl_certificate /etc/letsencrypt/live/api-test.tipbox.co/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api-test.tipbox.co/privkey.pem;
+    ssl_certificate __CERT_DIR__/fullchain.pem;
+    ssl_certificate_key __CERT_DIR__/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
@@ -142,8 +153,10 @@ server {
     }
 }
 SSLEOF
+  # Placeholder'ları gerçek değerlerle değiştir
+  sed -i "s|__DOMAIN__|$DOMAIN|g; s|__CERT_DIR__|$CERT_DIR|g" "$SSL_CONF"
   echo "HTTPS enabled."
 else
-  echo "No SSL certificate found at $CERT_DIR, running HTTP only."
+  echo "No SSL certificate found, running HTTP only."
   rm -f "$SSL_CONF" 2>/dev/null
 fi

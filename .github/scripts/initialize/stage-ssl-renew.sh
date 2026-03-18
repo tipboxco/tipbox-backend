@@ -6,20 +6,29 @@ cd "$PROJECT_DIR" || exit 1
 
 DOMAIN="api-test.tipbox.co"
 EMAIL="admin@tipbox.co"
-CERT_PATH="./certbot/conf/live/${DOMAIN}/fullchain.pem"
 
 # Helper: certbot komutlarını doğru entrypoint ile çalıştır
-# (docker-compose'daki certbot servisi custom entrypoint kullanıyor,
-#  one-off komutlar için --entrypoint override gerekli)
 run_certbot() {
   docker compose -f "$COMPOSE_FILE" run --rm --entrypoint "certbot" certbot "$@"
 }
 
-# 1. Sertifika var mı kontrol et
-if [ ! -f "$CERT_PATH" ]; then
+# Sertifika dizinini bul (certbot -0001 suffix ekleyebilir)
+find_cert_path() {
+  local found=""
+  for dir in ./certbot/conf/live/${DOMAIN}*/; do
+    if [ -f "${dir}fullchain.pem" ] && [ -f "${dir}privkey.pem" ]; then
+      found="${dir}fullchain.pem"
+    fi
+  done
+  echo "$found"
+}
+
+CERT_PATH=$(find_cert_path)
+
+# 1. Sertifika kontrol et
+if [ -z "$CERT_PATH" ]; then
   echo "⚠️  No SSL certificate found. Obtaining new certificate..."
 
-  # nginx HTTP modunda çalışıyor olmalı (ACME challenge için)
   run_certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
@@ -40,8 +49,24 @@ else
     echo "📋 Certificate expires: $EXPIRY_DATE ($DAYS_LEFT days left)"
 
     if [ "$DAYS_LEFT" -lt 30 ]; then
-      echo "⚠️  Certificate expires in less than 30 days. Renewing..."
-      run_certbot renew --force-renewal
+      echo "⚠️  Certificate expires in less than 30 days. Cleaning up and renewing..."
+
+      # Tüm eski sertifikaları sil (-0001 suffix sorununu önle)
+      run_certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
+      # -0001 gibi suffix'li olanları da temizle
+      for cert_name in $(run_certbot certificates 2>/dev/null | grep "Certificate Name:" | awk '{print $3}' | grep "^${DOMAIN}"); do
+        run_certbot delete --cert-name "$cert_name" --non-interactive 2>/dev/null || true
+      done
+
+      # Temiz sertifika al (doğru path'e yazılır)
+      run_certbot certonly \
+        --webroot \
+        --webroot-path=/var/www/certbot \
+        --email "$EMAIL" \
+        --agree-tos \
+        --no-eff-email \
+        -d "$DOMAIN"
+
       echo "✅ Certificate renewed!"
     else
       echo "✅ Certificate is valid for $DAYS_LEFT more days. No renewal needed."
@@ -77,7 +102,5 @@ for i in $(seq 1 5); do
   sleep 3
 done
 
-# HTTPS çalışmıyorsa uyar ama deploy'u başarısız yapma
-echo "⚠️  HTTPS not responding yet. This may be normal if DNS is not configured."
-echo "    HTTP should still be working. Check nginx logs for details."
+echo "⚠️  HTTPS not responding yet. Check nginx logs for details."
 echo "    Manual fix: ssh into server and run ./cert-init.sh --revoke-old"
