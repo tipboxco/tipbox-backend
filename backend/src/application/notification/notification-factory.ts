@@ -270,7 +270,10 @@ export class NotificationFactory {
       type: NotificationType.TIPS_SENT,
       category: NotificationCategory.TRANSACTION,
       getTitle: () => 'TIPS Sent! 💸',
-      getMessage: (data) => `You sent ${data.amount} TIPS to ${data.recipientName}`,
+      getMessage: (data) => {
+        const recipient = data.recipientName || 'a user';
+        return `You sent ${data.amount} TIPS to ${recipient}`;
+      },
     });
 
     // Reward Notifications

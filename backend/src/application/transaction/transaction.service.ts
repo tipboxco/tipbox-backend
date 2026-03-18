@@ -149,9 +149,15 @@ export class TransactionService {
         const sdk = getThirdwebSdkService();
         if (sdk.isConfigured()) {
           feePercentage = await sdk.getFeePercentage();
-          if (feePercentage > 0 && feePercentage <= 100) {
+          // C3 fix: Cap at < 100 — 100% fee is treated as misconfiguration
+          if (feePercentage > 0 && feePercentage < 100) {
             feeAmount = Math.floor(request.amount * feePercentage / 100);
             netAmount = request.amount - feeAmount;
+            // Ensure receiver gets at least 1 token
+            if (netAmount <= 0) {
+              netAmount = 1;
+              feeAmount = request.amount - 1;
+            }
           }
         }
       } catch (err) {
@@ -351,6 +357,21 @@ export class TransactionService {
         : []),
     ]);
 
+    // C1 fix: Unlock locked balance on cancel
+    if (transaction.amount) {
+      try {
+        await this.walletRepo.unlockBalance(wallet.id, transaction.amount);
+      } catch (unlockErr) {
+        logger.warn({
+          transactionId,
+          walletId: wallet.id,
+          amount: transaction.amount,
+          error: unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
+          message: 'Failed to unlock balance on cancel',
+        });
+      }
+    }
+
     const updated = await this.transactionRepo.findById(transactionId);
     logger.info({
       transactionId,
@@ -498,6 +519,23 @@ export class TransactionService {
       return existing!;
     }
 
+    // C1 fix: Unlock locked balance for SEND-type transactions (was locked in sendTip)
+    const unlockableOnConfirm = [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW];
+    if (unlockableOnConfirm.includes(transaction.actionType) && transaction.amount) {
+      try {
+        await this.walletRepo.unlockBalance(transaction.walletId, transaction.amount);
+      } catch (unlockErr) {
+        // Chain sync will correct lockedBalance — log and continue
+        logger.warn({
+          transactionId,
+          walletId: transaction.walletId,
+          amount: transaction.amount,
+          error: unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
+          message: 'Failed to unlock balance on confirm (chain sync will correct)',
+        });
+      }
+    }
+
     if (!transaction.amount) {
       logger.warn(`Transaction ${transactionId} has no amount, skipping balance update`);
       const confirmed = await this.transactionRepo.findById(transactionId);
@@ -595,6 +633,15 @@ export class TransactionService {
       throw new NotFoundError('Transaction not found');
     }
 
+    // C2 fix: Status guard — cannot fail already-confirmed transactions
+    if (transaction.status === TransactionStatus.CONFIRMED) {
+      logger.warn({
+        transactionId,
+        message: 'Cannot fail already-confirmed transaction (status guard)',
+      });
+      return transaction;
+    }
+
     logger.error({
       transactionId,
       errorMessage,
@@ -609,6 +656,22 @@ export class TransactionService {
 
     if (!failedTx) {
       throw new Error('Failed to mark transaction as failed');
+    }
+
+    // C1 fix: Unlock locked balance for SEND-type transactions
+    const unlockableOnFail = [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW];
+    if (unlockableOnFail.includes(transaction.actionType) && transaction.amount) {
+      try {
+        await this.walletRepo.unlockBalance(transaction.walletId, transaction.amount);
+      } catch (unlockErr) {
+        logger.warn({
+          transactionId,
+          walletId: transaction.walletId,
+          amount: transaction.amount,
+          error: unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
+          message: 'Failed to unlock balance on fail',
+        });
+      }
     }
 
     // Transaction fail notification (webhook/transaction akışı üzerinden)

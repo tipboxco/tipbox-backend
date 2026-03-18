@@ -55,12 +55,14 @@ export class TransactionNotificationService {
           const toProfile = recipientUserId
             ? await this.profileRepo.findByUserId(recipientUserId)
             : null;
-          const recipientName = toProfile?.displayName || toProfile?.userName || 'User';
+          const recipientName = toProfile?.displayName || toProfile?.userName || null;
+          // N1/N2 fix: senderUserId ÇIKARILDI — enricher senderUserId'yi recipientUserId'den
+          // önce kontrol ediyor ve gönderenin KENDİ avatarını resolve ediyordu.
+          // recipientUserId kalınca enricher alıcının avatarını doğru resolve eder.
           await this.notificationService.sendNotification(userId, NotificationType.TIPS_SENT, {
             amount,
             recipientUserId: recipientUserId ?? null,
             recipientName,
-            senderUserId: userId,
             transactionId: transaction.id,
           });
           break;
@@ -86,6 +88,7 @@ export class TransactionNotificationService {
             rewardType: metadata.rewardType ?? 'LADDER',
             rewardId: metadata.rewardId ?? null,
             transactionId: transaction.id,
+            isSystem: true,
           });
           break;
         }
@@ -138,6 +141,7 @@ export class TransactionNotificationService {
             actionType: transaction.actionType,
             transactionId: transaction.id,
             postId: (metadata.postId as string) ?? null,
+            isSystem: true,
           });
           break;
         }
@@ -150,6 +154,7 @@ export class TransactionNotificationService {
             amount,
             actionType: transaction.actionType,
             transactionId: transaction.id,
+            isSystem: true,
           });
           break;
         }
@@ -205,6 +210,7 @@ export class TransactionNotificationService {
           amount: transaction.amount ?? 0,
           actionType: transaction.actionType,
           errorMessage,
+          isSystem: true,
         }
       );
     } catch (error) {

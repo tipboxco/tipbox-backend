@@ -1,8 +1,8 @@
 # Transaction System Audit Report
 
 **Tarih:** 2026-03-18
-**Son Guncelleme:** 2026-03-19
-**Kapsam:** TIP_SEND, WITHDRAW, DEPOSIT, Webhook lifecycle, Notification, Balance management, Komisyon/Fee yonetimi
+**Son Guncelleme:** 2026-03-18 (Notification Veri Formati Iyilestirme - Phase 3)
+**Kapsam:** TIP_SEND, WITHDRAW, DEPOSIT, Webhook lifecycle, Notification, Balance management, Komisyon/Fee yonetimi, Locked Balance, Entity Consistency, Notification Data Format & Enrichment
 
 ---
 
@@ -10,8 +10,10 @@
 
 > **14/14 bug fixlendi** + 1 ek bug (Duplicate DEPOSIT/WITHDRAW) fixlendi.
 > **10 yeni bug tespit edildi ve FIXLENDI** (Komisyon/Fee yonetimi + Notification mantik/hedefleme hatalari) — BUG-15 ~ BUG-24
+> **5 CRITICAL bug tespit edildi ve FIXLENDI** (Kapsamli Sistem Analizi - Phase 2) — BUG-25 ~ BUG-29
+> **5 notification veri formati bugi tespit edildi ve FIXLENDI** (Notification Data Format - Phase 3) — BUG-30 ~ BUG-34
 > **1 pre-existing bug fixlendi** (Pagination testi: eksik test data)
-> **65/65 E2E test PASSED** (2026-03-19)
+> **82/82 E2E test PASSED** (2026-03-18)
 
 | # | Bug | Durum | Fix Detayi |
 |---|-----|-------|------------|
@@ -40,6 +42,16 @@
 | 22 | TIPS_SENT notification avatar resolve edilemiyor | **FIXLENDI** | Enricher'a `recipientUserId` desteği eklendi |
 | 23 | TIPS_SENT notification data'sinda `senderUserId` eksik | **FIXLENDI** | TIP_SEND notification data'sina `senderUserId` eklendi |
 | 24 | FEE transaction metadata'sinda user ID yok | **FIXLENDI** | FEE metadata'sina `senderUserId` ve `pairedTransactionId` eklendi |
+| 25 | **CRITICAL: Locked balance hic unlock edilmiyor** | **FIXLENDI** | `confirmTransaction()`, `failTransaction()`, `cancelTipSend()` icine `unlockBalance()` eklendi |
+| 26 | **CRITICAL: failTransaction() status guard yok** | **FIXLENDI** | CONFIRMED tx fail edilemez — status guard eklendi, sessizce mevcut tx donuyor |
+| 27 | **CRITICAL: 100% fee netAmount=0 yapiyor** | **FIXLENDI** | `feePercentage < 100` cap + `netAmount <= 0` ise minimum 1 token guarantee |
+| 28 | Entity isSend() BOOST_POST eksik | **FIXLENDI** | `transaction.entity.ts` isSend() listesine BOOST_POST eklendi |
+| 29 | Worker failSendOrBoth unlock bypass | **FIXLENDI** | `transactionService.failTransaction()` kullanilarak unlock otomatik tetikleniyor |
+| 30 | TIPS_SENT notification gonderenin kendi avatarini gosteriyor | **FIXLENDI** | `senderUserId` TIPS_SENT data'sindan cikarildi; enricher artik `recipientUserId`'yi resolve eder |
+| 31 | TIPS_SENT router enrichment gonderenin avatarini override ediyor | **FIXLENDI** | Router'da TIPS_SENT branch'i `recipientUserId` ile avatar yukluyor (senderUserId yerine) |
+| 32 | System notification'larda kullanici avatari gosteriliyor | **FIXLENDI** | BOOST_POST, CLAIM_REWARD, SWAP_*, AIRDROP, CLAIM_BADGE, TRANSACTION_FAILED icin `isSystem: true` flag eklendi |
+| 33 | TIPS_SENT enrichment'ta amount ve transactionId eksik | **FIXLENDI** | Router enrichment'a `amount` ve `transactionId` alanlari eklendi |
+| 34 | TRANSACTION_FAILED enrichment'ta errorMessage eksik | **FIXLENDI** | Router enrichment'a `errorMessage` alani eklendi |
 
 ### Degistirilen Dosyalar
 
@@ -47,25 +59,27 @@
 |-------|--------|
 | `backend/src/infrastructure/repositories/wallet-prisma.repository.ts` | BUG-1,3: `incrementBalance()`, `lockBalance()`, `unlockBalance()` atomic methodlar |
 | `backend/src/application/wallet/wallet.service.ts` | BUG-3: atomic increment; BUG-5: pending tx guard |
-| `backend/src/application/transaction/transaction.service.ts` | BUG-1: lockBalance; BUG-2: $transaction; BUG-11: cancelledByUser; BUG-12,13,14 |
+| `backend/src/application/transaction/transaction.service.ts` | BUG-1: lockBalance; BUG-2: $transaction; BUG-11: cancelledByUser; BUG-12,13,14; BUG-25: unlockBalance on confirm/fail/cancel; BUG-26: failTransaction status guard; BUG-27: fee cap |
 | `backend/src/interfaces/thirdweb-webhook/thirdweb-webhook.dto.ts` | BUG-4: errored priority fix |
 | `backend/src/application/thirdweb-webhook/thirdweb-webhook.service.ts` | BUG-13: pairedTransactionId; EK: cross-source txHash guard |
 | `backend/src/application/thirdweb-webhook/contract-event.service.ts` | EK: cross-source txHash guard (normalized + legacy) |
 | `backend/src/application/alchemy-webhook/alchemy-webhook.service.ts` | EK: cross-source txHash guard |
 | `backend/src/interfaces/transaction/transaction.router.ts` | BUG-6: authorization; BUG-10: batch user lookup |
-| `backend/src/application/transaction/transaction-notification.service.ts` | BUG-7: BOOST_POST; BUG-12: 'User' |
-| `backend/src/application/notification/notification-factory.ts` | BUG-8: senderUsername template |
-| `backend/src/infrastructure/workers/tip-send.worker.ts` | BUG-9: retry mekanizmasi |
+| `backend/src/application/transaction/transaction-notification.service.ts` | BUG-7: BOOST_POST; BUG-12: 'User'; BUG-30: senderUserId cikarildi; BUG-32: isSystem flag eklendi |
+| `backend/src/application/notification/notification-factory.ts` | BUG-8: senderUsername template; BUG-30: TIPS_SENT recipientName null fallback |
+| `backend/src/interfaces/notification/notification.router.ts` | BUG-31: TIPS_SENT recipient avatar; BUG-32: isSystem enrichment; BUG-33: amount/transactionId; BUG-34: errorMessage |
+| `backend/src/infrastructure/workers/tip-send.worker.ts` | BUG-9: retry mekanizmasi; BUG-29: failSendOrBoth → transactionService.failTransaction |
 | `backend/src/application/notification/notification-enricher.ts` | BUG-22: recipientUserId avatar desteği |
-| `backend/tests/e2e/transaction-lifecycle.test.ts` | 18 yeni test + pagination fix: Fee, Atomic Guard, Notification, Failed Filter, Resilience, Cancel Metadata |
+| `backend/src/domain/transaction/transaction.entity.ts` | BUG-28: isSend() BOOST_POST eklendi |
+| `backend/tests/e2e/transaction-lifecycle.test.ts` | 35 yeni test + pagination fix: Fee, Atomic Guard, Notification, Failed Filter, Resilience, Cancel Metadata, Locked Balance, Status Guard, Fee Edge Cases, Entity Consistency, Notification Data Format (N1-N5) |
 | `backend/tests/e2e/helpers.ts` | Prisma schema uyumu: isVerified/isActive → emailVerified |
 
-### E2E Test Sonuclari (2026-03-19)
+### E2E Test Sonuclari (2026-03-18 — Phase 3)
 
 ```
 Test Suites: 1 passed, 1 total
-Tests:       65 passed, 0 failed, 65 total
-Time:        ~24s
+Tests:       82 passed, 0 failed, 82 total
+Time:        ~25s
 ```
 
 | Test Grubu | Test Sayisi | Sonuc | Aciklama |
@@ -82,10 +96,15 @@ Time:        ~24s
 | Webhook Signature | 4 | **PASSED** | Valid/invalid signature, expired/invalid timestamp |
 | Fee Calculation | 6 | **PASSED** | %25 komisyon, SDK kapali, WITHDRAW fee yok, %33 decimal floor, %17 small amount, %0 fee |
 | Atomic Confirm Guard | 2 | **PASSED** | Double-confirm idempotent, duplicate notification yok |
-| Notification Data | 3 | **PASSED** | TIPS_SENT senderUserId, TIPS_RECEIVED senderUserId, DEPOSIT notification yok |
+| Notification Data | 3 | **PASSED** | TIPS_SENT recipientUserId (senderUserId yok), TIPS_RECEIVED senderUserId, DEPOSIT notification yok |
 | Failed Notification Filter | 3 | **PASSED** | TIP_SEND fail → notif, TIP_RECEIVE fail → no notif (BUG-19), WITHDRAW fail → no notif |
 | Notification Error Resilience | 2 | **PASSED** | Confirm basarili even if notification throws, fail basarili even if notification throws |
 | Cancel Metadata Preservation | 1 | **PASSED** | Fee metadata (feeAmount, feePercentage) cancel sonrasi korunuyor |
+| **Locked Balance Unlock (C1)** | **5** | **PASSED** | Confirm unlock, WITHDRAW unlock, fail unlock, cancel unlock, sequential tip lock tracking |
+| **Fail Status Guard (C2)** | **2** | **PASSED** | CONFIRMED tx fail edilemez, CREATED tx normal fail edilir |
+| **Fee Edge Cases (C3)** | **3** | **PASSED** | 100% fee = no-fee, netAmount >= 1 guarantee, normal %10 hesaplama |
+| **Entity isSend/isReceive (C4)** | **3** | **PASSED** | BOOST_POST = send, DEPOSIT = receive, WITHDRAW = send |
+| **Notification Data Format (N1-N5)** | **4** | **PASSED** | TIPS_SENT recipient avatar, BOOST_POST isSystem, TRANSACTION_FAILED isSystem+errorMessage, TIPS_RECEIVED no isSystem |
 
 ---
 
@@ -990,8 +1009,13 @@ sendTip(100 TIPS, A→B)
 | 22 | TIPS_SENT notification avatar resolve edilemiyor | **YUKSEK** | UX Bug | notification-enricher.ts | FIXLENDI |
 | 23 | TIPS_SENT notification data'sinda sender bilgisi eksik | **ORTA** | Missing Data | transaction-notification.service.ts | FIXLENDI |
 | 24 | FEE transaction metadata'sinda user ID yok | **DUSUK** | Missing Data | contract-event.service.ts | FIXLENDI |
+| 25 | Locked balance hic unlock edilmiyor | **KRITIK** | Balance Bug | transaction.service.ts | FIXLENDI |
+| 26 | failTransaction status guard yok | **KRITIK** | Logic Bug | transaction.service.ts | FIXLENDI |
+| 27 | 100% fee netAmount=0 yapiyor | **KRITIK** | Edge Case | transaction.service.ts | FIXLENDI |
+| 28 | Entity isSend() BOOST_POST eksik | **ORTA** | Data Model | transaction.entity.ts | FIXLENDI |
+| 29 | Worker failSendOrBoth unlock bypass | **YUKSEK** | Balance Bug | tip-send.worker.ts | FIXLENDI |
 
-### Onerilen Fix Sirasi (Yeni Buglar)
+### Onerilen Fix Sirasi (Eski Buglar — Tumu FIXLENDI)
 
 1. **BUG-15:** `sendTip()` icinde `getFeePercentage()` ile net tutar hesapla, RECEIVE'i net amount ile olustur
 2. **BUG-17:** Contract event INTERNAL TRANSFER blogunda RECEIVE amount dogrulamasi/guncelleme ekle
@@ -1002,6 +1026,16 @@ sendTip(100 TIPS, A→B)
 7. **BUG-19:** `sendTransactionFailedNotification()` icine TIP_RECEIVE filtresi ekle
 8. **BUG-20:** FEE action type'i notification silent grubuna tasi
 9. **BUG-24:** FEE transaction metadata'sina ilgili user ID'leri ekle
+
+### Phase 2 Buglar (Kapsamli Sistem Analizi — 2026-03-18)
+
+| # | Bug | Severity | Fix |
+|---|-----|----------|-----|
+| 25 | Locked balance hic unlock edilmiyor | **KRITIK** | confirmTransaction/failTransaction/cancelTipSend icine unlockBalance eklendi |
+| 26 | failTransaction status guard yok | **KRITIK** | CONFIRMED tx fail edilemez guard eklendi |
+| 27 | 100% fee netAmount=0 yapiyor | **KRITIK** | feePercentage < 100 cap + netAmount >= 1 guarantee |
+| 28 | Entity isSend() BOOST_POST eksik | **ORTA** | transaction.entity.ts isSend() listesine BOOST_POST eklendi |
+| 29 | Worker failSendOrBoth unlock bypass | **YUKSEK** | transactionService.failTransaction() kullaniliyor |
 
 ---
 
@@ -1259,3 +1293,250 @@ metadata: {
   pairedTransactionId: relatedReceiveTransactionId ?? null,    // ← EKLE
 },
 ```
+
+---
+
+## PHASE 2: KAPSAMLI SISTEM ANALIZI (2026-03-18)
+
+3 paralel analiz ajani (wallet, transaction, webhook) calistirildi. Toplam ~40 sorun tespit edildi. CRITICAL olanlar fixlendi:
+
+### BUG-25: CRITICAL — Locked Balance Hicbir Zaman Unlock Edilmiyor — FIXLENDI
+
+**Dosya:** `backend/src/application/transaction/transaction.service.ts`
+**Oncelik:** **KRITIK — EN YUKSEK ONCELIK**
+
+**Problem:**
+`sendTip()` icinde `lockBalance()` cagirilarak gonderilecek tutar kilitleniyor (double spend onleme). Ancak:
+- `confirmTransaction()` — unlock YOK
+- `failTransaction()` — unlock YOK
+- `cancelTipSend()` — unlock YOK
+
+Bu, **her basarili/basarisiz/iptal edilen tip gonderiminde** kilitlenen tutarin kalici olarak kilitli kalmasina neden olur.
+
+**Etki:**
+- Kullanicinin `available balance = balance - lockedBalance` surekli azalir
+- Birden fazla tip gonderdikten sonra bakiye var olmasina ragmen "Insufficient balance" hatasi alir
+- Chain sync `setBalance` ile lockedBalance'i sifirlarsa gecici olarak cozulur ama sync garantisi yok
+
+**Fix:**
+```typescript
+// confirmTransaction() — atomic confirm sonrasi:
+const unlockableOnConfirm = [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW];
+if (unlockableOnConfirm.includes(transaction.actionType) && transaction.amount) {
+  await this.walletRepo.unlockBalance(transaction.walletId, transaction.amount);
+}
+
+// failTransaction() — fail sonrasi:
+const unlockableOnFail = [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW];
+if (unlockableOnFail.includes(transaction.actionType) && transaction.amount) {
+  await this.walletRepo.unlockBalance(transaction.walletId, transaction.amount);
+}
+
+// cancelTipSend() — cancel sonrasi:
+if (transaction.amount) {
+  await this.walletRepo.unlockBalance(wallet.id, transaction.amount);
+}
+```
+
+**Test:** 5 E2E test (confirm unlock, WITHDRAW unlock, fail unlock, cancel unlock, sequential tip lock tracking)
+
+---
+
+### BUG-26: CRITICAL — failTransaction() CONFIRMED Transaction'i Fail Edebilir — FIXLENDI
+
+**Dosya:** `backend/src/application/transaction/transaction.service.ts:589-626`
+**Oncelik:** **KRITIK**
+
+**Problem:**
+`failTransaction()` icinde hicbir status kontrolu yok. Zaten confirmed olmus bir transaction'i fail edebilir:
+
+```typescript
+// ONCEKI KOD — guard yok:
+async failTransaction(transactionId, errorMessage) {
+  const transaction = await this.transactionRepo.findById(transactionId);
+  // ⚠ Hic status kontrol yok!
+  const failedTx = await this.transactionRepo.updateStatus(transactionId, FAILED, { errorMessage });
+}
+```
+
+**Senaryo:**
+1. Worker: confirmTransaction(txId) → CONFIRMED + balance guncellendi
+2. Alchemy webhook: ayni txHash ile fail sinyali gonderir (ornegin revert)
+3. failTransaction(txId) → CONFIRMED → FAILED → balance geri alinmadi, ama status yanlis
+
+**Fix:**
+```typescript
+if (transaction.status === TransactionStatus.CONFIRMED) {
+  logger.warn({ transactionId, message: 'Cannot fail already-confirmed transaction (status guard)' });
+  return transaction; // Sessizce mevcut tx don
+}
+```
+
+**Test:** 2 E2E test (CONFIRMED fail engellenir, CREATED normal fail edilir)
+
+---
+
+### BUG-27: CRITICAL — 100% Fee Durumunda netAmount = 0 — FIXLENDI
+
+**Dosya:** `backend/src/application/transaction/transaction.service.ts:148-166`
+**Oncelik:** **KRITIK**
+
+**Problem:**
+Eger contract'tan donen `feePercentage = 100` ise:
+```
+feeAmount = Math.floor(amount * 100 / 100) = amount
+netAmount = amount - amount = 0
+```
+RECEIVE transaction 0 tutarla olusturulur. On-chain'de 0 token transfer denemesi revert edebilir veya kullanici "0 TIPS received" gorur.
+
+**Fix:**
+```typescript
+// feePercentage < 100 (100% = misconfiguration, fee uygulanmaz)
+if (feePercentage > 0 && feePercentage < 100) {
+  feeAmount = Math.floor(request.amount * feePercentage / 100);
+  netAmount = request.amount - feeAmount;
+  // Receiver en az 1 token alsin
+  if (netAmount <= 0) {
+    netAmount = 1;
+    feeAmount = request.amount - 1;
+  }
+}
+```
+
+**Test:** 3 E2E test (100% fee = no-fee, small amount + high fee = min 1, normal fee dogru hesaplama)
+
+---
+
+### BUG-28: Entity isSend() BOOST_POST Eksik — FIXLENDI
+
+**Dosya:** `backend/src/domain/transaction/transaction.entity.ts:39-47`
+**Oncelik:** **ORTA**
+
+**Problem:**
+Entity'nin `isSend()` metodu BOOST_POST icermiyor ama service'in `confirmTransaction()` icindeki `isSend` listesi BOOST_POST iceriyor. Transaction history API'de `type: tx.isSend() ? 'sent' : 'received'` kullanildigi icin BOOST_POST "received" olarak gosterilir.
+
+**Fix:** `transaction.entity.ts` isSend() listesine `TransactionActionType.BOOST_POST` eklendi.
+
+**Test:** 3 E2E test (BOOST_POST=send, DEPOSIT=receive, WITHDRAW=send)
+
+---
+
+### BUG-29: Worker failSendOrBoth Unlock'u Bypass Ediyor — FIXLENDI
+
+**Dosya:** `backend/src/infrastructure/workers/tip-send.worker.ts:241-253`
+**Oncelik:** **YUKSEK**
+
+**Problem:**
+Worker'in `failSendOrBoth()` metodu dogrudan `transactionRepo.updateStatus()` cagirarak `transactionService.failTransaction()`'i bypass ediyor. BUG-25 fix'i ile failTransaction'a eklenen unlockBalance mantigi worker'in fail path'inde calismaz.
+
+**Fix:**
+```typescript
+// ONCEKI:
+private async failSendOrBoth(...) {
+  await this.transactionRepo.updateStatus(sendId, FAILED, { errorMessage });
+  if (receiveId) await this.transactionRepo.updateStatus(receiveId, FAILED, { errorMessage });
+}
+
+// SONRAKI:
+private async failSendOrBoth(...) {
+  await this.transactionService.failTransaction(sendId, errorMessage);
+  if (receiveId) await this.transactionService.failTransaction(receiveId, errorMessage);
+}
+```
+
+---
+
+### Phase 3 Buglar (Notification Veri Formati Iyilestirme — 2026-03-18)
+
+### BUG-30: TIPS_SENT Notification Gonderenin Kendi Avatarini Gosteriyor (N1/N2) — FIXLENDI
+
+**Dosya:** `backend/src/application/transaction/transaction-notification.service.ts:53-68`, `backend/src/application/notification/notification-enricher.ts`
+**Oncelik:** **YUKSEK**
+
+**Problem:**
+TIPS_SENT notification data'sinda hem `senderUserId` hem `recipientUserId` gonderiliyordu. Enricher'in avatar resolution priority sirasi `senderUserId` (pozisyon 6) > `recipientUserId` (pozisyon 8) oldugu icin, gonderenin kendi avatarini resolve ediyordu. Kullanici kendi profilinde, gonderim yaptigi kisiyi degil, kendi avatarini goruyordu.
+
+**Fix:**
+`transaction-notification.service.ts` TIP_SEND case'inden `senderUserId` cikarildi. Artik sadece `recipientUserId` gonderiliyor, enricher alicinin avatarini dogru resolve eder.
+
+**Test:** E2E — "TIPS_SENT should include recipientUserId but NOT senderUserId (N1/N2)"
+
+---
+
+### BUG-31: TIPS_SENT Router Enrichment Gonderenin Avatarini Override Ediyor — FIXLENDI
+
+**Dosya:** `backend/src/interfaces/notification/notification.router.ts` (TIPS_SENT enrichment blogu)
+**Oncelik:** **YUKSEK**
+
+**Problem:**
+Notification router'da GET fetch sirasinda yapilan batch enrichment'ta TIPS_SENT branch'i `senderUserId` ile avatar ariyordu. Enricher fix'i (BUG-30) sonrasinda bile, router seviyesinde yanlis avatar resolve ediliyordu.
+
+**Fix:**
+Router'da TIPS_SENT enrichment blogu yeniden yazildi: `recipientUserId` ile avatar yukleniyor, `recipientUsername` ekleniyor, `amount` ve `transactionId` alanlari dahil ediliyor.
+
+---
+
+### BUG-32: System Notification'larda Kullanici Avatari Gosteriliyor (N3) — FIXLENDI
+
+**Dosya:** `backend/src/application/transaction/transaction-notification.service.ts`, `backend/src/interfaces/notification/notification.router.ts`
+**Oncelik:** **ORTA**
+
+**Problem:**
+BOOST_POST, CLAIM_REWARD, SWAP_TIP_TO_SOL, SWAP_SOL_TO_TIP, AIRDROP, CLAIM_BADGE, TRANSACTION_FAILED gibi sistem kaynakli notification'larda karsi taraf kullanici yoktu ama `isSystem` flag'i bulunmuyordu. Frontend avatar resolve edemeyince bos veya yanlis avatar gosteriyordu.
+
+**Fix:**
+1. `transaction-notification.service.ts`: Tum sistem kaynakli notification data'larina `isSystem: true` eklendi.
+2. `notification.router.ts`: TRANSACTION_CONFIRMED/FAILED/PENDING enrichment blogu `isSystem` flag'ini kontrol ediyor. `isSystem=true` ise `avatar: null` ve `isSystem: true` donuyor (frontend Tipbox logosu gosterecek). Karsi taraf kullanici varsa normal avatar enrichment yapiliyor.
+
+**Test:** E2E — "BOOST_POST notification should have isSystem=true (N3)"
+
+---
+
+### BUG-33: TIPS_SENT Enrichment'ta amount ve transactionId Eksik (N4) — FIXLENDI
+
+**Dosya:** `backend/src/interfaces/notification/notification.router.ts`
+**Oncelik:** **DUSUK**
+
+**Problem:**
+TIPS_SENT notification router enrichment'inda `amount` ve `transactionId` alanlari cikartilmiyordu. Frontend bu alanlari notification detail sayfasinda gostermek istediginde `undefined` aliyordu.
+
+**Fix:**
+Router enrichment'a `enriched.amount = data.amount ? Number(data.amount) : undefined` ve `enriched.transactionId = data.transactionId ?? undefined` eklendi.
+
+---
+
+### BUG-34: TRANSACTION_FAILED Enrichment'ta errorMessage Eksik (N5) — FIXLENDI
+
+**Dosya:** `backend/src/interfaces/notification/notification.router.ts`
+**Oncelik:** **DUSUK**
+
+**Problem:**
+TRANSACTION_FAILED notification'lari `errorMessage` iceriyordu ama router enrichment'inda bu alan enriched objesine aktarilmiyordu. Frontend hata detayini gosteremiyordu.
+
+**Fix:**
+Router enrichment'a `if (data.errorMessage) { enriched.errorMessage = data.errorMessage; }` eklendi.
+
+**Test:** E2E — "TRANSACTION_FAILED should have isSystem=true and errorMessage (N3/N5)"
+
+---
+
+## KALAN POTANSIYEL SORUNLAR (Onerilenler — Henuz Fixlenmedi)
+
+Asagidaki sorunlar kapsamli analizde tespit edildi ancak su anki sprint'te fixlenmedi. Risk seviyeleri ve onerileri:
+
+### HIGH Priority (Yakin Vadede)
+
+| # | Sorun | Risk | Oneri |
+|---|-------|------|-------|
+| H1 | Wallet address normalization eksik (`findByAddressForTracking`) | Checksummed vs lowercase address eslesmez | `findByAddressForTracking` icinde `toLowerCase()` normalization ekle |
+| H2 | `syncWalletBalanceFromChain` pending tx sirasinda override | Balance tutarsizligi | Mevcut guard yeterli (BUG-5'te fixlendi) ama worker'dan sync sonrasi double-check eklenebilir |
+| H3 | `setBalance()` negatif deger kabul eder | Negatif balance mumkun | `Math.max(0, balance)` validation ekle |
+| H4 | CLAIM_REWARD / BOOST_PROFILE duplicate korumasi yok | Ayni odul 2x claim edilebilir | Idempotency key (rewardId) ile duplicate kontrolu ekle |
+
+### MEDIUM Priority (Orta Vadede)
+
+| # | Sorun | Risk | Oneri |
+|---|-------|------|-------|
+| M1 | Wallet entity `metadata` field `any` tipi | TypeScript safety | Typed metadata interface olustur |
+| M2 | Triple webhook source (thirdweb + contract-event + alchemy) karmasikligi | Maintenance riski | Webhook gateway/router layer ile tek giris noktasi olustur |
+| M3 | `updateLockedBalance` TOCTOU race condition | Concurrent lock hatalari | Atomic `incrementLockedBalance` yaz (lockBalance patterni gibi) |

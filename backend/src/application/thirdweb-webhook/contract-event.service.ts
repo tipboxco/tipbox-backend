@@ -416,7 +416,31 @@ export class ContractEventService {
             existingActionType: anyExistingByHash.actionType,
             message: 'Contract event (v1): txHash already tracked, skipping DEPOSIT creation',
           });
-        } else {
+        }
+
+        // Pending tip guard: wallet'ta pending/created TIP_RECEIVE varsa bu internal tip — DEPOSIT oluşturma
+        if (!anyExistingByHash) {
+          const pendingTipReceive = await prisma.transaction.findFirst({
+            where: {
+              walletId: toWallet.id,
+              actionType: 'TIP_RECEIVE' as unknown as TransactionActionType,
+              status: { in: ['pending', 'created'] as TransactionStatus[] },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          });
+          if (pendingTipReceive) {
+            transactionId = pendingTipReceive.id;
+            logger.info({
+              walletId: toWallet.id,
+              pendingTipReceiveId: pendingTipReceive.id,
+              txHash: event.transactionHash,
+              message: 'Contract event (v1): pending TIP_RECEIVE found, skipping DEPOSIT creation (internal tip)',
+            });
+          }
+        }
+
+        if (!anyExistingByHash && !transactionId) {
           // Thirdweb DEPOSIT: sadece DEPOSIT action'ından sorumlu; TIP_RECEIVE INTERNAL TRANSFER bölümünde yönetilir
           const pendingTx = await prisma.transaction.findFirst({
             where: {
@@ -629,7 +653,31 @@ export class ContractEventService {
               existingActionType: anyExistingByHash.actionType,
               message: 'Contract event (v1): txHash already tracked, skipping WITHDRAW creation',
             });
-          } else {
+          }
+
+          // Pending tip guard: wallet'ta pending/created TIP_SEND varsa bu internal tip — WITHDRAW oluşturma
+          if (!anyExistingByHash) {
+            const pendingTipSend = await prisma.transaction.findFirst({
+              where: {
+                walletId: fromWallet.id,
+                actionType: 'TIP_SEND' as unknown as TransactionActionType,
+                status: { in: ['pending', 'created'] as TransactionStatus[] },
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true },
+            });
+            if (pendingTipSend) {
+              transactionId = pendingTipSend.id;
+              logger.info({
+                walletId: fromWallet.id,
+                pendingTipSendId: pendingTipSend.id,
+                txHash: event.transactionHash,
+                message: 'Contract event (v1): pending TIP_SEND found, skipping WITHDRAW creation (internal tip)',
+              });
+            }
+          }
+
+          if (!anyExistingByHash && !transactionId) {
             // Thirdweb WITHDRAW: sadece WITHDRAW action'ından sorumlu; TIP_SEND INTERNAL TRANSFER bölümünde yönetilir
             const pendingTx = await prisma.transaction.findFirst({
               where: {

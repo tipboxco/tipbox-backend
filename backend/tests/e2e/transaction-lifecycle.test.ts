@@ -1276,7 +1276,7 @@ describe('Transaction Lifecycle E2E', () => {
   // ==========================================================================
 
   describe('Notification Data Validation', () => {
-    it('should send TIPS_SENT notification with senderUserId on confirm', async () => {
+    it('should send TIPS_SENT notification with recipientUserId (not senderUserId) on confirm', async () => {
       const result = await transactionService.sendTip({
         fromUserId: sender.id,
         toUserId: receiver.id,
@@ -1297,7 +1297,9 @@ describe('Transaction Lifecycle E2E', () => {
       expect(tipsSentCall![0]).toBe(sender.id);
       // Üçüncü argüman: data objesi
       const data = tipsSentCall![2] as Record<string, unknown>;
-      expect(data.senderUserId).toBe(sender.id);
+      // N1/N2 fix: senderUserId TIPS_SENT data'sından çıkarıldı (enricher'ın recipientUserId kullanması için)
+      expect(data.senderUserId).toBeUndefined();
+      expect(data.recipientUserId).toBe(receiver.id);
       expect(data.amount).toBe(100);
       expect(data.transactionId).toBe(result.transaction.id);
     });
@@ -1502,6 +1504,375 @@ describe('Transaction Lifecycle E2E', () => {
       expect(metaAfter.feePercentage).toBe(25);
       expect(metaAfter.cancelledByUser).toBe(true);
       expect(metaAfter.pairedTransactionId).toBeDefined();
+    });
+  });
+
+  // ==========================================================================
+  // 17. LOCKED BALANCE UNLOCK ON CONFIRM (C1 fix)
+  // ==========================================================================
+
+  describe('Locked Balance Unlock on Confirm (C1)', () => {
+    it('should unlock locked balance when TIP_SEND is confirmed', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 100,
+      });
+
+      // sendTip sonrası locked balance artmış olmalı
+      const walletAfterSend = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterSend!.lockedBalance).toBe(100);
+
+      // Confirm SEND transaction
+      const txHash = randomTxHash();
+      await transactionService.confirmTransaction(result.transaction.id, txHash);
+
+      // Confirm sonrası locked balance sıfıra dönmeli
+      const walletAfterConfirm = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterConfirm!.lockedBalance).toBe(0);
+    });
+
+    it('should unlock locked balance when WITHDRAW is confirmed', async () => {
+      const externalAddress = randomAddress();
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: externalAddress,
+        amount: 200,
+      });
+      expect(result.transaction.actionType).toBe(TransactionActionType.WITHDRAW);
+
+      // locked balance = 200
+      const walletAfterSend = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterSend!.lockedBalance).toBe(200);
+
+      // Confirm
+      const txHash = randomTxHash();
+      await transactionService.confirmTransaction(result.transaction.id, txHash);
+
+      const walletAfterConfirm = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterConfirm!.lockedBalance).toBe(0);
+    });
+
+    it('should unlock locked balance when TIP_SEND fails', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 150,
+      });
+
+      const walletAfterSend = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterSend!.lockedBalance).toBe(150);
+
+      // Fail transaction
+      await transactionService.failTransaction(result.transaction.id, 'On-chain revert');
+
+      // Fail sonrası locked balance sıfıra dönmeli
+      const walletAfterFail = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterFail!.lockedBalance).toBe(0);
+    });
+
+    it('should unlock locked balance when user cancels tip', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 75,
+      });
+
+      const walletAfterSend = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterSend!.lockedBalance).toBe(75);
+
+      // Cancel
+      await transactionService.cancelTipSend(result.transaction.id, sender.id);
+
+      // Cancel sonrası locked balance sıfıra dönmeli
+      const walletAfterCancel = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterCancel!.lockedBalance).toBe(0);
+    });
+
+    it('should handle multiple sequential tip sends with correct locked balance', async () => {
+      // İlk tip: 100
+      const result1 = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 100,
+      });
+
+      const walletAfter1 = await getWalletFromDB(senderWallet.id);
+      expect(walletAfter1!.lockedBalance).toBe(100);
+
+      // İkinci tip: 200
+      const result2 = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 200,
+      });
+
+      const walletAfter2 = await getWalletFromDB(senderWallet.id);
+      expect(walletAfter2!.lockedBalance).toBe(300);
+
+      // Birincisini confirm et
+      await transactionService.confirmTransaction(result1.transaction.id, randomTxHash());
+      const walletAfterConfirm1 = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterConfirm1!.lockedBalance).toBe(200);
+
+      // İkincisini fail et
+      await transactionService.failTransaction(result2.transaction.id, 'Failed');
+      const walletAfterFail2 = await getWalletFromDB(senderWallet.id);
+      expect(walletAfterFail2!.lockedBalance).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // 18. FAIL TRANSACTION STATUS GUARD (C2 fix)
+  // ==========================================================================
+
+  describe('Fail Transaction Status Guard (C2)', () => {
+    it('should NOT fail an already-confirmed transaction', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 50,
+      });
+
+      const txHash = randomTxHash();
+      await transactionService.confirmTransaction(result.transaction.id, txHash);
+
+      // Confirmed tx'i fail etmeye çalış — sessizce confirmed dönmeli
+      const failResult = await transactionService.failTransaction(
+        result.transaction.id,
+        'Late failure attempt',
+      );
+      expect(failResult.status).toBe(TransactionStatus.CONFIRMED);
+
+      // DB'de hala confirmed
+      const fromDb = await getTransactionFromDB(result.transaction.id);
+      expect(fromDb!.status).toBe(TransactionStatus.CONFIRMED);
+    });
+
+    it('should fail a CREATED transaction normally', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 50,
+      });
+
+      const failResult = await transactionService.failTransaction(
+        result.transaction.id,
+        'SDK error',
+      );
+      expect(failResult.status).toBe(TransactionStatus.FAILED);
+    });
+  });
+
+  // ==========================================================================
+  // 19. FEE EDGE CASES (C3 fix)
+  // ==========================================================================
+
+  describe('Fee Edge Cases (C3)', () => {
+    it('should treat 100% fee as no-fee (misconfiguration guard)', async () => {
+      mockSdkIsConfigured = true;
+      mockSdkFeePercentage = 100;
+
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 100,
+      });
+
+      const sendTx = await getTransactionFromDB(result.transaction.id);
+      const metadata = sendTx!.metadata as Record<string, unknown>;
+
+      // 100% fee → no fee applied (feeAmount/feePercentage should NOT be in metadata)
+      expect(metadata.feeAmount).toBeUndefined();
+
+      // RECEIVE should get full amount
+      const receiveId = metadata.pairedTransactionId as string;
+      const receiveTx = await getTransactionFromDB(receiveId);
+      expect(receiveTx!.amount).toBe(100);
+    });
+
+    it('should ensure netAmount >= 1 for high fee percentage on small amount', async () => {
+      mockSdkIsConfigured = true;
+      mockSdkFeePercentage = 99;
+
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 1,
+      });
+
+      const sendTx = await getTransactionFromDB(result.transaction.id);
+      const metadata = sendTx!.metadata as Record<string, unknown>;
+      const receiveId = metadata.pairedTransactionId as string;
+
+      // amount=1, fee=99% → Math.floor(1*99/100)=0 → netAmount=1 (no fee effectively)
+      const receiveTx = await getTransactionFromDB(receiveId);
+      expect(receiveTx!.amount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should calculate fee correctly for normal percentages', async () => {
+      mockSdkIsConfigured = true;
+      mockSdkFeePercentage = 10;
+
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 1000,
+      });
+
+      const sendTx = await getTransactionFromDB(result.transaction.id);
+      const metadata = sendTx!.metadata as Record<string, unknown>;
+      expect(metadata.feeAmount).toBe(100);
+      expect(metadata.feePercentage).toBe(10);
+
+      const receiveId = metadata.pairedTransactionId as string;
+      const receiveTx = await getTransactionFromDB(receiveId);
+      expect(receiveTx!.amount).toBe(900); // 1000 - 100 = 900
+    });
+  });
+
+  // ==========================================================================
+  // 20. ENTITY isSend() / isReceive() CONSISTENCY (C4 fix)
+  // ==========================================================================
+
+  describe('Entity isSend/isReceive Consistency (C4)', () => {
+    it('BOOST_POST should be classified as send', async () => {
+      // BOOST_POST transaction oluştur
+      const result = await transactionService.deductForPostBoost(sender.id, 50, 'test-post-id');
+      expect(result.actionType).toBe(TransactionActionType.BOOST_POST);
+
+      // Entity isSend() true dönmeli
+      const tx = await transactionService.getTransactionById(result.id);
+      expect(tx.isSend()).toBe(true);
+      expect(tx.isReceive()).toBe(false);
+    });
+
+    it('DEPOSIT should be classified as receive', async () => {
+      const prisma = getPrisma();
+      // Webhook benzeri DEPOSIT oluştur
+      const depositTx = await prisma.transaction.create({
+        data: {
+          walletId: receiverWallet.id,
+          actionType: TransactionActionType.DEPOSIT,
+          amount: 500,
+          fromAddress: randomAddress(),
+          toAddress: receiverWallet.smartAccountAddress,
+          status: TransactionStatus.CONFIRMED,
+          confirmedAt: new Date(),
+          provider: 'alchemy',
+          metadata: { source: 'test' },
+        },
+      });
+
+      const tx = await transactionService.getTransactionById(depositTx.id);
+      expect(tx.isReceive()).toBe(true);
+      expect(tx.isSend()).toBe(false);
+    });
+
+    it('WITHDRAW should be classified as send', async () => {
+      const externalAddress = randomAddress();
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: externalAddress,
+        amount: 100,
+      });
+
+      const tx = await transactionService.getTransactionById(result.transaction.id);
+      expect(tx.actionType).toBe(TransactionActionType.WITHDRAW);
+      expect(tx.isSend()).toBe(true);
+      expect(tx.isReceive()).toBe(false);
+    });
+  });
+
+  // ==========================================================================
+  // 21. NOTIFICATION DATA FORMAT — TIPS_SENT Avatar & System Flag
+  // ==========================================================================
+
+  describe('Notification Data Format (N1-N5)', () => {
+    it('TIPS_SENT should include recipientUserId but NOT senderUserId (N1/N2)', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 75,
+      });
+
+      mockSendNotification.mockClear();
+      await transactionService.confirmTransaction(result.transaction.id, randomTxHash());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const tipsSent = mockSendNotification.mock.calls.find(
+        (call: unknown[]) => call[1] === NotificationType.TIPS_SENT,
+      );
+      expect(tipsSent).toBeDefined();
+      const data = tipsSent![2] as Record<string, unknown>;
+
+      // recipientUserId olmalı (enricher alıcı avatarı çözmek için)
+      expect(data.recipientUserId).toBe(receiver.id);
+      // senderUserId OLMAMALI (enricher yanlış avatar çözmemesi için)
+      expect(data.senderUserId).toBeUndefined();
+      // recipientName olmalı (null olabilir ama field var)
+      expect('recipientName' in data).toBe(true);
+    });
+
+    it('BOOST_POST notification should have isSystem=true (N3)', async () => {
+      mockSendNotification.mockClear();
+      await transactionService.deductForPostBoost(sender.id, 25, 'test-post-123');
+      await new Promise((r) => setTimeout(r, 50));
+
+      const txConfirmed = mockSendNotification.mock.calls.find(
+        (call: unknown[]) => call[1] === NotificationType.TRANSACTION_CONFIRMED,
+      );
+      expect(txConfirmed).toBeDefined();
+      const data = txConfirmed![2] as Record<string, unknown>;
+      expect(data.isSystem).toBe(true);
+      expect(data.actionType).toBe(TransactionActionType.BOOST_POST);
+    });
+
+    it('TRANSACTION_FAILED should have isSystem=true and errorMessage (N3/N5)', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 50,
+      });
+
+      mockSendNotification.mockClear();
+      await transactionService.failTransaction(result.transaction.id, 'Insufficient gas');
+      await new Promise((r) => setTimeout(r, 50));
+
+      const failNotif = mockSendNotification.mock.calls.find(
+        (call: unknown[]) => call[1] === NotificationType.TRANSACTION_FAILED,
+      );
+      expect(failNotif).toBeDefined();
+      const data = failNotif![2] as Record<string, unknown>;
+      expect(data.isSystem).toBe(true);
+      expect(data.errorMessage).toBe('Insufficient gas');
+      expect(data.actionType).toBe(TransactionActionType.TIP_SEND);
+    });
+
+    it('TIPS_RECEIVED should NOT have isSystem flag', async () => {
+      const result = await transactionService.sendTip({
+        fromUserId: sender.id,
+        toUserId: receiver.id,
+        amount: 50,
+      });
+
+      // Confirm RECEIVE
+      const sendTx = await getTransactionFromDB(result.transaction.id);
+      const receiveId = (sendTx!.metadata as Record<string, unknown>).pairedTransactionId as string;
+
+      mockSendNotification.mockClear();
+      await transactionService.confirmTransaction(receiveId, randomTxHash());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const tipsReceived = mockSendNotification.mock.calls.find(
+        (call: unknown[]) => call[1] === NotificationType.TIPS_RECEIVED,
+      );
+      expect(tipsReceived).toBeDefined();
+      const data = tipsReceived![2] as Record<string, unknown>;
+      // TIPS_RECEIVED kullanıcı etkileşimi → isSystem olmamalı
+      expect(data.isSystem).toBeUndefined();
+      // senderUserId olmalı (gönderenin avatarı gösterilir)
+      expect(data.senderUserId).toBe(sender.id);
     });
   });
 });

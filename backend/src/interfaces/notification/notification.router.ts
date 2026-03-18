@@ -486,6 +486,12 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
       senderUsername?: string | null;
       recipientUserId?: string;
       recipientUsername?: string | null;
+      // Transaction bildirimleri için
+      transactionId?: string;
+      actionType?: string;
+      errorMessage?: string;
+      fromAddress?: string;
+      isSystem?: boolean;
       // NEW_BADGE için
       badgeUrl?: string | null;
       badgeName?: string | null;
@@ -910,24 +916,21 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
         enriched.userId = undefined;
         enriched.data = undefined;
       } else if (type === NotificationType.TIPS_SENT) {
-        // TIPS_SENT için: bildirimi alan kullanıcı (gönderen) kendi avatar'ı ve userId'si
-        // Alıcı kullanıcının userId ve username'i root seviyede
+        // TIPS_SENT: gönderen, alıcının (recipient) avatar'ını ve bilgilerini görmeli
         const recipientUserId = data.recipientUserId || data.recipientId || data.userId;
-        
-        // Bildirimi alan kullanıcının (gönderen) avatar'ı - notification.userId'den alınır
-        const senderUserId = notification.userId as string | undefined; // Bildirimi alan kullanıcı
-        if (senderUserId) {
-          const senderAvatar = userAvatars.get(senderUserId) || randomImageCache || null;
-          enriched.avatar = senderAvatar;
-        }
-        
-        // Alıcı kullanıcının bilgileri root seviyede
+
+        // N1 fix: Alıcının avatar'ını göster (gönderen kendi avatarını değil, kime gönderdiğini görmeli)
         if (recipientUserId) {
+          enriched.avatar = userAvatars.get(recipientUserId) || randomImageCache || null;
           enriched.recipientUserId = recipientUserId;
           const recipientUsername = userNames.get(recipientUserId);
           enriched.recipientUsername = recipientUsername || null;
         }
-        
+
+        // N4 fix: amount ve transactionId eklendi
+        enriched.amount = data.amount ? Number(data.amount) : undefined;
+        enriched.transactionId = data.transactionId ?? undefined;
+
         // Tüm gereksiz alanları kaldır
         enriched.postId = undefined;
         enriched.postContent = undefined;
@@ -935,22 +938,37 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
         enriched.description = undefined;
         enriched.imageUrl = undefined;
         enriched.commentId = undefined;
-        enriched.username = undefined; // username kaldırıldı, recipientUsername kullanılıyor
-        enriched.userId = undefined; // userId kaldırıldı, recipientUserId kullanılıyor
-        
+        enriched.username = undefined;
+        enriched.userId = undefined;
+
         // Data objesini tamamen kaldır
         enriched.data = undefined;
       } else if (type === NotificationType.TRANSACTION_CONFIRMED || type === NotificationType.TRANSACTION_FAILED || type === NotificationType.TRANSACTION_PENDING) {
-        // TRANSACTION_CONFIRMED (DEPOSIT vb.): gönderen (from) avatar'ı, amount, actionType, fromAddress
+        // N3 fix: isSystem flag — kullanıcı etkileşimi olmayan (BOOST_POST, CLAIM_REWARD vb.) notification'lar için
+        const isSystem = data.isSystem === true;
         const senderUserId = data.senderUserId ?? data.senderId;
-        enriched.avatar = data.avatar ?? (senderUserId ? userAvatars.get(senderUserId) || randomImageCache : null) ?? null;
+
+        if (isSystem) {
+          // System notification: avatar null (frontend Tipbox logosu gösterebilir)
+          enriched.avatar = null;
+          enriched.isSystem = true;
+        } else if (senderUserId) {
+          enriched.avatar = data.avatar ?? userAvatars.get(senderUserId) || randomImageCache || null;
+          enriched.senderUserId = senderUserId;
+          enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
+        } else {
+          // Bilinmeyen kaynak — system olarak işaretle
+          enriched.avatar = null;
+          enriched.isSystem = true;
+        }
+
         enriched.amount = data.amount ? Number(data.amount) : undefined;
         enriched.actionType = data.actionType ?? undefined;
         enriched.transactionId = data.transactionId ?? undefined;
         enriched.fromAddress = data.fromAddress ?? undefined;
-        if (senderUserId) {
-          enriched.senderUserId = senderUserId;
-          enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
+        // N5 fix: TRANSACTION_FAILED için errorMessage
+        if (data.errorMessage) {
+          enriched.errorMessage = data.errorMessage;
         }
         enriched.postId = undefined;
         enriched.postContent = undefined;

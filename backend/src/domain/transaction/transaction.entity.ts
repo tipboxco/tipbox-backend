@@ -42,7 +42,8 @@ export class Transaction {
       TransactionActionType.WITHDRAW,
       TransactionActionType.NFT_BUY,
       TransactionActionType.SWAP_TIP_TO_SOL,
-      TransactionActionType.FEE
+      TransactionActionType.FEE,
+      TransactionActionType.BOOST_POST,
     ].includes(this.actionType);
   }
 

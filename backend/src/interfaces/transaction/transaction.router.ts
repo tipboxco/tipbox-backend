@@ -320,6 +320,8 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
       ? userMap.get(tx.metadata.recipientUserId) || null
       : null;
 
+    const meta = tx.metadata as Record<string, unknown> | undefined;
+
     return {
       id: tx.id,
       type: tx.isSend() ? 'sent' : 'received',
@@ -328,9 +330,15 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
       currency: 'TIPS',
       from: fromUser,
       to: toUser,
-      reason: tx.metadata?.reason || null,
+      reason: meta?.reason || null,
+      // Commission / fee data
+      feeAmount: meta?.feeAmount ?? null,
+      feePercentage: meta?.feePercentage ?? null,
+      grossAmount: meta?.grossAmount ?? null,
       status: tx.status,
-      createdAt: tx.createdAt.toISOString()
+      txHash: tx.txHash || null,
+      createdAt: tx.createdAt.toISOString(),
+      confirmedAt: tx.confirmedAt?.toISOString() || null,
     };
   });
 

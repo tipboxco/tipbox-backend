@@ -235,7 +235,50 @@ export class ThirdwebWebhookService {
           });
         }
 
+        // Pending tip guard: Tipbox contract üzerinden yapılan tip'lerde webhook adresleri
+        // contract adresi olabilir (kullanıcı wallet'ı değil). txHash henüz set edilmemiş
+        // olabilir (worker receipt almadan webhook gelir). Bu yüzden wallet'ta
+        // pending/created TIP_SEND veya TIP_RECEIVE varsa → bu internal tip, DEPOSIT/WITHDRAW oluşturma.
+        let hasPendingTipOnWallet = false;
         if (!txHashAlreadyTracked && !isBothInternal) {
+          const walletToCheck = fromWallet || toWallet;
+          if (walletToCheck) {
+            const pendingTip = await prisma.transaction.findFirst({
+              where: {
+                walletId: walletToCheck.id,
+                actionType: {
+                  in: [
+                    TransactionActionType.TIP_SEND as string as PrismaTransactionActionType,
+                    TransactionActionType.TIP_RECEIVE as string as PrismaTransactionActionType,
+                  ],
+                },
+                status: {
+                  in: [
+                    TransactionStatus.CREATED as string,
+                    TransactionStatus.PENDING as string,
+                  ],
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true, actionType: true },
+            });
+            if (pendingTip) {
+              hasPendingTipOnWallet = true;
+              transactionId = pendingTip.id;
+              logger.info({
+                walletId: walletToCheck.id,
+                pendingTipId: pendingTip.id,
+                pendingTipAction: pendingTip.actionType,
+                txHash,
+                fromAddress: payload.fromAddress,
+                toAddress: payload.toAddress,
+                message: 'Thirdweb webhook: pending tip found on wallet, skipping DEPOSIT/WITHDRAW creation (likely internal tip via contract)',
+              });
+            }
+          }
+        }
+
+        if (!txHashAlreadyTracked && !isBothInternal && !hasPendingTipOnWallet) {
           // DEPOSIT: to = bizim wallet (smartAccount), from = external → alıcı bizim sistemde
           if (toWallet && !fromWallet) {
             const depositTx = await prisma.transaction.create({

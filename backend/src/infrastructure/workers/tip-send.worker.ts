@@ -237,19 +237,18 @@ export class TipSendWorker {
     return candidates[0];
   }
 
-  /** Send + opsiyonel receive transaction'ı FAILED yapar (doğrudan adrese tip'te receive yok). */
+  /** Send + opsiyonel receive transaction'ı FAILED yapar (doğrudan adrese tip'te receive yok).
+   *  C5 fix: TransactionService.failTransaction kullanılarak locked balance otomatik unlock edilir.
+   */
   private async failSendOrBoth(
     sendTransactionId: string,
     receiveTransactionId: string | undefined,
     errorMessage: string
   ): Promise<void> {
-    const updates: Promise<unknown>[] = [
-      this.transactionRepo.updateStatus(sendTransactionId, TransactionStatus.FAILED, { errorMessage }),
-    ];
+    await this.transactionService.failTransaction(sendTransactionId, errorMessage);
     if (receiveTransactionId) {
-      updates.push(this.transactionRepo.updateStatus(receiveTransactionId, TransactionStatus.FAILED, { errorMessage }));
+      await this.transactionService.failTransaction(receiveTransactionId, errorMessage);
     }
-    await Promise.all(updates);
   }
 
   public async stop(): Promise<void> {

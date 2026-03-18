@@ -54,6 +54,21 @@ function isSignificantTransfer(value: string, decimals: number = 18, minAmount: 
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
+/** feeRecipient adresini cache'le (process yaşam döngüsünce) */
+let cachedFeeRecipient: string | null = null;
+
+function isFeeRecipientAddress(address: string): boolean {
+  if (!address) return false;
+  const envFeeRecipient = process.env.FEE_RECIPIENT_ADDRESS;
+  if (envFeeRecipient && envFeeRecipient.startsWith('0x')) {
+    cachedFeeRecipient = envFeeRecipient.toLowerCase();
+  }
+  if (cachedFeeRecipient) {
+    return address.toLowerCase() === cachedFeeRecipient;
+  }
+  return false;
+}
+
 export class AlchemyWebhookService {
   private signingKey: string;
   private readonly walletRepo = new WalletPrismaRepository();
@@ -185,82 +200,99 @@ export class AlchemyWebhookService {
           select: { id: true, actionType: true },
         });
 
-        let depositTransactionId: string;
         if (anyExistingByHash) {
-          depositTransactionId = anyExistingByHash.id;
           logger.info({
             txHash: transfer.transactionHash,
             existingActionType: anyExistingByHash.actionType,
             message: 'Alchemy: txHash already tracked by another transaction, skipping DEPOSIT creation',
           });
-        } else {
-          const pendingTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: toWallet.id,
-              status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
-              actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true },
+          await this.upsertEventLog(transfer, block, blockTimestamp, toWallet.id, chainId);
+          processed++;
+          continue;
+        }
+
+        // Pending tip guard: wallet'ta pending/created TIP_RECEIVE varsa bu internal tip — DEPOSIT oluşturma.
+        // Alchemy webhook txHash set edilmeden gelebilir; thirdweb worker henüz receipt almamış olabilir.
+        const pendingTipReceive = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            actionType: TransactionActionType.TIP_RECEIVE as string as PrismaTransactionActionType,
+            status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+
+        if (pendingTipReceive) {
+          logger.info({
+            walletId: toWallet.id,
+            pendingTipReceiveId: pendingTipReceive.id,
+            txHash: transfer.transactionHash,
+            message: 'Alchemy: pending TIP_RECEIVE found, skipping DEPOSIT creation (internal tip)',
           });
-
-          if (pendingTx) {
-            await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
-            depositTransactionId = pendingTx.id;
-          } else {
-            const depositTx = await prisma.transaction.create({
-              data: {
-                walletId: toWallet.id,
-                actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
-                status: TransactionStatus.CONFIRMED,
-                amount,
-                fromAddress: transfer.from,
-                toAddress: transfer.to,
-                txHash: transfer.transactionHash,
-                provider: 'external',
-                confirmedAt: new Date(),
-                metadata: {
-                  source: 'alchemy_webhook',
-                  chainId,
-                  contractAddress: transfer.contractAddress,
-                  blockNumber: block.number ?? undefined,
-                  tokenType: 'ERC20',
-                },
-              },
-            });
-            depositTransactionId = depositTx.id;
-            await this.walletService.updateBalance(toWallet.id, amount, {
-              reason: `Deposit from ${transfer.from} (tx: ${transfer.transactionHash})`,
-            });
-          }
+          await this.upsertEventLog(transfer, block, blockTimestamp, toWallet.id, chainId);
+          processed++;
+          continue;
         }
 
-        // Deposit bildirimi — sadece gerçek yeni DEPOSIT oluşturulduysa gönder (cross-source duplicate ise skip)
-        if (!anyExistingByHash || anyExistingByHash.actionType === ('DEPOSIT' as string)) {
-          const fromWalletForAvatar = await this.walletRepo.findByAddressForTracking(transfer.from);
-          const fromProfile = fromWalletForAvatar
-            ? await this.profileRepo.findByUserId(fromWalletForAvatar.userId)
-            : null;
-          this.notificationService
-            .sendNotification(toWallet.userId, NotificationType.TRANSACTION_CONFIRMED, {
+        // Gerçek DEPOSIT: external kaynak → bizim wallet
+        const pendingDeposit = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
+            actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+
+        let depositTransactionId: string;
+        if (pendingDeposit) {
+          await this.transactionService.confirmTransaction(pendingDeposit.id, transfer.transactionHash);
+          depositTransactionId = pendingDeposit.id;
+        } else {
+          const depositTx = await prisma.transaction.create({
+            data: {
+              walletId: toWallet.id,
+              actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
+              status: TransactionStatus.CONFIRMED,
               amount,
-              actionType: TransactionActionType.DEPOSIT,
-              transactionId: depositTransactionId,
               fromAddress: transfer.from,
-              ...(fromWalletForAvatar && {
-                senderUserId: fromWalletForAvatar.userId,
-                senderUsername: fromProfile?.userName || fromProfile?.displayName || null,
-              }),
-            })
-            .catch((err) => {
-              logger.warn({
-                userId: toWallet.userId,
-                transactionId: depositTransactionId,
-                error: String(err),
-                message: 'Alchemy DEPOSIT notification failed',
-              });
-            });
+              toAddress: transfer.to,
+              txHash: transfer.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'alchemy_webhook',
+                chainId,
+                contractAddress: transfer.contractAddress,
+                blockNumber: block.number ?? undefined,
+                tokenType: 'ERC20',
+              },
+            },
+          });
+          depositTransactionId = depositTx.id;
+          await this.walletService.updateBalance(toWallet.id, amount, {
+            reason: `Deposit from ${transfer.from} (tx: ${transfer.transactionHash})`,
+          });
         }
+
+        // Deposit bildirimi — sadece gerçek yeni DEPOSIT için gönder
+        this.notificationService
+          .sendNotification(toWallet.userId, NotificationType.TRANSACTION_CONFIRMED, {
+            amount,
+            actionType: TransactionActionType.DEPOSIT,
+            transactionId: depositTransactionId,
+            fromAddress: transfer.from,
+          })
+          .catch((err) => {
+            logger.warn({
+              userId: toWallet.userId,
+              transactionId: depositTransactionId,
+              error: String(err),
+              message: 'Alchemy DEPOSIT notification failed',
+            });
+          });
 
         await this.upsertEventLog(transfer, block, blockTimestamp, toWallet.id, chainId);
         processed++;
@@ -278,6 +310,20 @@ export class AlchemyWebhookService {
       // WITHDRAW: smart wallet → EOA
       // Alchemy sadece WITHDRAW'dan sorumludur; TIP_SEND thirdweb webhook tarafından yönetilir.
       if (fromWallet && !toWallet && !isBurn) {
+        // Fee recipient'e giden transfer → bu komisyon, WITHDRAW değil. Contract-event service FEE kaydını oluşturur.
+        if (isFeeRecipientAddress(transfer.to)) {
+          logger.info({
+            txHash: transfer.transactionHash,
+            from: transfer.from,
+            to: transfer.to,
+            amount,
+            message: 'Alchemy: transfer to feeRecipient detected, skipping WITHDRAW (FEE handled by contract-event)',
+          });
+          await this.upsertEventLog(transfer, block, blockTimestamp, fromWallet.id, chainId);
+          processed++;
+          continue;
+        }
+
         // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction (TIP_SEND, TIP_RECEIVE vb.)
         // zaten varsa, bu bir tip transferinin alt-event'idir — WITHDRAW oluşturma.
         const anyExistingByHash = await prisma.transaction.findFirst({
@@ -285,49 +331,76 @@ export class AlchemyWebhookService {
           select: { id: true, actionType: true },
         });
 
-        if (!anyExistingByHash) {
-          const pendingTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: fromWallet.id,
-              status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
-              actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true },
-          });
-
-          if (pendingTx) {
-            await this.transactionService.confirmTransaction(pendingTx.id, transfer.transactionHash);
-          } else {
-            await prisma.transaction.create({
-              data: {
-                walletId: fromWallet.id,
-                actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
-                status: TransactionStatus.CONFIRMED,
-                amount,
-                fromAddress: transfer.from,
-                toAddress: transfer.to,
-                txHash: transfer.transactionHash,
-                provider: 'external',
-                confirmedAt: new Date(),
-                metadata: {
-                  source: 'alchemy_webhook',
-                  chainId,
-                  contractAddress: transfer.contractAddress,
-                  blockNumber: block.number ?? undefined,
-                  tokenType: 'ERC20',
-                },
-              },
-            });
-            await this.walletService.updateBalance(fromWallet.id, -amount, {
-              reason: `Withdraw to ${transfer.to} (tx: ${transfer.transactionHash})`,
-            });
-          }
-        } else {
+        if (anyExistingByHash) {
           logger.info({
             txHash: transfer.transactionHash,
             existingActionType: anyExistingByHash.actionType,
             message: 'Alchemy: txHash already tracked by another transaction, skipping WITHDRAW creation',
+          });
+          await this.upsertEventLog(transfer, block, blockTimestamp, fromWallet.id, chainId);
+          processed++;
+          continue;
+        }
+
+        // Pending tip guard: wallet'ta pending/created TIP_SEND varsa bu internal tip — WITHDRAW oluşturma.
+        const pendingTipSend = await prisma.transaction.findFirst({
+          where: {
+            walletId: fromWallet.id,
+            actionType: TransactionActionType.TIP_SEND as string as PrismaTransactionActionType,
+            status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+
+        if (pendingTipSend) {
+          logger.info({
+            walletId: fromWallet.id,
+            pendingTipSendId: pendingTipSend.id,
+            txHash: transfer.transactionHash,
+            message: 'Alchemy: pending TIP_SEND found, skipping WITHDRAW creation (internal tip)',
+          });
+          await this.upsertEventLog(transfer, block, blockTimestamp, fromWallet.id, chainId);
+          processed++;
+          continue;
+        }
+
+        // Gerçek WITHDRAW: bizim wallet → external adres
+        const pendingWithdraw = await prisma.transaction.findFirst({
+          where: {
+            walletId: fromWallet.id,
+            status: { in: [TransactionStatus.PENDING, TransactionStatus.CREATED] },
+            actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+
+        if (pendingWithdraw) {
+          await this.transactionService.confirmTransaction(pendingWithdraw.id, transfer.transactionHash);
+        } else {
+          await prisma.transaction.create({
+            data: {
+              walletId: fromWallet.id,
+              actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
+              status: TransactionStatus.CONFIRMED,
+              amount,
+              fromAddress: transfer.from,
+              toAddress: transfer.to,
+              txHash: transfer.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'alchemy_webhook',
+                chainId,
+                contractAddress: transfer.contractAddress,
+                blockNumber: block.number ?? undefined,
+                tokenType: 'ERC20',
+              },
+            },
+          });
+          await this.walletService.updateBalance(fromWallet.id, -amount, {
+            reason: `Withdraw to ${transfer.to} (tx: ${transfer.transactionHash})`,
           });
         }
 
