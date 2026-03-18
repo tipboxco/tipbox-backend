@@ -545,7 +545,9 @@ export class ExploreService {
   }> {
     const limit = options?.limit || 20;
     const search = options?.search?.trim();
-    const cacheKey = `explore:brands:new:${options?.cursor || 'first'}:${limit}:${search || 'all'}`;
+    const page = options?.cursor ? parseInt(options.cursor, 10) : 0;
+    const skip = page * limit;
+    const cacheKey = `explore:brands:new:${page}:${limit}:${search || 'all'}`;
 
     try {
       const cached = await this.cacheService.get<{
@@ -567,18 +569,15 @@ export class ExploreService {
         }),
       },
       orderBy: {
-        createdAt: 'desc',
+        products: { _count: 'desc' },
       },
       take: limit + 1,
-      ...(options?.cursor && {
-        cursor: { id: options.cursor },
-        skip: 1,
-      }),
+      skip,
     });
 
     const hasMore = brands.length > limit;
     const resultBrands = hasMore ? brands.slice(0, limit) : brands;
-    const nextCursor = hasMore && resultBrands.length > 0 ? resultBrands[resultBrands.length - 1].id : undefined;
+    const nextCursor = hasMore ? String(page + 1) : undefined;
 
     const response = {
       items: resultBrands.map((brand) => ({
