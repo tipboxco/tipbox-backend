@@ -5141,41 +5141,49 @@ export class UserService {
       orderBy: { displayOrder: 'asc' },
     });
 
-    // Separate by type
-    const eventBadges: Array<{
+    // Separate by badge type
+    type BadgeItem = {
       id: string;
       title: string;
       image: string | null;
       rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
-    }> = [];
-    const collectionBadges: Array<{
-      id: string;
-      title: string;
-      image: string | null;
-      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
-    }> = [];
+    };
+    const collectionBadges: BadgeItem[] = [];
+    const eventBadges: BadgeItem[] = [];
+    const cosmeticBadges: BadgeItem[] = [];
+    const brandBadges: BadgeItem[] = [];
 
     for (const ub of allBadges) {
-      const category = BadgeResponseMapper.mapBadgeCategory(ub.badge.type);
-      const item = {
+      const item: BadgeItem = {
         id: ub.badgeId,
         title: ub.badge.name,
         image: resolveMediaUrl(ub.badge.imageUrl ?? null),
         rarity: BadgeResponseMapper.mapRarity(ub.badge.rarity),
       };
 
-      if (category === 'bridge') {
-        collectionBadges.push(item);
-      } else {
-        eventBadges.push(item);
+      switch (ub.badge.type) {
+        case 'COLLECTION':
+          collectionBadges.push(item);
+          break;
+        case 'EVENT':
+          eventBadges.push(item);
+          break;
+        case 'COSMETIC':
+          cosmeticBadges.push(item);
+          break;
+        case 'BRAND':
+          brandBadges.push(item);
+          break;
       }
     }
 
     return {
       selectedBadgeIds: currentHighlights.map((ub) => ub.badgeId),
       availableBadges: {
-        event: eventBadges,
         collection: collectionBadges,
+        event: eventBadges,
+        cosmetic: cosmeticBadges,
+        brand: brandBadges,
       },
     };
   }

@@ -243,6 +243,7 @@ export interface BaseStats {
   comments: number;
   shares: number;
   bookmarks: number;
+  upvotes?: number;
 }
 
 export interface BasePost {
@@ -256,6 +257,7 @@ export interface BasePost {
   source?: string; // Feed source: TRUSTER, BOOSTED, CATEGORY_MATCH, TRENDING, NEW_USER
   isBoosted?: boolean; // Post boost edildi mi?
   boostedUntil?: string; // Boost bitiş tarihi (ISO string)
+  hasUpvoted?: boolean; // Kullanıcı bu post'u upvote etti mi?
 }
 
 
