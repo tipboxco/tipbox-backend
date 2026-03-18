@@ -157,46 +157,28 @@ export class WalletService {
     amount: number,
     metadata?: { reason?: string; transactionId?: string; sourceType?: string }
   ): Promise<Wallet> {
-    const wallet = await this.walletRepo.findById(walletId);
-    if (!wallet) {
-      throw new Error('Wallet not found');
-    }
+    logger.info({
+      walletId,
+      amount,
+      metadata,
+      message: 'Updating wallet balance (atomic increment)',
+    });
 
-    const currentBalance = wallet.balance || 0;
-    const newBalance = currentBalance + amount;
-
-    // Negatif balance kontrolü
-    if (newBalance < 0) {
-      logger.error({
-        walletId,
-        currentBalance,
-        amount,
-        newBalance,
-        metadata,
-        message: 'Attempted to set negative balance',
-      });
+    // Atomic increment — race condition olmadan balance günceller
+    const updatedWallet = await this.walletRepo.incrementBalance(walletId, amount);
+    if (!updatedWallet) {
+      // incrementBalance null dönerse: wallet yok veya yetersiz bakiye (negatif olurdu)
+      const wallet = await this.walletRepo.findById(walletId);
+      if (!wallet) {
+        throw new Error('Wallet not found');
+      }
       throw new InsufficientBalanceError(
-        `Insufficient balance. Current: ${currentBalance}, Required: ${Math.abs(amount)}`
+        `Insufficient balance. Current: ${wallet.balance}, Required: ${Math.abs(amount)}`
       );
     }
 
-    logger.info({
-      walletId,
-      userId: wallet.userId,
-      currentBalance,
-      amount,
-      newBalance,
-      metadata,
-      message: 'Updating wallet balance',
-    });
-
-    const updatedWallet = await this.walletRepo.updateBalance(walletId, newBalance);
-    if (!updatedWallet) {
-      throw new Error('Failed to update wallet balance');
-    }
-
     // Cache invalidation
-    invalidateWalletCache(wallet.userId).catch((err) => {
+    invalidateWalletCache(updatedWallet.userId).catch((err) => {
       logger.warn('Failed to invalidate wallet cache after balance update', { error: err instanceof Error ? err.message : String(err) });
     });
 
@@ -275,6 +257,26 @@ export class WalletService {
     if (!wallet) {
       return { success: false, error: 'Wallet not found' };
     }
+
+    // Pending/created transaction varken sync YAPMA — chain henüz güncel olmayabilir ve
+    // DB balance'ı eski değere geri yazarak confirmTransaction sonuçlarını ezebilir.
+    const { getPrisma: getPrismaClient } = await import('../../infrastructure/repositories/prisma.client');
+    const prisma = getPrismaClient();
+    const pendingCount = await prisma.transaction.count({
+      where: {
+        walletId,
+        status: { in: ['pending', 'created'] },
+      },
+    });
+    if (pendingCount > 0) {
+      logger.info({
+        walletId,
+        pendingCount,
+        message: 'Skipping balance sync: pending/created transactions exist',
+      });
+      return { success: false, error: 'Pending transactions exist, sync skipped' };
+    }
+
     const address = wallet.smartAccountAddress ?? wallet.publicAddress;
     const sdk = getThirdwebSdkService();
     if (!sdk.isConfigured()) {

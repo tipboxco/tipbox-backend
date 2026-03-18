@@ -400,20 +400,22 @@ export class ContractEventService {
       if (toWallet && !fromWallet && !transferEvent.isMint) {
         walletId = toWallet.id;
 
-        // Önce txHash ile var olan DEPOSIT transaction kontrolü (duplicate engelle)
-        const existingByHash = event.transactionHash
+        // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction zaten varsa
+        // (TIP_SEND, TIP_RECEIVE vb.), bu bir tip transferinin alt-event'idir — DEPOSIT oluşturma.
+        const anyExistingByHash = event.transactionHash
           ? await prisma.transaction.findFirst({
-              where: {
-                walletId: toWallet.id,
-                txHash: event.transactionHash,
-                actionType: 'DEPOSIT' as unknown as TransactionActionType,
-              },
-              select: { id: true },
+              where: { txHash: event.transactionHash },
+              select: { id: true, actionType: true },
             })
           : null;
 
-        if (existingByHash) {
-          transactionId = existingByHash.id;
+        if (anyExistingByHash) {
+          transactionId = anyExistingByHash.id;
+          logger.info({
+            txHash: event.transactionHash,
+            existingActionType: anyExistingByHash.actionType,
+            message: 'Contract event (v1): txHash already tracked, skipping DEPOSIT creation',
+          });
         } else {
           // Thirdweb DEPOSIT: sadece DEPOSIT action'ından sorumlu; TIP_RECEIVE INTERNAL TRANSFER bölümünde yönetilir
           const pendingTx = await prisma.transaction.findFirst({
@@ -530,6 +532,31 @@ export class ContractEventService {
               message: 'FEE transfer detected but receiver wallet not found; skipping FEE transaction',
             });
           } else {
+            // BUG-24 fix: FEE metadata'sına ilgili tip bilgilerini ekle
+            // TIP_RECEIVE transaction'ından pairedTransactionId, TIP_SEND'den senderUserId alınır
+            let feeSenderUserId: string | null = null;
+            let feeRelatedReceiveTxId: string | null = null;
+
+            const relatedReceiveTx = await prisma.transaction.findFirst({
+              where: { txHash: event.transactionHash, actionType: 'TIP_RECEIVE' as unknown as TransactionActionType },
+              select: { id: true, metadata: true },
+            });
+            if (relatedReceiveTx) {
+              feeRelatedReceiveTxId = relatedReceiveTx.id;
+              const receiveMeta = relatedReceiveTx.metadata as Record<string, unknown> | null;
+              feeSenderUserId = (receiveMeta?.senderUserId as string) ?? null;
+            }
+            if (!feeSenderUserId) {
+              const relatedSendTx = await prisma.transaction.findFirst({
+                where: { txHash: event.transactionHash, actionType: 'TIP_SEND' as unknown as TransactionActionType },
+                select: { metadata: true, walletId: true },
+              });
+              if (relatedSendTx) {
+                const senderWallet = await this.walletRepo.findById(relatedSendTx.walletId);
+                feeSenderUserId = senderWallet?.userId ?? null;
+              }
+            }
+
             // Aynı txHash ile zaten FEE kaydı var mı kontrol et (duplicate engelle)
             const existingFee = await prisma.transaction.findFirst({
               where: {
@@ -558,7 +585,9 @@ export class ContractEventService {
                     contractAddress: event.contractAddress,
                     blockNumber: event.blockNumber,
                     tokenType: 'ERC20',
-                    description: 'Hizmet bedeli (Tipbox platform fee)',
+                    description: 'Platform fee',
+                    senderUserId: feeSenderUserId,
+                    pairedTransactionId: feeRelatedReceiveTxId,
                   },
                 },
               });
@@ -584,20 +613,22 @@ export class ContractEventService {
           }
         } else {
           // Normal WITHDRAW akışı
-          // Önce txHash ile var olan WITHDRAW transaction kontrolü (duplicate engelle)
-          const existingByHash = event.transactionHash
+          // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction zaten varsa
+          // (TIP_SEND, TIP_RECEIVE vb.), bu bir tip transferinin alt-event'idir — WITHDRAW oluşturma.
+          const anyExistingByHash = event.transactionHash
             ? await prisma.transaction.findFirst({
-                where: {
-                  walletId: fromWallet.id,
-                  txHash: event.transactionHash,
-                  actionType: 'WITHDRAW' as unknown as TransactionActionType,
-                },
-                select: { id: true },
+                where: { txHash: event.transactionHash },
+                select: { id: true, actionType: true },
               })
             : null;
 
-          if (existingByHash) {
-            transactionId = existingByHash.id;
+          if (anyExistingByHash) {
+            transactionId = anyExistingByHash.id;
+            logger.info({
+              txHash: event.transactionHash,
+              existingActionType: anyExistingByHash.actionType,
+              message: 'Contract event (v1): txHash already tracked, skipping WITHDRAW creation',
+            });
           } else {
             // Thirdweb WITHDRAW: sadece WITHDRAW action'ından sorumlu; TIP_SEND INTERNAL TRANSFER bölümünde yönetilir
             const pendingTx = await prisma.transaction.findFirst({
@@ -693,6 +724,39 @@ export class ContractEventService {
         );
         if (toConfirm.length > 0) {
           for (const tx of toConfirm) {
+            // BUG-17 fix: TIP_RECEIVE amount'u on-chain gercek tutar ile dogrula/guncelle.
+            // Contract event'teki amount, fee dusulmus net tutardir (orn. 75).
+            // sendTip() fee'yi hesaplayip net tutari RECEIVE'e yazmis olabilir;
+            // burada on-chain gercek deger ile dogrulama/duzeltme yapilir.
+            if (
+              tx.actionType === TransactionActionType.TIP_RECEIVE &&
+              amount > 0 &&
+              tx.amount !== null &&
+              tx.amount !== amount
+            ) {
+              const existingMeta = (tx.metadata as Record<string, unknown>) || {};
+              await prisma.transaction.update({
+                where: { id: tx.id },
+                data: {
+                  amount: amount,
+                  metadata: {
+                    ...existingMeta,
+                    grossAmount: existingMeta.grossAmount ?? tx.amount,
+                    feeAmount: typeof existingMeta.grossAmount === 'number'
+                      ? existingMeta.grossAmount - amount
+                      : (tx.amount ?? 0) - amount,
+                    amountCorrectedByContractEvent: true,
+                  },
+                },
+              });
+              logger.info({
+                transactionId: tx.id,
+                oldAmount: tx.amount,
+                newAmount: amount,
+                txHash: hash,
+                message: 'TIP_RECEIVE amount corrected by contract event (on-chain net amount)',
+              });
+            }
             await this.transactionService.confirmTransaction(tx.id, hash ?? undefined);
             if (!transactionId) transactionId = tx.id;
           }
@@ -705,9 +769,31 @@ export class ContractEventService {
           const pendingReceiveTx = await prisma.transaction.findFirst({
             where: { walletId: toWallet.id, status: 'pending', actionType: 'TIP_RECEIVE' },
             orderBy: { createdAt: 'desc' },
-            select: { id: true }
+            select: { id: true, amount: true, metadata: true }
           });
           if (pendingReceiveTx) {
+            // BUG-17 fix: pending receive amount duzeltme
+            if (
+              amount > 0 &&
+              pendingReceiveTx.amount !== null &&
+              pendingReceiveTx.amount !== amount
+            ) {
+              const existingMeta = (pendingReceiveTx.metadata as Record<string, unknown>) || {};
+              await prisma.transaction.update({
+                where: { id: pendingReceiveTx.id },
+                data: {
+                  amount: amount,
+                  metadata: {
+                    ...existingMeta,
+                    grossAmount: existingMeta.grossAmount ?? pendingReceiveTx.amount,
+                    feeAmount: typeof existingMeta.grossAmount === 'number'
+                      ? existingMeta.grossAmount - amount
+                      : (pendingReceiveTx.amount ?? 0) - amount,
+                    amountCorrectedByContractEvent: true,
+                  },
+                },
+              });
+            }
             transactionId = pendingReceiveTx.id;
             await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
           }
@@ -1122,50 +1208,67 @@ export class ContractEventService {
         // ============================================================
         if (toWallet && !fromWallet) {
           walletId = toWallet.id;
-          
-          // Pending receive transaction bul
-          const pendingReceiveTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: toWallet.id,
-              status: 'pending',
-              actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] as TransactionActionType[] }
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true }
-          });
 
-          if (pendingReceiveTx) {
-            // Mevcut pending transaction'ı onayla
-            transactionId = pendingReceiveTx.id;
-            await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+          // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction zaten varsa skip et
+          const anyExistingByHash = data.transactionHash
+            ? await prisma.transaction.findFirst({
+                where: { txHash: data.transactionHash },
+                select: { id: true, actionType: true },
+              })
+            : null;
+
+          if (anyExistingByHash) {
+            transactionId = anyExistingByHash.id;
+            logger.info({
+              txHash: data.transactionHash,
+              existingActionType: anyExistingByHash.actionType,
+              message: 'Contract event (legacy): txHash already tracked, skipping DEPOSIT creation',
+            });
           } else {
-            // DEPOSIT: External wallet'tan gelen transfer için yeni transaction oluştur
-            const depositTx = await prisma.transaction.create({
-              data: {
+            // Pending receive transaction bul
+            const pendingReceiveTx = await prisma.transaction.findFirst({
+              where: {
                 walletId: toWallet.id,
-                actionType: 'DEPOSIT' as unknown as TransactionActionType,
-                status: 'confirmed',
-                amount: amount,
-                fromAddress: transferEvent.from,
-                toAddress: transferEvent.to,
-                txHash: data.transactionHash,
-                provider: 'external',
-                confirmedAt: new Date(),
-                metadata: {
-                  source: 'contract_event',
-                  chainId: data.chainId,
-                  contractAddress: data.contractAddress,
-                  blockNumber: data.blockNumber,
-                  tokenType: 'ERC20'
-                }
-              }
+                status: 'pending',
+                actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] as TransactionActionType[] }
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true }
             });
-            transactionId = depositTx.id;
 
-            // Balance güncelle
-            await this.walletService.updateBalance(toWallet.id, amount, {
-              reason: `Deposit from external wallet ${transferEvent.from} (tx: ${data.transactionHash})`
-            });
+            if (pendingReceiveTx) {
+              // Mevcut pending transaction'ı onayla
+              transactionId = pendingReceiveTx.id;
+              await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+            } else {
+              // DEPOSIT: External wallet'tan gelen transfer için yeni transaction oluştur
+              const depositTx = await prisma.transaction.create({
+                data: {
+                  walletId: toWallet.id,
+                  actionType: 'DEPOSIT' as unknown as TransactionActionType,
+                  status: 'confirmed',
+                  amount: amount,
+                  fromAddress: transferEvent.from,
+                  toAddress: transferEvent.to,
+                  txHash: data.transactionHash,
+                  provider: 'external',
+                  confirmedAt: new Date(),
+                  metadata: {
+                    source: 'contract_event',
+                    chainId: data.chainId,
+                    contractAddress: data.contractAddress,
+                    blockNumber: data.blockNumber,
+                    tokenType: 'ERC20'
+                  }
+                }
+              });
+              transactionId = depositTx.id;
+
+              // Balance güncelle
+              await this.walletService.updateBalance(toWallet.id, amount, {
+                reason: `Deposit from external wallet ${transferEvent.from} (tx: ${data.transactionHash})`
+              });
+            }
           }
 
           logger.info({
@@ -1184,49 +1287,66 @@ export class ContractEventService {
         // ============================================================
         else if (fromWallet && !toWallet) {
           walletId = fromWallet.id;
-          
-          // Pending send/withdraw transaction bul
-          const pendingSendTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: fromWallet.id,
-              status: 'pending',
-              actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true }
-          });
 
-          if (pendingSendTx) {
-            transactionId = pendingSendTx.id;
-            await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
+          // Cross-source duplicate guard: aynı txHash ile herhangi bir transaction zaten varsa skip et
+          const anyExistingByHash = data.transactionHash
+            ? await prisma.transaction.findFirst({
+                where: { txHash: data.transactionHash },
+                select: { id: true, actionType: true },
+              })
+            : null;
+
+          if (anyExistingByHash) {
+            transactionId = anyExistingByHash.id;
+            logger.info({
+              txHash: data.transactionHash,
+              existingActionType: anyExistingByHash.actionType,
+              message: 'Contract event (legacy): txHash already tracked, skipping WITHDRAW creation',
+            });
           } else {
-            // WITHDRAW: External wallet'a gönderilen transfer için yeni transaction oluştur
-            const withdrawTx = await prisma.transaction.create({
-              data: {
+            // Pending send/withdraw transaction bul
+            const pendingSendTx = await prisma.transaction.findFirst({
+              where: {
                 walletId: fromWallet.id,
-                actionType: 'WITHDRAW' as unknown as TransactionActionType,
-                status: 'confirmed',
-                amount: amount,
-                fromAddress: transferEvent.from,
-                toAddress: transferEvent.to,
-                txHash: data.transactionHash,
-                provider: 'external',
-                confirmedAt: new Date(),
-                metadata: {
-                  source: 'contract_event',
-                  chainId: data.chainId,
-                  contractAddress: data.contractAddress,
-                  blockNumber: data.blockNumber,
-                  tokenType: 'ERC20'
-                }
-              }
+                status: 'pending',
+                actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true }
             });
-            transactionId = withdrawTx.id;
 
-            // Balance zaten blockchain'de düşmüş, burada da güncelle
-            await this.walletService.updateBalance(fromWallet.id, -amount, {
-              reason: `Withdraw to external wallet ${transferEvent.to} (tx: ${data.transactionHash})`
-            });
+            if (pendingSendTx) {
+              transactionId = pendingSendTx.id;
+              await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
+            } else {
+              // WITHDRAW: External wallet'a gönderilen transfer için yeni transaction oluştur
+              const withdrawTx = await prisma.transaction.create({
+                data: {
+                  walletId: fromWallet.id,
+                  actionType: 'WITHDRAW' as unknown as TransactionActionType,
+                  status: 'confirmed',
+                  amount: amount,
+                  fromAddress: transferEvent.from,
+                  toAddress: transferEvent.to,
+                  txHash: data.transactionHash,
+                  provider: 'external',
+                  confirmedAt: new Date(),
+                  metadata: {
+                    source: 'contract_event',
+                    chainId: data.chainId,
+                    contractAddress: data.contractAddress,
+                    blockNumber: data.blockNumber,
+                    tokenType: 'ERC20'
+                  }
+                }
+              });
+              transactionId = withdrawTx.id;
+
+              // Balance zaten blockchain'de düşmüş, burada da güncelle
+              await this.walletService.updateBalance(fromWallet.id, -amount, {
+                reason: `Withdraw to external wallet ${transferEvent.to} (tx: ${data.transactionHash})`
+              });
+            }
           }
 
           logger.info({

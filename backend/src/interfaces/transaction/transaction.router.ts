@@ -280,65 +280,59 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
     { cursor, limit }
   );
 
-  // Enrich with user data
+  // Enrich with user data — batch lookup (N+1 query fix)
   const prisma = getPrisma();
-  const enrichedItems = await Promise.all(
-    result.items.map(async (tx) => {
-      let fromUser = null;
-      let toUser = null;
+  const allUserIds = new Set<string>();
+  for (const tx of result.items) {
+    if (tx.metadata?.senderUserId && typeof tx.metadata.senderUserId === 'string') {
+      allUserIds.add(tx.metadata.senderUserId);
+    }
+    if (tx.metadata?.recipientUserId && typeof tx.metadata.recipientUserId === 'string' && !tx.metadata.recipientUserId.startsWith('0x')) {
+      allUserIds.add(tx.metadata.recipientUserId);
+    }
+  }
 
-      if (tx.metadata?.senderUserId) {
-        const sender = await prisma.user.findUnique({
-          where: { id: tx.metadata.senderUserId as string },
-          include: {
-            profile: true,
-            avatars: { where: { isActive: true }, take: 1 },
-            wallets: { take: 1 }
-          }
-        });
-        if (sender) {
-          fromUser = {
-            id: sender.id,
-            name: sender.profile?.displayName || 'Unknown',
-            avatar: sender.avatars[0]?.imageUrl || null,
-            walletAddress: sender.wallets[0]?.publicAddress || null
-          };
-        }
-      }
+  const userMap = new Map<string, { id: string; name: string; avatar: string | null; walletAddress: string | null }>();
+  if (allUserIds.size > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...allUserIds] } },
+      include: {
+        profile: true,
+        avatars: { where: { isActive: true }, take: 1 },
+        wallets: { take: 1 },
+      },
+    });
+    for (const u of users) {
+      userMap.set(u.id, {
+        id: u.id,
+        name: u.profile?.displayName || 'Unknown',
+        avatar: u.avatars[0]?.imageUrl || null,
+        walletAddress: u.wallets[0]?.publicAddress || null,
+      });
+    }
+  }
 
-      if (tx.metadata?.recipientUserId && !tx.metadata?.recipientUserId?.startsWith('0x')) {
-        const recipient = await prisma.user.findUnique({
-          where: { id: tx.metadata.recipientUserId as string },
-          include: {
-            profile: true,
-            avatars: { where: { isActive: true }, take: 1 },
-            wallets: { take: 1 }
-          }
-        });
-        if (recipient) {
-          toUser = {
-            id: recipient.id,
-            name: recipient.profile?.displayName || 'Unknown',
-            avatar: recipient.avatars[0]?.imageUrl || null,
-            walletAddress: recipient.wallets[0]?.publicAddress || null
-          };
-        }
-      }
+  const enrichedItems = result.items.map((tx) => {
+    const fromUser = tx.metadata?.senderUserId
+      ? userMap.get(tx.metadata.senderUserId as string) || null
+      : null;
+    const toUser = (tx.metadata?.recipientUserId && typeof tx.metadata.recipientUserId === 'string' && !tx.metadata.recipientUserId.startsWith('0x'))
+      ? userMap.get(tx.metadata.recipientUserId) || null
+      : null;
 
-      return {
-        id: tx.id,
-        type: tx.isSend() ? 'sent' : 'received',
-        actionType: tx.actionType,
-        amount: tx.amount,
-        currency: 'TIPS',
-        from: fromUser,
-        to: toUser,
-        reason: tx.metadata?.reason || null,
-        status: tx.status,
-        createdAt: tx.createdAt.toISOString()
-      };
-    })
-  );
+    return {
+      id: tx.id,
+      type: tx.isSend() ? 'sent' : 'received',
+      actionType: tx.actionType,
+      amount: tx.amount,
+      currency: 'TIPS',
+      from: fromUser,
+      to: toUser,
+      reason: tx.metadata?.reason || null,
+      status: tx.status,
+      createdAt: tx.createdAt.toISOString()
+    };
+  });
 
   const historyData = {
     items: enrichedItems,
@@ -406,9 +400,24 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
  *         description: Transaction bulunamadı
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
 
+  const { id } = req.params;
   const transaction = await transactionService.getTransactionById(id);
+
+  // Authorization: kullanıcı sadece kendi transaction'larını görebilir
+  const prisma = getPrisma();
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: transaction.walletId },
+    select: { userId: true },
+  });
+  if (!wallet || wallet.userId !== String(userId)) {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
+  }
 
   const txData = {
     id: transaction.id,

@@ -189,6 +189,60 @@ export class WalletPrismaRepository {
     return this.toDomain(updatedWallet);
   }
 
+  /**
+   * Atomic balance increment/decrement. Race condition olmadan balance günceller.
+   * @param amount Pozitif = ekle, negatif = çıkar
+   * @returns Güncellenmiş wallet veya null (negatif balance koruması: updateMany count=0)
+   */
+  async incrementBalance(id: string, amount: number): Promise<Wallet | null> {
+    // Negatif balance koruması: sadece yeterli bakiye varsa güncelle
+    if (amount < 0) {
+      const result = await this.prisma.wallet.updateMany({
+        where: { id, balance: { gte: Math.abs(amount) } },
+        data: { balance: { increment: amount } },
+      });
+      if (result.count === 0) return null;
+    } else {
+      await this.prisma.wallet.update({
+        where: { id },
+        data: { balance: { increment: amount } },
+      });
+    }
+    const updated = await this.prisma.wallet.findUnique({ where: { id } });
+    return updated ? this.toDomain(updated) : null;
+  }
+
+  /**
+   * Atomic locked balance increment. Double spend önleme için lockedBalance'ı artırır.
+   * Sadece available balance (balance - lockedBalance) >= amount ise çalışır.
+   * @returns Güncellenmiş wallet veya null (yetersiz bakiye)
+   */
+  async lockBalance(id: string, amount: number): Promise<Wallet | null> {
+    // Raw query ile atomic check-and-update: available >= amount
+    const result = await this.prisma.$executeRaw`
+      UPDATE wallets
+      SET locked_balance = locked_balance + ${amount}
+      WHERE id = ${id}::uuid
+        AND (balance - locked_balance) >= ${amount}
+    `;
+    if (result === 0) return null;
+    const updated = await this.prisma.wallet.findUnique({ where: { id } });
+    return updated ? this.toDomain(updated) : null;
+  }
+
+  /**
+   * Atomic locked balance decrement (unlock).
+   */
+  async unlockBalance(id: string, amount: number): Promise<Wallet | null> {
+    const result = await this.prisma.wallet.updateMany({
+      where: { id, lockedBalance: { gte: amount } },
+      data: { lockedBalance: { increment: -amount } },
+    });
+    if (result.count === 0) return null;
+    const updated = await this.prisma.wallet.findUnique({ where: { id } });
+    return updated ? this.toDomain(updated) : null;
+  }
+
   async updateLockedBalance(id: string, newLockedBalance: number): Promise<Wallet | null> {
     const updatedWallet = await this.prisma.wallet.update({
       where: { id },

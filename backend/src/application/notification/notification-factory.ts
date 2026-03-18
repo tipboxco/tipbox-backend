@@ -170,7 +170,10 @@ export class NotificationFactory {
       type: NotificationType.TIPS_RECEIVED,
       category: NotificationCategory.SYSTEM,
       getTitle: () => 'TIPS Received! 💰',
-      getMessage: (data) => `You received ${data.amount || 0} TIPS`,
+      getMessage: (data) => {
+        const from = data.senderUsername ? ` from ${data.senderUsername}` : '';
+        return `You received ${data.amount || 0} TIPS${from}`;
+      },
     });
 
     // Event Notifications

@@ -124,6 +124,8 @@ export async function enrichNotificationData(
     // Tip transfer: gönderenin (from) avatar'ı gösterilir (TIPS_RECEIVED, DEPOSIT)
     else if (data.senderUserId) userIdForAvatar = String(data.senderUserId);
     else if (data.senderId) userIdForAvatar = String(data.senderId);
+    // TIPS_SENT: alıcının avatarını göster (gönderen kendi bildiriminde karşı tarafı görmeli)
+    else if (data.recipientUserId) userIdForAvatar = String(data.recipientUserId);
     else if (data.trusterId) userIdForAvatar = String(data.trusterId);
     else if (data.sharerId) userIdForAvatar = String(data.sharerId);
     else if (data.replierId) userIdForAvatar = String(data.replierId);
