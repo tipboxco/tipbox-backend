@@ -6,6 +6,8 @@ export interface CollectionListItem {
   description: string;
   currentProgress: number;
   totalProgress: number;
+  totalBadges: number;
+  earnedBadges: number;
   coverImage: string | null;
   category?: string | null;
 }
@@ -41,6 +43,9 @@ export interface CollectionBadge {
   currentProgress: number;
   totalProgress: number;
   status: CollectionBadgeStatus;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
 }
 
 export interface CollectionDetailResponse {

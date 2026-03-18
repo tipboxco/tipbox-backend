@@ -76,6 +76,7 @@ export class CollectionsService {
           achievementGoals: {
             select: { id: true, pointsRequired: true },
           },
+          _count: { select: { badges: true } },
         },
       }),
       prisma.badgeCollection.count({ where }),
@@ -98,6 +99,29 @@ export class CollectionsService {
       userAchievements.map((ua) => [ua.goalId, ua.progress]),
     );
 
+    // Fetch earned badge counts per collection
+    const collectionIds = collections.map((c) => c.id);
+    const earnedBadges =
+      collectionIds.length > 0
+        ? await prisma.userBadge.findMany({
+            where: {
+              userId,
+              badge: { collectionId: { in: collectionIds } },
+            },
+            select: { badge: { select: { collectionId: true } } },
+          })
+        : [];
+
+    const earnedByCollection = new Map<string, number>();
+    for (const ub of earnedBadges) {
+      if (ub.badge.collectionId) {
+        earnedByCollection.set(
+          ub.badge.collectionId,
+          (earnedByCollection.get(ub.badge.collectionId) ?? 0) + 1,
+        );
+      }
+    }
+
     let items: CollectionListItem[] = collections.map((c) => {
       const totalProgress = c.achievementGoals.reduce(
         (sum, g) => sum + g.pointsRequired,
@@ -114,8 +138,10 @@ export class CollectionsService {
         description: c.shortDescription ?? c.longDescription ?? '',
         currentProgress,
         totalProgress,
+        totalBadges: c._count.badges,
+        earnedBadges: earnedByCollection.get(c.id) ?? 0,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
       };
     });
 
@@ -256,7 +282,7 @@ export class CollectionsService {
       take: params.limit + 1,
       orderBy: { createdAt: 'desc' },
       include: {
-        category: { select: { handle: true } },
+        category: { select: { name: true } },
         _count: { select: { badges: true } },
       },
     });
@@ -299,7 +325,7 @@ export class CollectionsService {
         currentProgress: pd.current,
         totalProgress: pd.total,
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
         status: isCompleted ? 'completed' : 'in_progress',
         totalBadges: c._count.badges,
         earnedBadges: earnedByCollection.get(c.id) ?? 0,
@@ -393,7 +419,7 @@ export class CollectionsService {
       take: params.limit + 1,
       orderBy: { createdAt: 'desc' },
       include: {
-        category: { select: { handle: true } },
+        category: { select: { name: true } },
         badges: { select: { id: true } },
         _count: { select: { badges: true } },
       },
@@ -433,7 +459,7 @@ export class CollectionsService {
         title: c.name,
         description: c.shortDescription ?? c.longDescription ?? '',
         coverImage: c.bannerUrl ? resolveMediaUrl(c.bannerUrl) : null,
-        category: c.category?.handle ?? null,
+        category: c.category?.name ?? null,
         completedAt: cd?.completedAt?.toISOString() ?? null,
         totalBadges: c._count.badges,
         earnedBadges: earnedByCollection.get(c.id) ?? 0,
@@ -477,13 +503,16 @@ export class CollectionsService {
                 ],
               }
             : undefined,
-          orderBy: { name: 'asc' as const },
+          orderBy: [{ displayOrder: 'asc' as const }, { createdAt: 'asc' as const }],
           select: {
             id: true,
             name: true,
             description: true,
             imageUrl: true,
             highlightsImage: true,
+            status: true,
+            displayOrder: true,
+            createdAt: true,
           },
         },
       },
@@ -561,7 +590,15 @@ export class CollectionsService {
         currentProgress,
         totalProgress,
         status,
+        isActive: badge.status === 'ACTIVE',
+        displayOrder: 0, // will be assigned after sorting
+        createdAt: badge.createdAt.toISOString(),
       };
+    });
+
+    // Assign sequential displayOrder based on sorted position
+    badges.forEach((badge, index) => {
+      badge.displayOrder = index + 1;
     });
 
     // Collection-level progress
@@ -577,6 +614,9 @@ export class CollectionsService {
       0,
     );
 
+    const totalBadgesCount = collection.badges.length;
+    const earnedBadgesCount = ownedBadges.size;
+
     return {
       collection: {
         id: collection.id,
@@ -584,8 +624,10 @@ export class CollectionsService {
         description: collection.longDescription ?? collection.shortDescription ?? '',
         currentProgress: collectionCurrentProgress,
         totalProgress: collectionTotalProgress,
+        totalBadges: totalBadgesCount,
+        earnedBadges: earnedBadgesCount,
         coverImage: collection.bannerUrl ? resolveMediaUrl(collection.bannerUrl) : null,
-        category: collection.category?.handle ?? null,
+        category: collection.category?.name ?? null,
       },
       badges,
     };
