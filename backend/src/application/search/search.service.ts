@@ -1,5 +1,5 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
-import { SearchData, SearchUserData, SearchBrandData, SearchProductData } from '../../interfaces/search/search.dto';
+import { SearchData, SearchUserData, SearchBrandData, SearchProductData, SearchPagination } from '../../interfaces/search/search.dto';
 import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
@@ -16,12 +16,37 @@ export class SearchService {
     this.cacheService = CacheService.getInstance();
   }
 
-  async searchAll(keyword: string | undefined, limitPerType: number = 10, types?: SearchTypes): Promise<SearchData> {
+  private decodeCursor(cursor?: string): { user?: string; brand?: string; product?: string } {
+    if (!cursor) return {};
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decoded) as Record<string, unknown>;
+      return {
+        user: typeof parsed.user === 'string' ? parsed.user : undefined,
+        brand: typeof parsed.brand === 'string' ? parsed.brand : undefined,
+        product: typeof parsed.product === 'string' ? parsed.product : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  private encodeCursor(cursors: { user?: string; brand?: string; product?: string }): string {
+    return Buffer.from(JSON.stringify(cursors)).toString('base64');
+  }
+
+  async searchAll(
+    keyword: string | undefined,
+    limitPerType: number = 10,
+    types?: SearchTypes,
+    cursor?: string,
+  ): Promise<SearchData> {
     const activeTypes: SearchTypes = types && types.length > 0 ? types : ['user', 'brand', 'product'];
     const trimmed = keyword?.trim() || '';
     const isDefaultMode = !keyword || trimmed.length === 0;
     const defaultLimit = 4; // Default mode'da 4'er adet
     const actualLimit = isDefaultMode ? defaultLimit : limitPerType;
+    const cursorIds = this.decodeCursor(cursor);
 
     // Default mode: cache ile tekrarlayan isteklerde DB yükü ve timeout riski azaltılır
     if (isDefaultMode) {
@@ -68,6 +93,7 @@ export class SearchService {
                 { profile: { is: { displayName: { contains: trimmed, mode: 'insensitive' } } } },
                 { profile: { is: { userName: { contains: trimmed, mode: 'insensitive' } } } },
               ],
+              ...(cursorIds.user ? { id: { lt: cursorIds.user } } : {}),
             },
             include: {
               profile: true,
@@ -84,7 +110,7 @@ export class SearchService {
             orderBy: [
               { updatedAt: 'desc' },
             ],
-            take: actualLimit,
+            take: actualLimit + 1,
           })
         );
       }
@@ -153,6 +179,7 @@ export class SearchService {
                 { category: { contains: trimmed, mode: 'insensitive' } },
                 { description: { contains: trimmed, mode: 'insensitive' } },
               ],
+              ...(cursorIds.brand ? { id: { gt: cursorIds.brand } } : {}),
             },
             select: {
               id: true,
@@ -162,7 +189,7 @@ export class SearchService {
               description: true,
             },
             orderBy: { name: 'asc' },
-            take: actualLimit,
+            take: actualLimit + 1,
           })
         );
       }
@@ -235,6 +262,7 @@ export class SearchService {
                 { description: { contains: trimmed, mode: 'insensitive' } },
                 { brand: { is: { name: { contains: trimmed, mode: 'insensitive' } } } },
               ],
+              ...(cursorIds.product ? { id: { gt: cursorIds.product } } : {}),
             },
             select: {
               id: true,
@@ -248,7 +276,7 @@ export class SearchService {
               imageUrl: true,
             },
             orderBy: { name: 'asc' },
-            take: actualLimit,
+            take: actualLimit + 1,
           })
         );
       }
@@ -274,6 +302,15 @@ export class SearchService {
       // resolveMediaUrl path'e tipbox-media/ ekleyecek ve BASE_URL ile birleştirecek
       return resolveMediaUrl(path);
     };
+
+    // Pagination: check hasMore and trim extra items (search mode only)
+    const usersHasMore = !isDefaultMode && users.length > actualLimit;
+    const brandsHasMore = !isDefaultMode && brands.length > actualLimit;
+    const productsHasMore = !isDefaultMode && products.length > actualLimit;
+
+    if (usersHasMore) users.splice(actualLimit);
+    if (brandsHasMore) brands.splice(actualLimit);
+    if (productsHasMore) products.splice(actualLimit);
 
     const typedUsers = users as Array<Record<string, unknown>>;
     const typedBrands = brands as Array<Record<string, unknown>>;
@@ -317,7 +354,22 @@ export class SearchService {
       };
     });
 
-    const result: SearchData = { userData, brandData, productData };
+    const hasMore = usersHasMore || brandsHasMore || productsHasMore;
+
+    const pagination: SearchPagination = {
+      hasMore,
+      limit: actualLimit,
+    };
+
+    if (hasMore) {
+      const nextCursor: { user?: string; brand?: string; product?: string } = {};
+      if (usersHasMore && userData.length > 0) nextCursor.user = userData[userData.length - 1].id;
+      if (brandsHasMore && brandData.length > 0) nextCursor.brand = brandData[brandData.length - 1].id;
+      if (productsHasMore && productData.length > 0) nextCursor.product = productData[productData.length - 1].id;
+      pagination.cursor = this.encodeCursor(nextCursor);
+    }
+
+    const result: SearchData = { userData, brandData, productData, pagination };
 
     if (isDefaultMode) {
       const cacheKey = `search:default:${[...activeTypes].sort().join(',')}`;

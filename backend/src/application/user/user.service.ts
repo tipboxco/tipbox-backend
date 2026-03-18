@@ -77,6 +77,7 @@ type CollectionResponse = {
   nftAddress: string | null;
   totalEarned: number;
   earnedDate: string | null;
+  category: 'event' | 'collection';
   tasks: CollectionTask[];
 };
 
@@ -1137,7 +1138,7 @@ export class UserService {
               },
             },
             _count: {
-              select: { userBadges: true },
+              select: { userBadges: true, eventBadges: true },
             },
           },
         },
@@ -1163,6 +1164,8 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
+      const isEvent = (badge?._count?.eventBadges ?? 0) > 0;
+
       return {
         id: String(badge?.id || ''),
         title: badge?.name || '',
@@ -1172,6 +1175,7 @@ export class UserService {
         nftAddress: (badge as { nftAddress?: string | null })?.nftAddress ?? null,
         earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
         totalEarned: badge?._count?.userBadges ?? 0,
+        category: isEvent ? 'event' : 'collection',
         tasks,
       } as CollectionResponse;
     });
@@ -1440,6 +1444,7 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
+      const badgeType = badge?.type ?? '';
       const item: CollectionResponse = {
         id: String(badge?.id || ''),
         title: badge?.name || '',
@@ -1449,9 +1454,9 @@ export class UserService {
         nftAddress: rw.nftAddress ?? null,
         earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
         totalEarned: badge?._count?.bridgeRewards ?? 0,
+        category: badgeType === 'EVENT' ? 'event' : 'collection',
         tasks,
       };
-      const badgeType = badge?.type ?? '';
       return { item, badgeType };
     });
 
