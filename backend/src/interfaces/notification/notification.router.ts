@@ -953,7 +953,7 @@ async function enrichNotifications(notifications: Record<string, unknown>[]): Pr
           enriched.avatar = null;
           enriched.isSystem = true;
         } else if (senderUserId) {
-          enriched.avatar = data.avatar ?? userAvatars.get(senderUserId) || randomImageCache || null;
+          enriched.avatar = data.avatar ?? (userAvatars.get(senderUserId) || randomImageCache || null);
           enriched.senderUserId = senderUserId;
           enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
         } else {
