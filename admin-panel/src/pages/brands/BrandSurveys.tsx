@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -48,6 +48,8 @@ function BrandSurveys() {
   const [stats, setStats] = useState<AdminBrandSurveyStatsResponse | null>(null);
   const [surveys, setSurveys] = useState<AdminBrandSurveyListItem[]>([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [brandSearchLoading, setBrandSearchLoading] = useState(false);
+  const brandSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pagination, setPagination] = useState({
     total: 0,
     limit: PAGE_SIZE,
@@ -82,22 +84,33 @@ function BrandSurveys() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchBrands({});
-        if (!cancelled && res.data) {
-          setBrands(res.data.map((b) => ({ id: b.id, name: b.name })));
-        }
-      } catch (e) {
-        console.error('Failed to load brands:', e);
+  const searchBrands = useCallback(async (searchText: string) => {
+    setBrandSearchLoading(true);
+    try {
+      const res = await fetchBrands({ search: searchText || undefined, limit: 50 });
+      if (res.data) {
+        setBrands(res.data.map((b) => ({ id: b.id, name: b.name })));
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch (e) {
+      console.error('Failed to load brands:', e);
+    } finally {
+      setBrandSearchLoading(false);
+    }
   }, []);
+
+  const handleBrandSearch = useCallback(
+    (value: string) => {
+      if (brandSearchTimer.current) clearTimeout(brandSearchTimer.current);
+      brandSearchTimer.current = setTimeout(() => {
+        searchBrands(value);
+      }, 300);
+    },
+    [searchBrands],
+  );
+
+  useEffect(() => {
+    searchBrands('');
+  }, [searchBrands]);
 
   const loadSurveys = async () => {
     setLoadingList(true);
@@ -395,9 +408,10 @@ function BrandSurveys() {
             <Select
               placeholder="Select brand"
               showSearch
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
+              filterOption={false}
+              onSearch={handleBrandSearch}
+              loading={brandSearchLoading}
+              notFoundContent={brandSearchLoading ? 'Searching...' : 'No brands found'}
               options={brands.map((b) => ({ label: b.name, value: b.id }))}
             />
           </Form.Item>
