@@ -1498,6 +1498,210 @@ export class CatalogService {
   }
 
   /**
+   * Subcategory arama - level=1 kategoriler arasında isim bazlı arama (cursor pagination)
+   */
+  async searchSubCategories(
+    q: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: SubCategoryItem[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const trimmedQ = q.trim();
+
+    const where: Prisma.CategoryWhereInput = {
+      level: 1,
+      ...(trimmedQ && { name: { contains: trimmedQ, mode: 'insensitive' as const } }),
+      ...(cursor && { id: { gt: cursor } }),
+    };
+
+    const results = await prisma.category.findMany({
+      where,
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items: items.map((c) => ({
+        subCategoryId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        categoryId: c.parentId || '',
+      })),
+      pagination: { cursor: nextCursor, hasMore, limit },
+    };
+  }
+
+  /**
+   * Product group arama - level=2 kategoriler arasında isim bazlı arama (cursor pagination)
+   */
+  async searchProductGroups(
+    q: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductGroupItem[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const trimmedQ = q.trim();
+
+    const where: Prisma.CategoryWhereInput = {
+      level: 2,
+      ...(trimmedQ && { name: { contains: trimmedQ, mode: 'insensitive' as const } }),
+      ...(cursor && { id: { gt: cursor } }),
+    };
+
+    const results = await prisma.category.findMany({
+      where,
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items: items.map((c) => ({
+        productGroupId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        subCategoryId: c.parentId || '',
+      })),
+      pagination: { cursor: nextCursor, hasMore, limit },
+    };
+  }
+
+  /**
+   * Popüler subcategories - en fazla post içeren level=1 kategoriler
+   */
+  async getPopularSubCategories(limit: number = 10): Promise<{
+    items: SubCategoryItem[];
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit > 0 ? Math.min(limit, 50) : 10;
+
+    const postCounts = await prisma.contentPost.groupBy({
+      by: ['categoryId'],
+      _count: { id: true },
+      where: { categoryId: { not: null } },
+      orderBy: { _count: { id: 'desc' } },
+      take: safeLimit * 5,
+    });
+
+    const orderedIds = postCounts
+      .map((r) => r.categoryId)
+      .filter((id): id is string => id !== null);
+
+    if (orderedIds.length === 0) {
+      const fallback = await prisma.category.findMany({
+        where: { level: 1 },
+        select: { id: true, name: true, thumbnail: true, parentId: true },
+        take: safeLimit,
+      });
+      return {
+        items: fallback.map((c) => ({
+          subCategoryId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          categoryId: c.parentId || '',
+        })),
+        pagination: { hasMore: false, limit: safeLimit },
+      };
+    }
+
+    const cats = await prisma.category.findMany({
+      where: { id: { in: orderedIds }, level: 1 },
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+    });
+
+    const catMap = new Map(cats.map((c) => [c.id, c]));
+    const ordered = orderedIds
+      .filter((id) => catMap.has(id))
+      .map((id) => catMap.get(id)!)
+      .slice(0, safeLimit);
+
+    return {
+      items: ordered.map((c) => ({
+        subCategoryId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        categoryId: c.parentId || '',
+      })),
+      pagination: { hasMore: false, limit: safeLimit },
+    };
+  }
+
+  /**
+   * Popüler product groups - en fazla post içeren level=2 kategoriler
+   */
+  async getPopularProductGroups(limit: number = 10): Promise<{
+    items: ProductGroupItem[];
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit > 0 ? Math.min(limit, 50) : 10;
+
+    const postCounts = await prisma.contentPost.groupBy({
+      by: ['categoryId'],
+      _count: { id: true },
+      where: { categoryId: { not: null } },
+      orderBy: { _count: { id: 'desc' } },
+      take: safeLimit * 5,
+    });
+
+    const orderedIds = postCounts
+      .map((r) => r.categoryId)
+      .filter((id): id is string => id !== null);
+
+    if (orderedIds.length === 0) {
+      const fallback = await prisma.category.findMany({
+        where: { level: 2 },
+        select: { id: true, name: true, thumbnail: true, parentId: true },
+        take: safeLimit,
+      });
+      return {
+        items: fallback.map((c) => ({
+          productGroupId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          subCategoryId: c.parentId || '',
+        })),
+        pagination: { hasMore: false, limit: safeLimit },
+      };
+    }
+
+    const cats = await prisma.category.findMany({
+      where: { id: { in: orderedIds }, level: 2 },
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+    });
+
+    const catMap = new Map(cats.map((c) => [c.id, c]));
+    const ordered = orderedIds
+      .filter((id) => catMap.has(id))
+      .map((id) => catMap.get(id)!)
+      .slice(0, safeLimit);
+
+    return {
+      items: ordered.map((c) => ({
+        productGroupId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        subCategoryId: c.parentId || '',
+      })),
+      pagination: { hasMore: false, limit: safeLimit },
+    };
+  }
+
+  /**
    * Global product search - Tüm product group'lar arasında arama
    * Sonuçları product group bazında gruplar
    */

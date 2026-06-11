@@ -805,6 +805,174 @@ router.get(
   }),
 );
 
+/**
+ * @openapi
+ * /api/catalog/subcategories/search:
+ *   get:
+ *     summary: Subcategory arama
+ *     description: İsim bazlı subcategory (level=1 kategori) araması. Cursor-based pagination destekler.
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Arama terimi (subcategory adında içerik araması)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Subcategoryler başarıyla listelendi.
+ */
+router.get(
+  '/subcategories/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.searchSubCategories(q, { cursor, limit: limitParam });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /api/catalog/product-groups/search:
+ *   get:
+ *     summary: Product group arama
+ *     description: İsim bazlı product group (level=2 kategori) araması. Cursor-based pagination destekler.
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Arama terimi (product group adında içerik araması)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Product group'lar başarıyla listelendi.
+ */
+router.get(
+  '/product-groups/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.searchProductGroups(q, { cursor, limit: limitParam });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /api/catalog/subcategories/popular:
+ *   get:
+ *     summary: Popüler subcategories
+ *     description: En fazla post içeren subcategoryleri (level=1) döndürür.
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Döndürülecek item sayısı
+ *     responses:
+ *       200:
+ *         description: Popüler subcategoryler başarıyla getirildi.
+ */
+router.get(
+  '/subcategories/popular',
+  asyncHandler(async (req: Request, res: Response) => {
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.getPopularSubCategories(limitParam);
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /api/catalog/product-groups/popular:
+ *   get:
+ *     summary: Popüler product groups
+ *     description: En fazla post içeren product group'ları (level=2) döndürür.
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Döndürülecek item sayısı
+ *     responses:
+ *       200:
+ *         description: Popüler product group'lar başarıyla getirildi.
+ */
+router.get(
+  '/product-groups/popular',
+  asyncHandler(async (req: Request, res: Response) => {
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.getPopularProductGroups(limitParam);
+    return res.json(result);
+  }),
+);
+
 router.get(
   '/products/:productId/posts',
   asyncHandler(async (req: Request, res: Response) => {
