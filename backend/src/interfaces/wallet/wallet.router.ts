@@ -3,14 +3,13 @@ import { WalletService } from '../../application/wallet/wallet.service';
 import { TipsBalanceService } from '../../application/wallet/tips-balance.service';
 import { TransactionService } from '../../application/transaction/transaction.service';
 import { RewardClaimService } from '../../application/reward/reward-claim.service';
-import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
+import { getWalletProvider } from '../../application/wallet/provider/wallet-provider.factory';
 import { parseContractError } from '../../application/wallet/thirdweb-sdk/contract-errors';
 import { createWeb3NftService, resolveNftImageUrl } from '../../application/wallet/web3-nft-service';
 import { ConnectWalletRequest, WalletResponse, WalletNftsResponse, NftItemResponse } from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import {
-  ThirdwebNotConfiguredError,
-  ThirdwebWalletAuthFailedError,
+  WalletProviderNotConfiguredError,
 } from '../../infrastructure/errors/custom-errors';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { RewardSourceType } from '../../domain/reward/reward-source-type.enum';
@@ -822,7 +821,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
 
   // Contract → DB sync: pasif (WALLET_BALANCE_SYNC_ENABLED=true yapılırsa çalışır)
   const balanceSyncEnabled = process.env.WALLET_BALANCE_SYNC_ENABLED === 'true';
-  const sdk = getThirdwebSdkService();
+  const sdk = getWalletProvider();
   if (balanceSyncEnabled && sdk.isConfigured() && wallet.smartAccountAddress) {
     const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
     if (!syncResult.success) {
@@ -943,18 +942,21 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
       balance: balanceInfo.balance
     });
   } catch (err: unknown) {
-    if (err instanceof ThirdwebNotConfiguredError) {
+    if (err instanceof WalletProviderNotConfiguredError) {
       return res.status(503).json({
         success: false,
         message: err.message,
         code: err.code,
       });
     }
-    if (err instanceof ThirdwebWalletAuthFailedError) {
+    if (
+      err instanceof Error &&
+      (err.name === 'WalletProviderAuthFailedError' ||
+        err.name === 'ThirdwebWalletAuthFailedError')
+    ) {
       return res.status(400).json({
         success: false,
         message: err.message,
-        code: err.code,
       });
     }
     throw err;
@@ -1130,11 +1132,11 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
-  const sdk = getThirdwebSdkService();
+  const sdk = getWalletProvider();
   if (!sdk.isConfigured()) {
     return res.status(503).json({
       success: false,
-      error: 'Thirdweb SDK is not configured',
+      error: 'Wallet provider is not configured',
     });
   }
 
@@ -1152,10 +1154,10 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
   let attempt = await tryClaim();
 
   if (attempt.success) {
-    const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
-    if (thirdwebWallet?.id) {
-      walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
-        logger.warn({ userId: userIdStr, walletId: thirdwebWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
+    const providerWallet = await walletService.getActiveProviderWallet(userIdStr);
+    if (providerWallet?.id) {
+      walletService.syncWalletBalanceFromChain(providerWallet.id).catch((err) => {
+        logger.warn({ userId: userIdStr, walletId: providerWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
       });
     }
     return res.status(200).json({

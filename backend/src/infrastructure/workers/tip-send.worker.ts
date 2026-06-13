@@ -10,7 +10,7 @@ import RedisConfigManager from '../config/redis.config';
 import QueueProvider, { TipSendJobData } from '../queue/queue.provider';
 import { TransactionPrismaRepository } from '../repositories/transaction-prisma.repository';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
-import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
+import { getWalletProvider } from '../../application/wallet/provider/wallet-provider.factory';
 import { WalletService } from '../../application/wallet/wallet.service';
 import { TransactionService } from '../../application/transaction/transaction.service';
 import logger from '../logger/logger';
@@ -95,9 +95,9 @@ export class TipSendWorker {
       return;
     }
 
-    const sdk = getThirdwebSdkService();
+    const sdk = getWalletProvider();
     if (!sdk.isConfigured()) {
-      await this.failSendOrBoth(sendTransactionId, receiveTransactionId ?? undefined, 'Thirdweb SDK is not configured.');
+      await this.failSendOrBoth(sendTransactionId, receiveTransactionId ?? undefined, 'Wallet provider is not configured.');
       return;
     }
 

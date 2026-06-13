@@ -126,4 +126,28 @@ export class ThirdwebWalletAuthFailedError extends Error {
     super(message);
     this.name = 'ThirdwebWalletAuthFailedError';
   }
-} 
+}
+
+// ============================================================================
+// Provider-agnostic wallet errors (use these in new code)
+// ============================================================================
+
+/** Active wallet provider is not configured (missing API keys / credentials). */
+export class WalletProviderNotConfiguredError extends Error {
+  status = 503;
+  code = ErrorCode.WALLET_PROVIDER_NOT_CONFIGURED;
+  constructor(message = 'Wallet provider yapılandırılmamış. Gerekli ortam değişkenlerini kontrol edin.') {
+    super(message);
+    this.name = 'WalletProviderNotConfiguredError';
+  }
+}
+
+/** Active wallet provider could not authenticate / create a wallet for the user. */
+export class WalletProviderAuthFailedError extends Error {
+  status = 400;
+  code = ErrorCode.WALLET_PROVIDER_AUTH_FAILED;
+  constructor(message = 'Wallet provider ile kimlik doğrulama başarısız oldu.') {
+    super(message);
+    this.name = 'WalletProviderAuthFailedError';
+  }
+}
