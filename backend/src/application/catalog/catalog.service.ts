@@ -111,6 +111,15 @@ export interface ProductItem {
   productGroupId: string; // Product Group ID (parent)
 }
 
+/** Bir kategori subtree'sinde bulunan marka facet'i (yatay marka filtresi için) */
+export interface BrandFilterItem {
+  id: string; // Brand.id (UUID) — marka detay sayfasına (BrandDetailScreen) yönlendirmede kullanılır
+  brandId: string; // Product.brandId === Brand.externalId — ürün filtrelemede kullanılan değer
+  name: string;
+  image: string | null;
+  productCount: number;
+}
+
 export interface ProductDetail {
   productId: string;
   name: string;
@@ -423,6 +432,169 @@ export class CatalogService {
       };
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bir kategori (kendisi dahil) için tüm alt kategori id'lerini TEK SORGUDA bulur.
+   * Tüm kategorileri bir kez yükleyip in-memory BFS yapar (recursive N+1 yerine).
+   */
+  private async getDescendantCategoryIdsFast(rootCategoryId: string): Promise<string[]> {
+    const allCategories = await prisma.category.findMany({
+      select: { id: true, parentId: true },
+    });
+
+    const parentChildMap = new Map<string, string[]>();
+    for (const cat of allCategories) {
+      if (!cat.parentId) continue;
+      if (!parentChildMap.has(cat.parentId)) parentChildMap.set(cat.parentId, []);
+      parentChildMap.get(cat.parentId)!.push(cat.id);
+    }
+
+    const result = new Set<string>([rootCategoryId]);
+    const toProcess: string[] = [rootCategoryId];
+    while (toProcess.length > 0) {
+      const currentId = toProcess.shift()!;
+      const children = parentChildMap.get(currentId) || [];
+      for (const childId of children) {
+        if (!result.has(childId)) {
+          result.add(childId);
+          toProcess.push(childId);
+        }
+      }
+    }
+
+    return Array.from(result);
+  }
+
+  /**
+   * Bir kategori (herhangi bir seviye) ve tüm alt kategorilerindeki ürünlere ait
+   * marka facet listesini döndürür. Yatay marka filtresi (scroll-x) için kullanılır.
+   * brandId === Product.brandId === Brand.externalId (ürün filtrelemede kullanılan değer).
+   */
+  async getBrandsByCategory(categoryId: string): Promise<{ items: BrandFilterItem[] }> {
+    try {
+      const resolvedCategoryId = await this.resolveCategoryId(categoryId);
+      const categoryIds = await this.getDescendantCategoryIdsFast(resolvedCategoryId);
+
+      // Subtree'deki ürünleri brandId'ye göre grupla + say
+      const grouped = await prisma.product.groupBy({
+        by: ['brandId'],
+        where: {
+          categoryId: { in: categoryIds },
+          brandId: { not: null },
+        },
+        _count: { _all: true },
+      });
+
+      if (grouped.length === 0) {
+        return { items: [] };
+      }
+
+      const countByExternalId = new Map<string, number>();
+      for (const row of grouped) {
+        if (row.brandId) countByExternalId.set(row.brandId, row._count._all);
+      }
+
+      const brands = await prisma.brand.findMany({
+        where: { externalId: { in: Array.from(countByExternalId.keys()) } },
+        select: { id: true, externalId: true, name: true, logoUrl: true, imageUrl: true },
+      });
+
+      const items: BrandFilterItem[] = brands
+        .filter((b) => b.externalId !== null)
+        .map((b) => ({
+          id: b.id,
+          brandId: b.externalId as string,
+          name: b.name,
+          image: resolveMediaUrl(b.logoUrl ?? b.imageUrl),
+          productCount: countByExternalId.get(b.externalId as string) ?? 0,
+        }))
+        .sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));
+
+      return { items };
+    } catch (error) {
+      logger.error(`Failed to get brands for category ${categoryId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bir kategori (herhangi bir seviye) ve tüm alt kategorilerindeki ürünleri listeler.
+   * Opsiyonel brandId (Brand.externalId) ile markaya göre filtreler. Cursor-based pagination.
+   */
+  async getProductsByCategory(
+    categoryId: string,
+    options?: { brandId?: string; search?: string; cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductItem[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
+    const brandId = options?.brandId?.trim();
+    const searchTrimmed = options?.search?.trim();
+
+    try {
+      const resolvedCategoryId = await this.resolveCategoryId(categoryId);
+      const categoryIds = await this.getDescendantCategoryIdsFast(resolvedCategoryId);
+
+      const productsWhere: Prisma.ProductWhereInput = {
+        categoryId: { in: categoryIds },
+        ...(brandId && { brandId }),
+        ...(searchTrimmed && {
+          OR: [
+            { name: { contains: searchTrimmed, mode: 'insensitive' as const } },
+            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' as const } } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' as const } },
+          ],
+        }),
+        ...(cursor && { id: { gt: cursor } }),
+      };
+
+      const products = await prisma.product.findMany({
+        where: productsWhere,
+        select: {
+          id: true,
+          name: true,
+          imageUrl: true,
+          categoryId: true,
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor =
+        hasMore && resultProducts.length > 0
+          ? resultProducts[resultProducts.length - 1].id
+          : undefined;
+
+      const items = resultProducts.map((product) => ({
+        productId: product.id,
+        name: product.name,
+        image: resolveMediaUrl(product.imageUrl),
+        productGroupId: product.categoryId || '',
+      }));
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get products for category ${categoryId}:`, error);
       throw error;
     }
   }
