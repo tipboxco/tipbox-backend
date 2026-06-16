@@ -95,6 +95,7 @@ export interface SubCategoryItem {
   name: string;
   image: string | null;
   categoryId: string; // Main Category ID (parent)
+  categoryName?: string; // Üst kategori adı (breadcrumb için; arama sonuçlarında doldurulur)
 }
 
 export interface ProductGroupItem {
@@ -102,6 +103,8 @@ export interface ProductGroupItem {
   name: string;
   image: string | null;
   subCategoryId: string; // Sub Category ID (parent)
+  subCategoryName?: string; // Üst alt-kategori adı (breadcrumb için)
+  categoryName?: string; // Kök kategori adı (breadcrumb için)
 }
 
 export interface ProductItem {
@@ -1700,15 +1703,32 @@ export class CatalogService {
     const items = hasMore ? results.slice(0, limit) : results;
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
 
+    // Breadcrumb için üst kategori (level=0) adlarını topluca getir
+    const parentIds = Array.from(new Set(items.map((c) => c.parentId).filter((id): id is string => !!id)));
+    const parentNameById = await this.getCategoryNameMap(parentIds);
+
     return {
       items: items.map((c) => ({
         subCategoryId: c.id,
         name: c.name,
         image: resolveMediaUrl(c.thumbnail),
         categoryId: c.parentId || '',
+        categoryName: c.parentId ? parentNameById.get(c.parentId) : undefined,
       })),
       pagination: { cursor: nextCursor, hasMore, limit },
     };
+  }
+
+  /** Verilen kategori id'leri için id→name haritası döndürür (breadcrumb isimleri için). */
+  private async getCategoryNameMap(ids: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (ids.length === 0) return map;
+    const rows = await prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, parentId: true },
+    });
+    for (const row of rows) map.set(row.id, row.name);
+    return map;
   }
 
   /**
@@ -1742,13 +1762,33 @@ export class CatalogService {
     const items = hasMore ? results.slice(0, limit) : results;
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
 
+    // Breadcrumb için üst alt-kategori (level=1) ve kök kategori (level=0) adlarını getir
+    const subCategoryIds = Array.from(
+      new Set(items.map((c) => c.parentId).filter((id): id is string => !!id))
+    );
+    const subCategories = subCategoryIds.length
+      ? await prisma.category.findMany({
+          where: { id: { in: subCategoryIds } },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+    const subCategoryById = new Map(subCategories.map((s) => [s.id, s]));
+    const categoryNameById = await this.getCategoryNameMap(
+      Array.from(new Set(subCategories.map((s) => s.parentId).filter((id): id is string => !!id)))
+    );
+
     return {
-      items: items.map((c) => ({
-        productGroupId: c.id,
-        name: c.name,
-        image: resolveMediaUrl(c.thumbnail),
-        subCategoryId: c.parentId || '',
-      })),
+      items: items.map((c) => {
+        const sub = c.parentId ? subCategoryById.get(c.parentId) : undefined;
+        return {
+          productGroupId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          subCategoryId: c.parentId || '',
+          subCategoryName: sub?.name,
+          categoryName: sub?.parentId ? categoryNameById.get(sub.parentId) : undefined,
+        };
+      }),
       pagination: { cursor: nextCursor, hasMore, limit },
     };
   }
