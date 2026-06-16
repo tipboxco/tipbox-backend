@@ -1,8 +1,9 @@
 export enum WalletProvider {
   METAMASK = 'METAMASK',
-  WALLETCONNECT = 'WALLETCONNECT', 
+  WALLETCONNECT = 'WALLETCONNECT',
   CUSTOM = 'CUSTOM',
-  THIRDWEB = 'THIRDWEB'
+  THIRDWEB = 'THIRDWEB',
+  ALCHEMY = 'ALCHEMY',
 }
 
 export class Wallet {
@@ -66,6 +67,8 @@ export class Wallet {
         return '💼';
       case WalletProvider.THIRDWEB:
         return '🔮';
+      case WalletProvider.ALCHEMY:
+        return '⚗️';
       default:
         return '💰';
     }

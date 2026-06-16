@@ -5,10 +5,13 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import logger from '../../infrastructure/logger/logger';
 import {
   InsufficientBalanceError,
-  ThirdwebNotConfiguredError,
-  ThirdwebWalletAuthFailedError,
+  WalletProviderAuthFailedError,
+  WalletProviderNotConfiguredError,
 } from '../../infrastructure/errors/custom-errors';
-import { getThirdwebSdkService } from './thirdweb-sdk/thirdweb-sdk.service';
+import {
+  getActiveWalletProviderEnum,
+  getWalletProvider,
+} from './provider/wallet-provider.factory';
 import { invalidateWalletCache } from '../../infrastructure/cache/cache-invalidation';
 
 export class WalletService {
@@ -29,30 +32,30 @@ export class WalletService {
     const wallets = await this.walletRepo.findByUserId(userId);
     if (wallets.length > 0) return;
 
-    const sdk = getThirdwebSdkService();
-    if (!sdk.isConfigured()) return;
+    const provider = getWalletProvider();
+    if (!provider.isConfigured()) return;
 
     try {
-      const auth = await sdk.authenticateAndGetAddresses(userId);
+      const auth = await provider.authenticateAndGetAddresses(userId);
       if (!auth.success || !auth.eoaAddress) return;
 
       await this.connectWallet(
         userId,
         auth.eoaAddress,
-        WalletProvider.THIRDWEB,
-        auth.smartAccountAddress
+        getActiveWalletProviderEnum(),
+        auth.smartAccountAddress,
       );
       logger.info({
         userId,
         eoaAddress: auth.eoaAddress,
         smartAccountAddress: auth.smartAccountAddress,
-        message: 'Wallet created from Thirdweb session (ensureWalletForUser)',
+        message: 'Wallet created from provider session (ensureWalletForUser)',
       });
     } catch (err) {
       logger.warn({
         userId,
         error: err instanceof Error ? err.message : String(err),
-        message: 'ensureWalletForUser: Thirdweb session or wallet create failed',
+        message: 'ensureWalletForUser: provider session or wallet create failed',
       });
     }
   }
@@ -62,40 +65,44 @@ export class WalletService {
    * Thirdweb yapılandırılmamışsa veya kullanıcı Thirdweb oturumu yoksa hata fırlatır.
    */
   async createWalletViaThirdweb(userId: string): Promise<Wallet> {
-    const sdk = getThirdwebSdkService();
-    if (!sdk.isConfigured()) {
-      throw new ThirdwebNotConfiguredError(
-        'Wallet oluşturmak için Thirdweb yapılandırması gerekli. THIRDWEB_CLIENT_ID ve THIRDWEB_SECRET_KEY tanımlı olmalı.'
+    return this.createWalletViaProvider(userId);
+  }
+
+  async createWalletViaProvider(userId: string): Promise<Wallet> {
+    const provider = getWalletProvider();
+    if (!provider.isConfigured()) {
+      throw new WalletProviderNotConfiguredError(
+        'Wallet oluşturmak için wallet provider yapılandırması gerekli. İlgili ortam değişkenlerini kontrol edin.',
       );
     }
 
     let auth: { success: boolean; eoaAddress?: string; smartAccountAddress?: string };
     try {
-      auth = await sdk.authenticateAndGetAddresses(userId);
+      auth = await provider.authenticateAndGetAddresses(userId);
     } catch (err) {
-      logger.warn({ userId, error: err, message: 'Thirdweb authenticateAndGetAddresses failed' });
-      throw new ThirdwebWalletAuthFailedError(
-        'Cüzdan oluşturmak için önce uygulama içinde Thirdweb ile wallet connect yapılmalı.'
+      logger.warn({ userId, error: err, message: 'Provider authenticateAndGetAddresses failed' });
+      throw new WalletProviderAuthFailedError(
+        'Cüzdan oluşturmak için önce uygulama içinde wallet connect yapılmalı.',
       );
     }
 
     if (!auth.success || !auth.eoaAddress) {
-      throw new ThirdwebWalletAuthFailedError(
-        'Thirdweb wallet oturumu bulunamadı. Lütfen önce uygulama içinde cüzdan bağlayın (Wallet Connect).'
+      throw new WalletProviderAuthFailedError(
+        'Wallet provider oturumu bulunamadı. Lütfen önce uygulama içinde cüzdan bağlayın.',
       );
     }
 
     const wallet = await this.connectWallet(
       userId,
       auth.eoaAddress,
-      WalletProvider.THIRDWEB,
-      auth.smartAccountAddress ?? undefined
+      getActiveWalletProviderEnum(),
+      auth.smartAccountAddress ?? undefined,
     );
     logger.info({
       userId,
       eoaAddress: auth.eoaAddress,
       smartAccountAddress: auth.smartAccountAddress,
-      message: 'Wallet created via Thirdweb (createWalletViaThirdweb)',
+      message: 'Wallet created via provider (createWalletViaProvider)',
     });
     return wallet;
   }
@@ -278,15 +285,15 @@ export class WalletService {
     }
 
     const address = wallet.smartAccountAddress ?? wallet.publicAddress;
-    const sdk = getThirdwebSdkService();
-    if (!sdk.isConfigured()) {
-      logger.debug({ walletId, message: 'Thirdweb SDK not configured, skipping balance sync' });
-      return { success: false, error: 'Thirdweb SDK not configured' };
+    const provider = getWalletProvider();
+    if (!provider.isConfigured()) {
+      logger.debug({ walletId, message: 'Wallet provider not configured, skipping balance sync' });
+      return { success: false, error: 'Wallet provider not configured' };
     }
     try {
       const [balanceResult, pendingResult] = await Promise.all([
-        sdk.getTokenBalanceForAddress(address),
-        sdk.getPendingTips(address),
+        provider.getTokenBalanceForAddress(address),
+        provider.getPendingTips(address),
       ]);
       const balance = balanceResult.balanceFormatted ?? 0;
       const lockedBalance = pendingResult.pendingFormatted ?? 0;
@@ -488,11 +495,21 @@ export class WalletService {
    * @returns Wallet entity ve authentication sonucu
    */
   /**
-   * Kullanıcının Thirdweb wallet'ını getirir
+   * Kullanıcının Thirdweb wallet'ını getirir (geriye dönük uyumluluk için korunur).
    */
   async getThirdwebWallet(userId: string): Promise<Wallet | null> {
     const wallets = await this.walletRepo.findByUserId(userId);
-    return wallets.find(w => w.provider === WalletProvider.THIRDWEB) || null;
+    return wallets.find((w) => w.provider === WalletProvider.THIRDWEB) || null;
+  }
+
+  /**
+   * Aktif provider'a ait kullanıcı wallet'ını getirir.
+   * WALLET_PROVIDER env değişkenine göre doğru provider wallet'ı döner.
+   */
+  async getActiveProviderWallet(userId: string): Promise<Wallet | null> {
+    const wallets = await this.walletRepo.findByUserId(userId);
+    const activeEnum = getActiveWalletProviderEnum();
+    return wallets.find((w) => w.provider === activeEnum) || null;
   }
 
 }

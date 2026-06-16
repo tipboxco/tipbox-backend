@@ -95,6 +95,7 @@ export interface SubCategoryItem {
   name: string;
   image: string | null;
   categoryId: string; // Main Category ID (parent)
+  categoryName?: string; // Üst kategori adı (breadcrumb için; arama sonuçlarında doldurulur)
 }
 
 export interface ProductGroupItem {
@@ -102,6 +103,8 @@ export interface ProductGroupItem {
   name: string;
   image: string | null;
   subCategoryId: string; // Sub Category ID (parent)
+  subCategoryName?: string; // Üst alt-kategori adı (breadcrumb için)
+  categoryName?: string; // Kök kategori adı (breadcrumb için)
 }
 
 export interface ProductItem {
@@ -109,6 +112,15 @@ export interface ProductItem {
   name: string;
   image: string | null;
   productGroupId: string; // Product Group ID (parent)
+}
+
+/** Bir kategori subtree'sinde bulunan marka facet'i (yatay marka filtresi için) */
+export interface BrandFilterItem {
+  id: string; // Brand.id (UUID) — marka detay sayfasına (BrandDetailScreen) yönlendirmede kullanılır
+  brandId: string; // Product.brandId === Brand.externalId — ürün filtrelemede kullanılan değer
+  name: string;
+  image: string | null;
+  productCount: number;
 }
 
 export interface ProductDetail {
@@ -423,6 +435,169 @@ export class CatalogService {
       };
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bir kategori (kendisi dahil) için tüm alt kategori id'lerini TEK SORGUDA bulur.
+   * Tüm kategorileri bir kez yükleyip in-memory BFS yapar (recursive N+1 yerine).
+   */
+  private async getDescendantCategoryIdsFast(rootCategoryId: string): Promise<string[]> {
+    const allCategories = await prisma.category.findMany({
+      select: { id: true, parentId: true },
+    });
+
+    const parentChildMap = new Map<string, string[]>();
+    for (const cat of allCategories) {
+      if (!cat.parentId) continue;
+      if (!parentChildMap.has(cat.parentId)) parentChildMap.set(cat.parentId, []);
+      parentChildMap.get(cat.parentId)!.push(cat.id);
+    }
+
+    const result = new Set<string>([rootCategoryId]);
+    const toProcess: string[] = [rootCategoryId];
+    while (toProcess.length > 0) {
+      const currentId = toProcess.shift()!;
+      const children = parentChildMap.get(currentId) || [];
+      for (const childId of children) {
+        if (!result.has(childId)) {
+          result.add(childId);
+          toProcess.push(childId);
+        }
+      }
+    }
+
+    return Array.from(result);
+  }
+
+  /**
+   * Bir kategori (herhangi bir seviye) ve tüm alt kategorilerindeki ürünlere ait
+   * marka facet listesini döndürür. Yatay marka filtresi (scroll-x) için kullanılır.
+   * brandId === Product.brandId === Brand.externalId (ürün filtrelemede kullanılan değer).
+   */
+  async getBrandsByCategory(categoryId: string): Promise<{ items: BrandFilterItem[] }> {
+    try {
+      const resolvedCategoryId = await this.resolveCategoryId(categoryId);
+      const categoryIds = await this.getDescendantCategoryIdsFast(resolvedCategoryId);
+
+      // Subtree'deki ürünleri brandId'ye göre grupla + say
+      const grouped = await prisma.product.groupBy({
+        by: ['brandId'],
+        where: {
+          categoryId: { in: categoryIds },
+          brandId: { not: null },
+        },
+        _count: { _all: true },
+      });
+
+      if (grouped.length === 0) {
+        return { items: [] };
+      }
+
+      const countByExternalId = new Map<string, number>();
+      for (const row of grouped) {
+        if (row.brandId) countByExternalId.set(row.brandId, row._count._all);
+      }
+
+      const brands = await prisma.brand.findMany({
+        where: { externalId: { in: Array.from(countByExternalId.keys()) } },
+        select: { id: true, externalId: true, name: true, logoUrl: true, imageUrl: true },
+      });
+
+      const items: BrandFilterItem[] = brands
+        .filter((b) => b.externalId !== null)
+        .map((b) => ({
+          id: b.id,
+          brandId: b.externalId as string,
+          name: b.name,
+          image: resolveMediaUrl(b.logoUrl ?? b.imageUrl),
+          productCount: countByExternalId.get(b.externalId as string) ?? 0,
+        }))
+        .sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));
+
+      return { items };
+    } catch (error) {
+      logger.error(`Failed to get brands for category ${categoryId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bir kategori (herhangi bir seviye) ve tüm alt kategorilerindeki ürünleri listeler.
+   * Opsiyonel brandId (Brand.externalId) ile markaya göre filtreler. Cursor-based pagination.
+   */
+  async getProductsByCategory(
+    categoryId: string,
+    options?: { brandId?: string; search?: string; cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductItem[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
+    const brandId = options?.brandId?.trim();
+    const searchTrimmed = options?.search?.trim();
+
+    try {
+      const resolvedCategoryId = await this.resolveCategoryId(categoryId);
+      const categoryIds = await this.getDescendantCategoryIdsFast(resolvedCategoryId);
+
+      const productsWhere: Prisma.ProductWhereInput = {
+        categoryId: { in: categoryIds },
+        ...(brandId && { brandId }),
+        ...(searchTrimmed && {
+          OR: [
+            { name: { contains: searchTrimmed, mode: 'insensitive' as const } },
+            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' as const } } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' as const } },
+          ],
+        }),
+        ...(cursor && { id: { gt: cursor } }),
+      };
+
+      const products = await prisma.product.findMany({
+        where: productsWhere,
+        select: {
+          id: true,
+          name: true,
+          imageUrl: true,
+          categoryId: true,
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor =
+        hasMore && resultProducts.length > 0
+          ? resultProducts[resultProducts.length - 1].id
+          : undefined;
+
+      const items = resultProducts.map((product) => ({
+        productId: product.id,
+        name: product.name,
+        image: resolveMediaUrl(product.imageUrl),
+        productGroupId: product.categoryId || '',
+      }));
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get products for category ${categoryId}:`, error);
       throw error;
     }
   }
@@ -1495,6 +1670,247 @@ export class CatalogService {
       logger.error(`Failed to get product news for ${productId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Subcategory arama - level=1 kategoriler arasında isim bazlı arama (cursor pagination)
+   */
+  async searchSubCategories(
+    q: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: SubCategoryItem[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const trimmedQ = q.trim();
+
+    const where: Prisma.CategoryWhereInput = {
+      level: 1,
+      ...(trimmedQ && { name: { contains: trimmedQ, mode: 'insensitive' as const } }),
+      ...(cursor && { id: { gt: cursor } }),
+    };
+
+    const results = await prisma.category.findMany({
+      where,
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    // Breadcrumb için üst kategori (level=0) adlarını topluca getir
+    const parentIds = Array.from(new Set(items.map((c) => c.parentId).filter((id): id is string => !!id)));
+    const parentNameById = await this.getCategoryNameMap(parentIds);
+
+    return {
+      items: items.map((c) => ({
+        subCategoryId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        categoryId: c.parentId || '',
+        categoryName: c.parentId ? parentNameById.get(c.parentId) : undefined,
+      })),
+      pagination: { cursor: nextCursor, hasMore, limit },
+    };
+  }
+
+  /** Verilen kategori id'leri için id→name haritası döndürür (breadcrumb isimleri için). */
+  private async getCategoryNameMap(ids: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (ids.length === 0) return map;
+    const rows = await prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, parentId: true },
+    });
+    for (const row of rows) map.set(row.id, row.name);
+    return map;
+  }
+
+  /**
+   * Product group arama - level=2 kategoriler arasında isim bazlı arama (cursor pagination)
+   */
+  async searchProductGroups(
+    q: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductGroupItem[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const trimmedQ = q.trim();
+
+    const where: Prisma.CategoryWhereInput = {
+      level: 2,
+      ...(trimmedQ && { name: { contains: trimmedQ, mode: 'insensitive' as const } }),
+      ...(cursor && { id: { gt: cursor } }),
+    };
+
+    const results = await prisma.category.findMany({
+      where,
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    // Breadcrumb için üst alt-kategori (level=1) ve kök kategori (level=0) adlarını getir
+    const subCategoryIds = Array.from(
+      new Set(items.map((c) => c.parentId).filter((id): id is string => !!id))
+    );
+    const subCategories = subCategoryIds.length
+      ? await prisma.category.findMany({
+          where: { id: { in: subCategoryIds } },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+    const subCategoryById = new Map(subCategories.map((s) => [s.id, s]));
+    const categoryNameById = await this.getCategoryNameMap(
+      Array.from(new Set(subCategories.map((s) => s.parentId).filter((id): id is string => !!id)))
+    );
+
+    return {
+      items: items.map((c) => {
+        const sub = c.parentId ? subCategoryById.get(c.parentId) : undefined;
+        return {
+          productGroupId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          subCategoryId: c.parentId || '',
+          subCategoryName: sub?.name,
+          categoryName: sub?.parentId ? categoryNameById.get(sub.parentId) : undefined,
+        };
+      }),
+      pagination: { cursor: nextCursor, hasMore, limit },
+    };
+  }
+
+  /**
+   * Popüler subcategories - en fazla post içeren level=1 kategoriler
+   */
+  async getPopularSubCategories(limit: number = 10): Promise<{
+    items: SubCategoryItem[];
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit > 0 ? Math.min(limit, 50) : 10;
+
+    const postCounts = await prisma.contentPost.groupBy({
+      by: ['categoryId'],
+      _count: { id: true },
+      where: { categoryId: { not: null } },
+      orderBy: { _count: { id: 'desc' } },
+      take: safeLimit * 5,
+    });
+
+    const orderedIds = postCounts
+      .map((r) => r.categoryId)
+      .filter((id): id is string => id !== null);
+
+    if (orderedIds.length === 0) {
+      const fallback = await prisma.category.findMany({
+        where: { level: 1 },
+        select: { id: true, name: true, thumbnail: true, parentId: true },
+        take: safeLimit,
+      });
+      return {
+        items: fallback.map((c) => ({
+          subCategoryId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          categoryId: c.parentId || '',
+        })),
+        pagination: { hasMore: false, limit: safeLimit },
+      };
+    }
+
+    const cats = await prisma.category.findMany({
+      where: { id: { in: orderedIds }, level: 1 },
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+    });
+
+    const catMap = new Map(cats.map((c) => [c.id, c]));
+    const ordered = orderedIds
+      .filter((id) => catMap.has(id))
+      .map((id) => catMap.get(id)!)
+      .slice(0, safeLimit);
+
+    return {
+      items: ordered.map((c) => ({
+        subCategoryId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        categoryId: c.parentId || '',
+      })),
+      pagination: { hasMore: false, limit: safeLimit },
+    };
+  }
+
+  /**
+   * Popüler product groups - en fazla post içeren level=2 kategoriler
+   */
+  async getPopularProductGroups(limit: number = 10): Promise<{
+    items: ProductGroupItem[];
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit > 0 ? Math.min(limit, 50) : 10;
+
+    const postCounts = await prisma.contentPost.groupBy({
+      by: ['categoryId'],
+      _count: { id: true },
+      where: { categoryId: { not: null } },
+      orderBy: { _count: { id: 'desc' } },
+      take: safeLimit * 5,
+    });
+
+    const orderedIds = postCounts
+      .map((r) => r.categoryId)
+      .filter((id): id is string => id !== null);
+
+    if (orderedIds.length === 0) {
+      const fallback = await prisma.category.findMany({
+        where: { level: 2 },
+        select: { id: true, name: true, thumbnail: true, parentId: true },
+        take: safeLimit,
+      });
+      return {
+        items: fallback.map((c) => ({
+          productGroupId: c.id,
+          name: c.name,
+          image: resolveMediaUrl(c.thumbnail),
+          subCategoryId: c.parentId || '',
+        })),
+        pagination: { hasMore: false, limit: safeLimit },
+      };
+    }
+
+    const cats = await prisma.category.findMany({
+      where: { id: { in: orderedIds }, level: 2 },
+      select: { id: true, name: true, thumbnail: true, parentId: true },
+    });
+
+    const catMap = new Map(cats.map((c) => [c.id, c]));
+    const ordered = orderedIds
+      .filter((id) => catMap.has(id))
+      .map((id) => catMap.get(id)!)
+      .slice(0, safeLimit);
+
+    return {
+      items: ordered.map((c) => ({
+        productGroupId: c.id,
+        name: c.name,
+        image: resolveMediaUrl(c.thumbnail),
+        subCategoryId: c.parentId || '',
+      })),
+      pagination: { hasMore: false, limit: safeLimit },
+    };
   }
 
   /**
