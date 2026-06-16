@@ -15,7 +15,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
 import { WalletService } from '../wallet/wallet.service';
-import { getThirdwebSdkService } from '../wallet/thirdweb-sdk/thirdweb-sdk.service';
+import { getWalletProvider } from '../wallet/provider/wallet-provider.factory';
 import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 
@@ -146,7 +146,7 @@ export class TransactionService {
       // Sadece internal tip (TIP_SEND via Tipbox contract) için fee var;
       // external adrese gönderim (WITHDRAW / ERC20 transfer) için fee yok.
       try {
-        const sdk = getThirdwebSdkService();
+        const sdk = getWalletProvider();
         if (sdk.isConfigured()) {
           feePercentage = await sdk.getFeePercentage();
           // C3 fix: Cap at < 100 — 100% fee is treated as misconfiguration
