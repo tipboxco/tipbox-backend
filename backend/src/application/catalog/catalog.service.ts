@@ -330,6 +330,206 @@ export class CatalogService {
   }
 
   /**
+   * İsim bazlı sub-kategori araması (level=1 kategoriler, cursor-based pagination)
+   * Breadcrumb için üst (main) kategori adını da döndürür.
+   */
+  async searchSubCategories(
+    query: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<SubCategoryItem & { categoryName: string }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
+    const q = query?.trim();
+
+    if (!q || q.length === 0) {
+      return { items: [], pagination: { cursor: undefined, hasMore: false, limit } };
+    }
+
+    try {
+      const where: Prisma.CategoryWhereInput = {
+        level: 1,
+        name: { contains: q, mode: 'insensitive' },
+        ...(cursor && { id: { gt: cursor } }),
+      };
+
+      const subCategories = await prisma.category.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          thumbnail: true,
+          parentId: true,
+          parent: { select: { name: true } },
+        },
+        orderBy: { id: 'asc' },
+        take: limit + 1,
+      });
+
+      const hasMore = subCategories.length > limit;
+      const result = hasMore ? subCategories.slice(0, limit) : subCategories;
+      const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].id : undefined;
+
+      const items = result.map((subCategory) => ({
+        subCategoryId: subCategory.id,
+        name: subCategory.name,
+        image: resolveMediaUrl(subCategory.thumbnail),
+        categoryId: subCategory.parentId || '',
+        categoryName: subCategory.parent?.name || '',
+      }));
+
+      return { items, pagination: { cursor: nextCursor, hasMore, limit } };
+    } catch (error) {
+      logger.error(`Failed to search sub-categories for query "${q}":`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * İsim bazlı product group araması (level=2 kategoriler, cursor-based pagination)
+   * Breadcrumb için üst (sub-category) ve kök (main) kategori adlarını da döndürür.
+   */
+  async searchProductGroups(
+    query: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<ProductGroupItem & { subCategoryName: string; categoryName: string }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
+    const q = query?.trim();
+
+    if (!q || q.length === 0) {
+      return { items: [], pagination: { cursor: undefined, hasMore: false, limit } };
+    }
+
+    try {
+      const where: Prisma.CategoryWhereInput = {
+        level: 2,
+        name: { contains: q, mode: 'insensitive' },
+        ...(cursor && { id: { gt: cursor } }),
+      };
+
+      const productGroups = await prisma.category.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          thumbnail: true,
+          parentId: true,
+          parent: { select: { name: true, parent: { select: { name: true } } } },
+        },
+        orderBy: { id: 'asc' },
+        take: limit + 1,
+      });
+
+      const hasMore = productGroups.length > limit;
+      const result = hasMore ? productGroups.slice(0, limit) : productGroups;
+      const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].id : undefined;
+
+      const items = result.map((group) => ({
+        productGroupId: group.id,
+        name: group.name,
+        image: resolveMediaUrl(group.thumbnail),
+        subCategoryId: group.parentId || '',
+        subCategoryName: group.parent?.name || '',
+        categoryName: group.parent?.parent?.name || '',
+      }));
+
+      return { items, pagination: { cursor: nextCursor, hasMore, limit } };
+    } catch (error) {
+      logger.error(`Failed to search product groups for query "${q}":`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * En fazla post içeren sub-kategorileri (level=1) döndürür.
+   * İçerdiği post sayısına göre azalan sırada.
+   */
+  async getPopularSubCategories(
+    limit: number = 10
+  ): Promise<{
+    items: Array<SubCategoryItem & { categoryName: string }>;
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit && limit > 0 ? Math.min(limit, 50) : 10;
+
+    try {
+      const subCategories = await prisma.category.findMany({
+        where: { level: 1 },
+        select: {
+          id: true,
+          name: true,
+          thumbnail: true,
+          parentId: true,
+          parent: { select: { name: true } },
+        },
+        orderBy: { contentPosts: { _count: 'desc' } },
+        take: safeLimit,
+      });
+
+      const items = subCategories.map((subCategory) => ({
+        subCategoryId: subCategory.id,
+        name: subCategory.name,
+        image: resolveMediaUrl(subCategory.thumbnail),
+        categoryId: subCategory.parentId || '',
+        categoryName: subCategory.parent?.name || '',
+      }));
+
+      return { items, pagination: { hasMore: false, limit: safeLimit } };
+    } catch (error) {
+      logger.error('Failed to get popular sub-categories:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * En fazla post içeren product group'ları (level=2) döndürür.
+   * İçerdiği post sayısına göre azalan sırada.
+   */
+  async getPopularProductGroups(
+    limit: number = 10
+  ): Promise<{
+    items: Array<ProductGroupItem & { subCategoryName: string; categoryName: string }>;
+    pagination: { hasMore: boolean; limit: number };
+  }> {
+    const safeLimit = limit && limit > 0 ? Math.min(limit, 50) : 10;
+
+    try {
+      const productGroups = await prisma.category.findMany({
+        where: { level: 2 },
+        select: {
+          id: true,
+          name: true,
+          thumbnail: true,
+          parentId: true,
+          parent: { select: { name: true, parent: { select: { name: true } } } },
+        },
+        orderBy: { contentPosts: { _count: 'desc' } },
+        take: safeLimit,
+      });
+
+      const items = productGroups.map((group) => ({
+        productGroupId: group.id,
+        name: group.name,
+        image: resolveMediaUrl(group.thumbnail),
+        subCategoryId: group.parentId || '',
+        subCategoryName: group.parent?.name || '',
+        categoryName: group.parent?.parent?.name || '',
+      }));
+
+      return { items, pagination: { hasMore: false, limit: safeLimit } };
+    } catch (error) {
+      logger.error('Failed to get popular product groups:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Product group'a göre ürünleri listele (cursor-based pagination)
    */
   async getProductsByProductGroupId(
