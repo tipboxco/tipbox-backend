@@ -641,6 +641,7 @@ model PostComparison {
   postId            String                @unique @map("post_id") @db.VarChar(26)
   product1Id        String                @map("product_1_id")
   product2Id        String                @map("product_2_id")
+  choiceProductId   String?               @map("choice_product_id")
   comparisonSummary String?               @map("comparison_summary")
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")

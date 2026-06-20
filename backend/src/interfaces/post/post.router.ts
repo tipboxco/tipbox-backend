@@ -641,13 +641,33 @@ router.post(
       });
     }
 
-    // Validate that at least 2 products are selected
-    const selectedProducts = products.filter((p) => p.isSelected);
-    if (selectedProducts.length < 2) {
+    // Validate that there are at least 2 distinct products to compare
+    if (products.length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'At least 2 products must be selected for comparison',
+        message: 'At least 2 products are required for comparison',
       });
+    }
+
+    // Determine the winner (author's choice) of the comparison.
+    // Priority: explicit choiceProductId from body, else the single selected product.
+    let choiceProductId: string | undefined;
+    const explicitChoice = req.body.choiceProductId ?? req.body.choiceproductid;
+    if (explicitChoice) {
+      try {
+        choiceProductId = await postService.resolveProductId(String(explicitChoice));
+      } catch (error) {
+        logger.warn('Failed to resolve choiceProductId, leaving winner undecided', {
+          explicitChoice,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (!choiceProductId) {
+      const selected = products.filter((p) => p.isSelected);
+      if (selected.length === 1) {
+        choiceProductId = selected[0].productId;
+      }
     }
 
     const description = (req.body.description ?? req.body.postText ?? req.body.body ?? req.body.content ?? '').trim();
@@ -660,6 +680,7 @@ router.post(
       contextId: contextId,
       products: products,
       description,
+      choiceProductId,
       images: images,
       eventId: normalizeEventId(req.body.eventId ?? req.body.event_id),
     };
