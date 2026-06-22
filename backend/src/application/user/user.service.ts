@@ -2008,7 +2008,7 @@ export class UserService {
               {
                 ...(await this.getProductBase(String(comp.product1Id)))!,
                 isOwned: ownedProductIds.has(String(comp.product1Id)),
-                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : true,
+                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : false,
               },
               {
                 ...(await this.getProductBase(String(comp.product2Id)))!,
@@ -2777,7 +2777,7 @@ export class UserService {
               isOwned: ownedSet.has(String(comp.product1Id)),
               choice: choiceProductId
                 ? choiceProductId === String(comp.product1Id)
-                : true,
+                : false,
             },
             {
               ...(await this.getProductBase(String(comp.product2Id)))!,
@@ -2808,10 +2808,20 @@ export class UserService {
     comparison: {
       product1Id: string;
       product2Id: string;
+      choiceProductId?: string | null;
       scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
     } | null,
   ): string | null {
-    if (!comparison || !comparison.scores || comparison.scores.length === 0) {
+    if (!comparison) {
+      return null;
+    }
+
+    // Yazarın açık seçimi, skordan türetilen kazanana göre önceliklidir.
+    if (comparison.choiceProductId) {
+      return String(comparison.choiceProductId);
+    }
+
+    if (!comparison.scores || comparison.scores.length === 0) {
       return null;
     }
 
@@ -2824,7 +2834,8 @@ export class UserService {
     }
 
     if (product1Score === product2Score) {
-      return String(comparison.product1Id);
+      // Berabere: net bir kazanan yok, hiçbir ürün seçili gösterilmez.
+      return null;
     }
 
     return product1Score > product2Score
@@ -3220,7 +3231,7 @@ export class UserService {
               },
             },
             mainCategory: true,
-            comparison: { include: { product1: true, product2: true } },
+            comparison: { include: { product1: true, product2: true, scores: true } },
             tip: true,
             question: true,
             contentPostTags: true,
@@ -3313,6 +3324,8 @@ export class UserService {
           const comp = (post as PostWithComparison).comparison;
           if (!comp) break;
 
+          const choiceProductId = this.selectComparisonWinner(comp);
+
           results.push({
             id: String(post.id),
             type: 'benchmark' as const,
@@ -3324,12 +3337,12 @@ export class UserService {
               {
                 ...(await this.getProductBase(String(comp.product1Id)))!,
                 isOwned: ownedSet.has(String(comp.product1Id)),
-                choice: false, // TODO: Comparison score'dan çıkarılacak
+                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : false,
               },
               {
                 ...(await this.getProductBase(String(comp.product2Id)))!,
                 isOwned: ownedSet.has(String(comp.product2Id)),
-                choice: false,
+                choice: choiceProductId ? choiceProductId === String(comp.product2Id) : false,
               },
             ],
             content: post.body,

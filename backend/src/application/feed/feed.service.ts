@@ -1605,7 +1605,7 @@ export class FeedService {
         isOwned: ownedProductIds.has(product1.id),
         choice: choiceProductId
           ? choiceProductId === String(comparison.product1Id)
-          : true,
+          : false,
       });
     }
     if (product2) {
@@ -1997,7 +1997,8 @@ export class FeedService {
     }
 
     if (product1Score === product2Score) {
-      return comparison.product1Id ? String(comparison.product1Id) : null;
+      // Berabere: net bir kazanan yok, hiçbir ürün seçili gösterilmez.
+      return null;
     }
 
     return product1Score > product2Score
