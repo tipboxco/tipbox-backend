@@ -136,11 +136,59 @@ export class MinioStorageService {
   }
 
   /**
+   * Upload a file to MinIO under a fixed, caller-provided key (no random UUID).
+   * Used for deterministic cache keys (ör. brand-logos/{id}.png) where we need
+   * to check existence before re-fetching.
+   */
+  async uploadFileWithKey(
+    buffer: Buffer,
+    key: string,
+    contentType?: string
+  ): Promise<{ url: string; key: string }> {
+    await this.ensureBucket()
+
+    const ext = path.extname(key) || ".png"
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": contentType || this.getContentType(ext),
+    })
+
+    return { url: this.getPublicUrl(key), key }
+  }
+
+  /**
+   * Check whether an object exists at the given key.
+   */
+  async fileExists(key: string): Promise<boolean> {
+    try {
+      await this.ensureBucket()
+      await this.client.statObject(this.bucket, key)
+      return true
+    } catch (error: any) {
+      // MinIO/S3 returns NotFound / NoSuchKey when the object is absent
+      if (
+        error?.code === "NotFound" ||
+        error?.code === "NoSuchKey" ||
+        error?.statusCode === 404
+      ) {
+        return false
+      }
+      throw error
+    }
+  }
+
+  /**
    * Get file URL from MinIO
    * Returns public URL instead of presigned URL (no signature parameters)
    */
   async getFileUrl(key: string): Promise<string> {
     // Direct public URL, no presigned URL with signatures
+    return this.getPublicUrl(key)
+  }
+
+  /**
+   * Public URL for a given key (assumes bucket is public).
+   */
+  publicUrl(key: string): string {
     return this.getPublicUrl(key)
   }
 

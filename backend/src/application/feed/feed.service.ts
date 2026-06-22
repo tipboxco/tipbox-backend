@@ -84,7 +84,7 @@ interface FeedContentPost {
   productGroup?: { id: string; name: string; imageUrl?: string | null; subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null } | null;
   subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null;
   mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
-  comparison?: { product1Id: string; product2Id: string; comparisonSummary?: string | null; product1?: FeedProductLike | null; product2?: FeedProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
+  comparison?: { product1Id: string; product2Id: string; choiceProductId?: string | null; comparisonSummary?: string | null; product1?: FeedProductLike | null; product2?: FeedProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
   tags?: TagRecord[];
   contentPostTags?: TagRecord[];
   media?: MediaRecord[];
@@ -1687,6 +1687,15 @@ export class FeedService {
     // Get tags
     const tags = post.tags?.map((t: TagRecord) => t.tag) || post.contentPostTags?.map((t: TagRecord) => t.tag) || [];
 
+    // Update gönderisinin KENDİ segmentli içeriği yalnızca body'de gerçek AI marker'ları
+    // varsa anlamlıdır (yoksa parseExperienceContent body'yi 2 sahte bloğa kopyalar).
+    const hasUpdateSegments = /\[(price_and_shopping|product_and_usage)/i.test(
+      post.body || ''
+    );
+    const updateOwnExperienceContent = hasUpdateSegments
+      ? experienceContent
+      : undefined;
+
     if (type === FeedItemType.UPDATE) {
       // Get experience post from PostUpdateContent
       const updateContent = post.updateContent;
@@ -1709,6 +1718,7 @@ export class FeedService {
           ...basePost,
           relatedPost,
           content: post.body || '',
+          experienceContent: updateOwnExperienceContent,
           images,
         };
 
@@ -1766,6 +1776,7 @@ export class FeedService {
         relatedPost,
         relatedPostId: experiencePost.id,
         content: updatePostContent,
+        experienceContent: updateOwnExperienceContent,
         images,
       };
 
@@ -1964,9 +1975,15 @@ export class FeedService {
     comparison?: {
       product1Id?: string | null;
       product2Id?: string | null;
+      choiceProductId?: string | null;
       scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
     }
   ): string | null {
+    // Author's explicit choice takes precedence over derived metric scores.
+    if (comparison?.choiceProductId) {
+      return String(comparison.choiceProductId);
+    }
+
     if (!comparison || !comparison.scores || comparison.scores.length === 0) {
       return null;
     }

@@ -1936,6 +1936,11 @@ export class UserService {
                 .join('\n\n')
             : expPost.body || '';
         const updateContentText = post.updateContent.content || post.body || '';
+        // Update gönderisinin KENDİ AI-segmentli içeriği (body'de gerçek marker varsa)
+        const updateHasSegments = /\[(price_and_shopping|product_and_usage)/i.test(post.body || '');
+        const updateOwnContent = updateHasSegments
+          ? this.parseExperienceContentFromBody(post.body)
+          : undefined;
         return {
           id: String(post.id),
           type: 'update' as const,
@@ -1954,6 +1959,7 @@ export class UserService {
             statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : undefined,
           },
           content: updateContentText,
+          experienceContent: updateOwnContent,
           images,
         };
       }
@@ -2459,6 +2465,11 @@ export class UserService {
         .map((cpt: { tag: string }) => cpt.tag)
         .filter((tag: string | null | undefined) => tag);
       const updateText = post.updateContent?.content ?? post.body ?? '';
+      // Update gönderisinin KENDİ AI-segmentli içeriği (body'de gerçek marker varsa)
+      const updateHasSegments = /\[(price_and_shopping|product_and_usage)/i.test(post.body || '');
+      const updateOwnContent = updateHasSegments
+        ? this.parseExperienceContentFromPost(post.body)
+        : undefined;
       const contextData = post.product
         ? {
             product: {
@@ -2538,6 +2549,7 @@ export class UserService {
         contextType: ContextType.PRODUCT,
         contextData,
         content: updateText,
+        experienceContent: updateOwnContent,
         relatedPost,
         tags,
         images,
