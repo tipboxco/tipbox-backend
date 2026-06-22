@@ -5,6 +5,9 @@ FROM node:23-alpine AS builder
 
 WORKDIR /app
 
+# openssl → Prisma engine'in libssl/OpenSSL 3.x sürümünü algılaması için
+RUN apk add --no-cache openssl
+
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # 1) Sadece dependency dosyalarini kopyala (layer cache icin)
@@ -32,6 +35,9 @@ RUN pnpm run build
 FROM node:23-alpine
 
 WORKDIR /app
+
+# openssl → Prisma query engine'in runtime'da libssl 3.x'i bulması için
+RUN apk add --no-cache openssl
 
 # Non-root user olustur (guvenlik icin)
 RUN addgroup -g 1001 -S nodejs && \
