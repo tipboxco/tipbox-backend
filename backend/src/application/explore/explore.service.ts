@@ -144,6 +144,7 @@ const CONTENT_POST_FEED_INCLUDE = {
     include: {
       product1: { include: { group: true } },
       product2: { include: { group: true } },
+      scores: true,
     },
   },
   question: true,
@@ -883,20 +884,25 @@ export class ExploreService {
 
     const product1 = this.getProductBase(comparison.product1);
     const product2 = this.getProductBase(comparison.product2);
+    const choiceProductId = this.selectComparisonWinner(comparison);
 
     const products: BenchmarkProduct[] = [];
     if (product1) {
       products.push({
         ...product1,
         isOwned: ownedProductIds.has(product1.id),
-        choice: false,
+        choice: choiceProductId
+          ? choiceProductId === String(comparison.product1Id)
+          : false,
       });
     }
     if (product2) {
       products.push({
         ...product2,
         isOwned: ownedProductIds.has(product2.id),
-        choice: false,
+        choice: choiceProductId
+          ? choiceProductId === String(comparison.product2Id)
+          : false,
       });
     }
 
@@ -911,6 +917,45 @@ export class ExploreService {
       type: FeedItemType.BENCHMARK,
       data: benchmarkData,
     };
+  }
+
+  private selectComparisonWinner(
+    comparison?: {
+      product1Id?: string | null;
+      product2Id?: string | null;
+      choiceProductId?: string | null;
+      scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
+    } | null,
+  ): string | null {
+    if (!comparison) {
+      return null;
+    }
+
+    // Yazarın açık seçimi, skordan türetilen kazanana göre önceliklidir.
+    if (comparison.choiceProductId) {
+      return String(comparison.choiceProductId);
+    }
+
+    if (!comparison.scores || comparison.scores.length === 0) {
+      return null;
+    }
+
+    let product1Score = 0;
+    let product2Score = 0;
+
+    for (const score of comparison.scores) {
+      product1Score += score.scoreProduct1 ?? 0;
+      product2Score += score.scoreProduct2 ?? 0;
+    }
+
+    if (product1Score === product2Score) {
+      // Berabere: net bir kazanan yok, hiçbir ürün seçili gösterilmez.
+      return null;
+    }
+
+    return product1Score > product2Score
+      ? (comparison.product1Id ? String(comparison.product1Id) : null)
+      : (comparison.product2Id ? String(comparison.product2Id) : null);
   }
 
   private mapToTipsAndTricksItem(post: ExploreContentPost, basePost: ExploreBasePost, images: string[] = []): FeedItem {
