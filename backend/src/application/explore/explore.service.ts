@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -129,6 +130,32 @@ interface BrandSearchItem {
   categoryId: string;
 }
 
+/**
+ * Shared Prisma include for content posts that are rendered as feed items.
+ * Both the hottest feed and post search use this so they return identical shapes.
+ */
+const CONTENT_POST_FEED_INCLUDE = {
+  user: { include: { profile: true } },
+  product: { include: { group: true } },
+  productGroup: { include: { subCategory: { include: { mainCategory: true } } } },
+  subCategory: { include: { mainCategory: true } },
+  mainCategory: true,
+  comparison: {
+    include: {
+      product1: { include: { group: true } },
+      product2: { include: { group: true } },
+    },
+  },
+  question: true,
+  tip: true,
+  tags: true,
+  contentPostTags: true,
+} satisfies Prisma.ContentPostInclude;
+
+type ContentPostWithFeedRelations = Prisma.ContentPostGetPayload<{
+  include: typeof CONTENT_POST_FEED_INCLUDE;
+}>;
+
 export class ExploreService {
   private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly cacheService: CacheService;
@@ -189,51 +216,7 @@ export class ExploreService {
       },
       include: {
         post: {
-          include: {
-            user: {
-              include: {
-                profile: true,
-              },
-            },
-            product: {
-              include: {
-                group: true,
-              },
-            },
-            productGroup: {
-              include: {
-                subCategory: {
-                  include: {
-                    mainCategory: true,
-                  },
-                },
-              },
-            },
-            subCategory: {
-              include: {
-                mainCategory: true,
-              },
-            },
-            mainCategory: true,
-            comparison: {
-              include: {
-                product1: {
-                  include: {
-                    group: true,
-                  },
-                },
-                product2: {
-                  include: {
-                    group: true,
-                  },
-                },
-              },
-            },
-            question: true,
-            tip: true,
-            tags: true,
-            contentPostTags: true,
-          },
+          include: CONTENT_POST_FEED_INCLUDE,
         },
       },
       orderBy: [
@@ -261,6 +244,111 @@ export class ExploreService {
       };
     }
 
+    // Enrich posts into feed items (shared with post search)
+    const posts = resultPosts.map((tp) => tp.post);
+    const feedItems = await this.enrichPostsToFeedItems(userId, posts);
+
+    const response: TrendingFeedResponse = {
+      items: feedItems,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: !!nextCursor,
+        limit,
+      },
+    };
+
+    // Cache for 5 minutes
+    try {
+      await this.cacheService.set(cacheKey, response, 300);
+    } catch (error) {
+      // Cache error - continue without caching
+    }
+
+    return response;
+  }
+
+  /**
+   * Search shared posts by free text (title/body), newest first.
+   * Returns the same enriched feed-item shape as the hottest feed and uses
+   * cursor pagination for stable, performant paging.
+   */
+  async searchPosts(
+    userId: string,
+    options: { q: string; cursor?: string; limit?: number }
+  ): Promise<TrendingFeedResponse> {
+    const limit = options.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const search = options.q?.trim();
+
+    if (!search) {
+      return { items: [], pagination: { hasMore: false, limit } };
+    }
+
+    const cacheKey = `explore:search-posts:${search.toLowerCase()}:${options.cursor || 'first'}:${limit}`;
+    try {
+      const cached = await this.cacheService.get<TrendingFeedResponse>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Post search served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    const posts = await this.prisma.contentPost.findMany({
+      where: {
+        user: { ...NOT_SYSTEM_USER },
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { body: { contains: search, mode: 'insensitive' } },
+        ],
+      },
+      include: CONTENT_POST_FEED_INCLUDE,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(options.cursor && {
+        cursor: { id: options.cursor },
+        skip: 1,
+      }),
+    });
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+    const feedItems = await this.enrichPostsToFeedItems(userId, resultPosts);
+
+    const response: TrendingFeedResponse = {
+      items: feedItems,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: !!nextCursor,
+        limit,
+      },
+    };
+
+    // Cache for 2 minutes (search results are query-specific and short-lived)
+    try {
+      await this.cacheService.set(cacheKey, response, 120);
+    } catch (error) {
+      // Cache error - continue without caching
+    }
+
+    return response;
+  }
+
+  /**
+   * Convert content posts (with feed relations) into enriched feed items.
+   * Batches inventory/media/user lookups, then maps each post by its type.
+   * Shared by the hottest feed and post search so both return the same shape.
+   */
+  private async enrichPostsToFeedItems(
+    userId: string,
+    posts: ContentPostWithFeedRelations[]
+  ): Promise<FeedItem[]> {
+    if (posts.length === 0) {
+      return [];
+    }
+
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
@@ -268,8 +356,7 @@ export class ExploreService {
     });
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Get posts from resultPosts and create stats map from denormalized counts
-    const posts = resultPosts.map((tp) => tp.post);
+    // Stats map from denormalized counts
     const statsMap = new Map();
     posts.forEach((post) => {
       const counts = getPostCounts(post);
@@ -280,6 +367,7 @@ export class ExploreService {
         bookmarks: counts.favoritesCount,
       });
     });
+
     // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
     const postIds = posts.map((p) => p.id);
     const postMediaMap = new Map<string, string[]>();
@@ -312,23 +400,23 @@ export class ExploreService {
     );
 
     // Convert to feed items
-    const feedItems = await Promise.all(
+    return Promise.all(
       posts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
+        const typedPost = post as unknown as ExploreContentPost;
         const basePost = {
           id: post.id,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
-          contextType: this.mapContextType(post),
+          contextType: this.mapContextType(typedPost),
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
         const rawImages = postMediaMap.get(post.id) || [];
         const images = rawImages.map((img: string) => resolveMediaUrl(img) || img);
 
-        const typedPost = post as unknown as ExploreContentPost;
         switch (post.type as ContentPostType) {
           case ContentPostType.FREE:
             return this.mapToPostItem(typedPost, basePost, FeedItemType.POST, images);
@@ -347,24 +435,6 @@ export class ExploreService {
         }
       })
     );
-
-    const response: TrendingFeedResponse = {
-      items: feedItems,
-      pagination: {
-        cursor: nextCursor,
-        hasMore: !!nextCursor,
-        limit,
-      },
-    };
-
-    // Cache for 5 minutes
-    try {
-      await this.cacheService.set(cacheKey, response, 300);
-    } catch (error) {
-      // Cache error - continue without caching
-    }
-
-    return response;
   }
 
   /**

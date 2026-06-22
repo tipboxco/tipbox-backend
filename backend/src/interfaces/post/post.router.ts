@@ -1568,12 +1568,30 @@ router.post(
     // Process images (from files or URLs)
     const images = await processPostImages(req, String(userId));
 
+    // Parse experience if it's a JSON string (AI ile bölünmüş segmentli deneyim — opsiyonel)
+    let experience = req.body.experience;
+    if (typeof experience === 'string' && experience.trim() !== '') {
+      try {
+        experience = JSON.parse(experience);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          message: 'experience field must be a valid JSON array',
+        });
+      }
+    }
+
     const request: CreateUpdatePostRequest = {
       // Update posts are always for products, ignore sent contextType
       contextType: ContextType.PRODUCT,
       contextId: req.body.contextId != null && req.body.contextId !== '' ? String(req.body.contextId).trim() : undefined,
       experiencePostId: (req.body.experiencePostId ?? '').toString().trim(),
       content: req.body.content,
+      experience: Array.isArray(experience) ? experience : undefined,
+      experienceSnippetId:
+        req.body.experienceSnippetId != null && req.body.experienceSnippetId !== ''
+          ? String(req.body.experienceSnippetId).trim()
+          : undefined,
       images: images,
       eventId: normalizeEventId(req.body.eventId),
     };

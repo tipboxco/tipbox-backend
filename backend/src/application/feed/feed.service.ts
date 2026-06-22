@@ -1687,6 +1687,15 @@ export class FeedService {
     // Get tags
     const tags = post.tags?.map((t: TagRecord) => t.tag) || post.contentPostTags?.map((t: TagRecord) => t.tag) || [];
 
+    // Update gönderisinin KENDİ segmentli içeriği yalnızca body'de gerçek AI marker'ları
+    // varsa anlamlıdır (yoksa parseExperienceContent body'yi 2 sahte bloğa kopyalar).
+    const hasUpdateSegments = /\[(price_and_shopping|product_and_usage)/i.test(
+      post.body || ''
+    );
+    const updateOwnExperienceContent = hasUpdateSegments
+      ? experienceContent
+      : undefined;
+
     if (type === FeedItemType.UPDATE) {
       // Get experience post from PostUpdateContent
       const updateContent = post.updateContent;
@@ -1709,6 +1718,7 @@ export class FeedService {
           ...basePost,
           relatedPost,
           content: post.body || '',
+          experienceContent: updateOwnExperienceContent,
           images,
         };
 
@@ -1766,6 +1776,7 @@ export class FeedService {
         relatedPost,
         relatedPostId: experiencePost.id,
         content: updatePostContent,
+        experienceContent: updateOwnExperienceContent,
         images,
       };
 

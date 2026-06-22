@@ -325,6 +325,9 @@ export interface RelatedPostData {
 export interface UpdatePost extends BasePost {
   relatedPost: RelatedPostData;
   content: string;
+  // Update gönderisinin KENDİ AI-segmentli içeriği (varsa). "Orijinal" = content (düz metin),
+  // "Segmentli (AI)" = experienceContent. Yoksa undefined (eski/düz update'ler).
+  experienceContent?: ExperienceContent[];
   images?: string[];
 }
 

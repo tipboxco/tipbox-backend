@@ -381,6 +381,10 @@ export interface CreateUpdatePostRequest {
   contextId?: string; // Optional. Boşsa experience post'taki productId kullanılır (Medusa'da zorunlu değil).
   experiencePostId: string; // Experience post ID that this update is related to
   content: string;
+  // AI ile bölünmüş segmentli deneyim (price_and_shopping / product_and_usage). Opsiyonel:
+  // verilirse update gönderisi de experience gibi segmentli olarak saklanır ve döner.
+  experience?: Experience[];
+  experienceSnippetId?: string; // AI split snippet ID (opsiyonel; fallback'te gönderilmez)
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
 }

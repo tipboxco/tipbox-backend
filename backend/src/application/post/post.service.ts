@@ -1908,8 +1908,24 @@ export class PostService {
       // ✅ Update posts do NOT require inventory check
       // If experience post exists (owned or tried), user can post updates regardless of current inventory status
 
+      // Segmentli deneyim (AI split) verilmişse body'ye experience gönderisiyle AYNI formatta
+      // ekle: feed.parseExperienceContent bu marker'ları ([type] ... (Rating: x/5)) okuyup
+      // update gönderisinin kendi experienceContent'ini üretir. Verilmezse düz metin saklanır.
+      const segmentedText =
+        request.experience && request.experience.length > 0
+          ? request.experience
+              .map(
+                (exp) =>
+                  `[${exp.type}] ${exp.content} (Rating: ${exp.rating}/5)`
+              )
+              .join('\n\n')
+          : '';
+      const updateBody = segmentedText
+        ? `${request.content}\n\n${segmentedText}`
+        : request.content;
+
       const bodyWithImages = this.appendImagesToBody(
-        request.content,
+        updateBody,
         request.images
       );
 
@@ -1929,7 +1945,16 @@ export class PostService {
         contextIds.categoryId
       );
 
+      // AI split snippet ID'sini kaydet (varsa; fallback'te gönderilmez)
+      if (request.experienceSnippetId) {
+        await this.prisma.contentPost.update({
+          where: { id: post.id },
+          data: { experienceSnippetId: request.experienceSnippetId },
+        });
+      }
+
       // Create PostUpdateContent record (resolved experience post id kullan)
+      // content = kullanıcının yazdığı orijinal düz metin ("Orijinal" görünümü için).
       await this.prisma.postUpdateContent.create({
         data: {
           postId: post.id,
