@@ -11,7 +11,8 @@ FROM node:23-alpine AS base
 WORKDIR /app
 
 # python3/make/g++ → native modüller (utf-8-validate, bufferutil)
-RUN apk add --no-cache python3 make g++ netcat-openbsd \
+# openssl → Prisma engine'in libssl/OpenSSL 3.x sürümünü algılaması için
+RUN apk add --no-cache python3 make g++ netcat-openbsd openssl \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # pnpm aktif et
