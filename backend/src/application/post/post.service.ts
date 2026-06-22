@@ -1273,15 +1273,31 @@ export class PostService {
         throw new Error(`products must be an array, got: ${typeof request.products}`);
       }
 
-      // Validate that at least 2 products are selected
-      const selectedProducts = request.products.filter((p) => p.isSelected);
-      if (selectedProducts.length < 2) {
-        throw new Error('At least 2 products must be selected for comparison');
+      // Validate that there are at least 2 distinct products to compare
+      if (request.products.length < 2) {
+        throw new Error('At least 2 products are required for comparison');
       }
 
-      // For now, we'll compare the first 2 selected products
-      const product1 = selectedProducts[0];
-      const product2 = selectedProducts[1];
+      // Compare the first 2 provided products (order = left/right in the UI)
+      const product1 = request.products[0];
+      const product2 = request.products[1];
+
+      // Resolve the author's winner choice.
+      // Priority: explicit choiceProductId, else the single product flagged isSelected.
+      let choiceProductId: string | null = null;
+      if (request.choiceProductId) {
+        if (
+          request.choiceProductId === product1.productId ||
+          request.choiceProductId === product2.productId
+        ) {
+          choiceProductId = request.choiceProductId;
+        }
+      } else {
+        const selected = request.products.filter((p) => p.isSelected);
+        if (selected.length === 1) {
+          choiceProductId = selected[0].productId;
+        }
+      }
 
       // Event validation (if eventId is provided)
       if (request.eventId) {
@@ -1345,6 +1361,7 @@ export class PostService {
             postId: createdPost.id,
             product1Id: product1.productId,
             product2Id: product2.productId,
+            choiceProductId: choiceProductId ?? null,
           },
         });
 
@@ -1891,8 +1908,24 @@ export class PostService {
       // ✅ Update posts do NOT require inventory check
       // If experience post exists (owned or tried), user can post updates regardless of current inventory status
 
+      // Segmentli deneyim (AI split) verilmişse body'ye experience gönderisiyle AYNI formatta
+      // ekle: feed.parseExperienceContent bu marker'ları ([type] ... (Rating: x/5)) okuyup
+      // update gönderisinin kendi experienceContent'ini üretir. Verilmezse düz metin saklanır.
+      const segmentedText =
+        request.experience && request.experience.length > 0
+          ? request.experience
+              .map(
+                (exp) =>
+                  `[${exp.type}] ${exp.content} (Rating: ${exp.rating}/5)`
+              )
+              .join('\n\n')
+          : '';
+      const updateBody = segmentedText
+        ? `${request.content}\n\n${segmentedText}`
+        : request.content;
+
       const bodyWithImages = this.appendImagesToBody(
-        request.content,
+        updateBody,
         request.images
       );
 
@@ -1912,7 +1945,16 @@ export class PostService {
         contextIds.categoryId
       );
 
+      // AI split snippet ID'sini kaydet (varsa; fallback'te gönderilmez)
+      if (request.experienceSnippetId) {
+        await this.prisma.contentPost.update({
+          where: { id: post.id },
+          data: { experienceSnippetId: request.experienceSnippetId },
+        });
+      }
+
       // Create PostUpdateContent record (resolved experience post id kullan)
+      // content = kullanıcının yazdığı orijinal düz metin ("Orijinal" görünümü için).
       await this.prisma.postUpdateContent.create({
         data: {
           postId: post.id,

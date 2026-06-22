@@ -142,6 +142,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *             $ref: '#/components/schemas/Product'
  *         description:
  *           type: string
+ *         choiceProductId:
+ *           type: string
+ *           description: Product id the author picked as the winner of the comparison
  *         images:
  *           type: array
  *           items:
@@ -342,6 +345,11 @@ export interface CreateBenchmarkPostRequest {
   contextId: string;
   products: Product[];
   description: string;
+  /**
+   * Product id that the author selected as the winner of the comparison.
+   * Optional for backward compatibility; when omitted the winner is left undecided.
+   */
+  choiceProductId?: string;
   images?: string[]; // Images support for benchmark posts
   eventId?: string; // Optional event ID to link post to event
 }
@@ -373,6 +381,10 @@ export interface CreateUpdatePostRequest {
   contextId?: string; // Optional. Boşsa experience post'taki productId kullanılır (Medusa'da zorunlu değil).
   experiencePostId: string; // Experience post ID that this update is related to
   content: string;
+  // AI ile bölünmüş segmentli deneyim (price_and_shopping / product_and_usage). Opsiyonel:
+  // verilirse update gönderisi de experience gibi segmentli olarak saklanır ve döner.
+  experience?: Experience[];
+  experienceSnippetId?: string; // AI split snippet ID (opsiyonel; fallback'te gönderilmez)
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
 }

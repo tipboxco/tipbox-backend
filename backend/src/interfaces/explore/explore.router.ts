@@ -107,6 +107,65 @@ router.get(
 
 /**
  * @openapi
+ * /api/explore/search-posts:
+ *   get:
+ *     summary: Paylaşılan postlarda metin araması
+ *     description: Post başlığı/içeriğinde arama yapar ve eşleşen postları feed formatında, en yeniden eskiye doğru döner.
+ *     tags: [Explore]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Aranacak metin (post başlığı/içeriği)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/search-posts',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    if (limit < 1 || limit > 50) {
+      return res.status(400).json({ success: false, message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await exploreService.searchPosts(String(userId), { q, cursor, limit });
+    return res.json(result);
+  })
+);
+
+/**
+ * @openapi
  * /api/explore/marketplace-banners:
  *   get:
  *     summary: Marketplace banner'larını getir
