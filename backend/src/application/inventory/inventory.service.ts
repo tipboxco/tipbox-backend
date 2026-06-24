@@ -264,16 +264,41 @@ export class InventoryService {
         return p;
       });
 
-      // [2/3] Gemini AI ile deneyimi ayır
-      const splitResult = await pipeline.runStage('Splitting experience with AI', () =>
-        this.geminiService.splitExperience({
-          productId,
-          productName: product.name,
-          productBrand: product.brand?.name || undefined,
-          productDescription: product.description || undefined,
-          experienceText,
-        }),
-      );
+      // [2/3] Gemini AI ile deneyimi ayır.
+      // Fallback: Gemini başarısız olursa (ör. rate limit / 503) kullanıcının kendi metnini
+      // split sonucu olarak kabul et — akış tıkanmaz, kullanıcı puanlayıp paylaşabilir.
+      let splitResult: Awaited<ReturnType<typeof this.geminiService.splitExperience>>;
+      try {
+        splitResult = await pipeline.runStage('Splitting experience with AI', () =>
+          this.geminiService.splitExperience({
+            productId,
+            productName: product.name,
+            productBrand: product.brand?.name || undefined,
+            productDescription: product.description || undefined,
+            experienceText,
+          }),
+        );
+      } catch (aiError) {
+        const aiMsg = aiError instanceof Error ? aiError.message : String(aiError);
+        logger.warn(
+          `[splitExperienceWithAI] Gemini split failed, falling back to raw user text: ${aiMsg}`,
+        );
+        splitResult = {
+          priceAndShopping: null,
+          productAndUsage: {
+            content: experienceText,
+            rating: 0,
+            placeholder: null,
+            isEnhanced: false,
+          },
+          metadata: {
+            tokensUsed: null,
+            processingTimeMs: 0,
+            model: 'fallback-user-text',
+            promptVersion: 'fallback',
+          },
+        };
+      }
 
       // [3/3] AI split sonucunu database'e kaydet
       const experienceSnippet = await pipeline.runStage('Saving to database', () =>
@@ -457,7 +482,10 @@ export class InventoryService {
             rating: typeof e.rating === 'number' ? e.rating : 4,
           }));
         }
-        if (experienceArray.length > 0 && experienceSnippetId) {
+        // Snippet üretilememiş olsa bile (ör. Gemini rate limit) kullanıcının puanladığı
+        // experience dizisiyle post oluştur — aksi halde envantere eklenir ama ürün feed'inde
+        // hiçbir gönderi görünmez. experienceSnippetId null geçilebilir (post servisi tolere eder).
+        if (experienceArray.length > 0) {
           await pipeline.runStageOptional(
             'Creating experience post',
             () =>
