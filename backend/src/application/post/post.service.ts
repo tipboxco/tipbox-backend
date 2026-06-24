@@ -1273,15 +1273,23 @@ export class PostService {
         throw new Error(`products must be an array, got: ${typeof request.products}`);
       }
 
-      // Validate that at least 2 products are selected
-      const selectedProducts = request.products.filter((p) => p.isSelected);
-      if (selectedProducts.length < 2) {
-        throw new Error('At least 2 products must be selected for comparison');
+      // Validate that at least 2 products are present for comparison.
+      // Only one product carries isSelected:true (the user's choice/winner),
+      // so the two compared products are the first two entries, not a filter by isSelected.
+      if (request.products.length < 2) {
+        throw new Error('At least 2 products are required for comparison');
       }
 
-      // For now, we'll compare the first 2 selected products
-      const product1 = selectedProducts[0];
-      const product2 = selectedProducts[1];
+      // The two compared products
+      const product1 = request.products[0];
+      const product2 = request.products[1];
+
+      // Determine the user's choice/winner: explicit choiceProductId takes precedence,
+      // otherwise fall back to the product flagged isSelected.
+      const choiceProductId =
+        request.choiceProductId ||
+        request.products.find((p) => p.isSelected)?.productId ||
+        null;
 
       // Event validation (if eventId is provided)
       if (request.eventId) {
@@ -1345,6 +1353,7 @@ export class PostService {
             postId: createdPost.id,
             product1Id: product1.productId,
             product2Id: product2.productId,
+            choiceProductId,
           },
         });
 

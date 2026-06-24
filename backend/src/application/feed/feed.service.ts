@@ -84,7 +84,7 @@ interface FeedContentPost {
   productGroup?: { id: string; name: string; imageUrl?: string | null; subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null } | null;
   subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null;
   mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
-  comparison?: { product1Id: string; product2Id: string; comparisonSummary?: string | null; product1?: FeedProductLike | null; product2?: FeedProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
+  comparison?: { product1Id: string; product2Id: string; choiceProductId?: string | null; comparisonSummary?: string | null; product1?: FeedProductLike | null; product2?: FeedProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
   tags?: TagRecord[];
   contentPostTags?: TagRecord[];
   media?: MediaRecord[];
@@ -1596,25 +1596,23 @@ export class FeedService {
 
     const product1 = this.getProductBase(comparison.product1);
     const product2 = this.getProductBase(comparison.product2);
-    const choiceProductId = this.selectComparisonWinner(comparison);
+    // Prefer the user's persisted choice; fall back to the score-based winner.
+    // When neither is available, no product is highlighted (avoids wrongly flagging product1).
+    const choiceProductId = comparison.choiceProductId ?? this.selectComparisonWinner(comparison);
 
     const products: BenchmarkProduct[] = [];
     if (product1) {
       products.push({
         ...product1,
         isOwned: ownedProductIds.has(product1.id),
-        choice: choiceProductId
-          ? choiceProductId === String(comparison.product1Id)
-          : true,
+        choice: choiceProductId ? String(choiceProductId) === String(comparison.product1Id) : false,
       });
     }
     if (product2) {
       products.push({
         ...product2,
         isOwned: ownedProductIds.has(product2.id),
-        choice: choiceProductId
-          ? choiceProductId === String(comparison.product2Id)
-          : false,
+        choice: choiceProductId ? String(choiceProductId) === String(comparison.product2Id) : false,
       });
     }
 

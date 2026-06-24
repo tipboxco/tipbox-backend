@@ -1990,7 +1990,7 @@ export class UserService {
       if (postType === 'COMPARE') {
         const comp = post.comparison;
         if (comp) {
-          const choiceProductId = this.selectComparisonWinner(comp);
+          const choiceProductId = comp.choiceProductId ?? this.selectComparisonWinner(comp);
           return {
             id: String(post.id),
             type: 'benchmark' as const,
@@ -2002,12 +2002,12 @@ export class UserService {
               {
                 ...(await this.getProductBase(String(comp.product1Id)))!,
                 isOwned: ownedProductIds.has(String(comp.product1Id)),
-                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : true,
+                choice: choiceProductId ? String(choiceProductId) === String(comp.product1Id) : false,
               },
               {
                 ...(await this.getProductBase(String(comp.product2Id)))!,
                 isOwned: ownedProductIds.has(String(comp.product2Id)),
-                choice: choiceProductId ? choiceProductId === String(comp.product2Id) : false,
+                choice: choiceProductId ? String(choiceProductId) === String(comp.product2Id) : false,
               },
             ],
             content: post.body,
@@ -2751,7 +2751,7 @@ export class UserService {
           throw new Error('Comparison not found');
         }
         const stats = await this.getPostStats(String(post.id));
-        const choiceProductId = this.selectComparisonWinner(comp);
+        const choiceProductId = comp.choiceProductId ?? this.selectComparisonWinner(comp);
         return {
           id: String(post.id),
           type: 'benchmark' as const,
@@ -2764,14 +2764,14 @@ export class UserService {
               ...(await this.getProductBase(String(comp.product1Id)))!,
               isOwned: ownedSet.has(String(comp.product1Id)),
               choice: choiceProductId
-                ? choiceProductId === String(comp.product1Id)
-                : true,
+                ? String(choiceProductId) === String(comp.product1Id)
+                : false,
             },
             {
               ...(await this.getProductBase(String(comp.product2Id)))!,
               isOwned: ownedSet.has(String(comp.product2Id)),
               choice: choiceProductId
-                ? choiceProductId === String(comp.product2Id)
+                ? String(choiceProductId) === String(comp.product2Id)
                 : false,
             },
           ],
@@ -3297,9 +3297,18 @@ export class UserService {
 
         case 'COMPARE': {
           // COMPARE -> "benchmark" tipi
+          type ComparisonShape = {
+            product1Id: string;
+            product2Id: string;
+            choiceProductId?: string | null;
+            scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
+          };
           type PostWithComparison = typeof post & { comparison?: unknown };
-          const comp = (post as PostWithComparison).comparison;
+          const comp = (post as PostWithComparison).comparison as ComparisonShape | undefined;
           if (!comp) break;
+
+          // Prefer the user's persisted choice; fall back to the score-based winner.
+          const choiceProductId = comp.choiceProductId ?? this.selectComparisonWinner(comp);
 
           results.push({
             id: String(post.id),
@@ -3312,12 +3321,12 @@ export class UserService {
               {
                 ...(await this.getProductBase(String(comp.product1Id)))!,
                 isOwned: ownedSet.has(String(comp.product1Id)),
-                choice: false, // TODO: Comparison score'dan çıkarılacak
+                choice: choiceProductId ? String(choiceProductId) === String(comp.product1Id) : false,
               },
               {
                 ...(await this.getProductBase(String(comp.product2Id)))!,
                 isOwned: ownedSet.has(String(comp.product2Id)),
-                choice: false,
+                choice: choiceProductId ? String(choiceProductId) === String(comp.product2Id) : false,
               },
             ],
             content: post.body,

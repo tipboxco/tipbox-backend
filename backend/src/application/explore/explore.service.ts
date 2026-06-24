@@ -72,7 +72,7 @@ interface ExploreContentPost {
   productGroup?: { id: string; name: string; imageUrl?: string | null; subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null } | null;
   subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null;
   mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
-  comparison?: { product1Id: string; product2Id: string; comparisonSummary?: string | null; product1?: ExploreProductLike | null; product2?: ExploreProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
+  comparison?: { product1Id: string; product2Id: string; choiceProductId?: string | null; comparisonSummary?: string | null; product1?: ExploreProductLike | null; product2?: ExploreProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
   tags?: ExploreTagRecord[];
   contentPostTags?: ExploreTagRecord[];
   media?: { mediaUrl: string }[];
@@ -813,20 +813,22 @@ export class ExploreService {
 
     const product1 = this.getProductBase(comparison.product1);
     const product2 = this.getProductBase(comparison.product2);
+    // Highlight the user's persisted choice; no highlight if none stored.
+    const choiceProductId = comparison.choiceProductId ?? null;
 
     const products: BenchmarkProduct[] = [];
     if (product1) {
       products.push({
         ...product1,
         isOwned: ownedProductIds.has(product1.id),
-        choice: false,
+        choice: choiceProductId ? String(choiceProductId) === String(comparison.product1Id) : false,
       });
     }
     if (product2) {
       products.push({
         ...product2,
         isOwned: ownedProductIds.has(product2.id),
-        choice: false,
+        choice: choiceProductId ? String(choiceProductId) === String(comparison.product2Id) : false,
       });
     }
 

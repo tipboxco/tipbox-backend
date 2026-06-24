@@ -641,12 +641,13 @@ router.post(
       });
     }
 
-    // Validate that at least 2 products are selected
-    const selectedProducts = products.filter((p) => p.isSelected);
-    if (selectedProducts.length < 2) {
+    // Validate that exactly 2 products are present for comparison.
+    // Note: only one product carries isSelected:true (the user's choice/winner),
+    // so we must NOT validate by isSelected count here.
+    if (products.length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'At least 2 products must be selected for comparison',
+        message: 'At least 2 products are required for comparison',
       });
     }
 
@@ -655,11 +656,28 @@ router.post(
     const contextType = contextTypeRaw && String(contextTypeRaw).toLowerCase() === 'product' ? ContextType.PRODUCT : undefined;
     const contextId = req.body.contextId ?? req.body.context_id ?? req.body.productId;
 
+    // Resolve the user's choice/winner product id so it aligns with the resolved
+    // product ids in `products` (supports id and externalId). Falls back to undefined,
+    // in which case the service derives the winner from the isSelected flag.
+    let choiceProductId: string | undefined;
+    const choiceProductIdRaw = req.body.choiceProductId ?? req.body.choice_product_id;
+    if (choiceProductIdRaw) {
+      try {
+        choiceProductId = await postService.resolveProductId(String(choiceProductIdRaw));
+      } catch (error) {
+        logger.warn('Failed to resolve choiceProductId, falling back to isSelected', {
+          choiceProductIdRaw,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     const request: CreateBenchmarkPostRequest = {
       contextType: contextType as ContextType,
       contextId: contextId,
       products: products,
       description,
+      choiceProductId,
       images: images,
       eventId: normalizeEventId(req.body.eventId ?? req.body.event_id),
     };

@@ -342,6 +342,7 @@ export interface CreateBenchmarkPostRequest {
   contextId: string;
   products: Product[];
   description: string;
+  choiceProductId?: string; // Product the user picked as their choice/winner
   images?: string[]; // Images support for benchmark posts
   eventId?: string; // Optional event ID to link post to event
 }
