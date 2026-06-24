@@ -884,8 +884,9 @@ router.post(
       !request.content ||
       (typeof request.content === 'string' && request.content.trim() === '') ||
       !Array.isArray(request.experience) ||
-      request.experience.length === 0 ||
-      !request.experienceSnippetId
+      request.experience.length === 0
+      // experienceSnippetId zorunlu DEĞİL: AI split başarısız olduğunda (ör. Gemini rate limit)
+      // kullanıcının kendi metniyle (experience array) gönderi oluşturulabilmeli.
     ) {
       const missingResolution =
         !request.selectedDurationId ||
