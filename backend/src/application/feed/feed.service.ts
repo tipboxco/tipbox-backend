@@ -690,6 +690,14 @@ export class FeedService {
     }
 
     // Interests filter - şu feed source'lar kabul edilir: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
+    //
+    // NOT (For You): "For You" sekmesi CATEGORY_MATCH + TRENDING ister. Ancak Medusa
+    // kategori migrasyonu sonrası postlar main_category_id/sub_category_id yerine
+    // category_id kullandığından scoring CATEGORY_MATCH üretemiyor; TRENDING ise source
+    // dağıtım anında dondurulduğu için feed'e nadiren işleniyor. Bu yüzden For You isteği
+    // geldiğinde (CATEGORY_MATCH veya TRENDING), filtreyi kullanıcının feed'inde gerçekten
+    // üretilen "keşif/ilgi" source'larına genişletiyoruz. Trust source'ları (MUTUAL_TRUST,
+    // TRUSTER, TRUSTER_NETWORK) "Trusting" sekmesine ait olduğundan For You'ya dahil değil.
     const feedWhere: Prisma.FeedWhereInput = {};
     if (filters.interests && filters.interests.length > 0) {
       // İzin verilen feed source'lar
@@ -702,7 +710,18 @@ export class FeedService {
         FeedSource.INVENTORY_MATCH,
         FeedSource.PRODUCT_GROUP_MATCH,
       ];
-      
+
+      // "For You" isteğinde kullanılacak keşif/ilgi source'ları (trust hariç)
+      const forYouSources = [
+        FeedSource.CATEGORY_MATCH,
+        FeedSource.TRENDING,
+        FeedSource.ENGAGEMENT_HIGH,
+        FeedSource.NEW_USER,
+        FeedSource.BOOSTED,
+        FeedSource.INVENTORY_MATCH,
+        FeedSource.PRODUCT_GROUP_MATCH,
+      ];
+
       // Case-insensitive mapping: new_user -> NEW_USER, boosted -> BOOSTED, vb.
       const sourceMapping: Record<string, FeedSource> = {
         'new_user': FeedSource.NEW_USER,
@@ -713,7 +732,7 @@ export class FeedService {
         'inventory_match': FeedSource.INVENTORY_MATCH,
         'product_group_match': FeedSource.PRODUCT_GROUP_MATCH,
       };
-      
+
       // Feed source'larını normalize et ve validate et
       const validSources = filters.interests
         .map((source) => {
@@ -727,8 +746,15 @@ export class FeedService {
           return mapped || null;
         })
         .filter((source): source is FeedSource => source !== null && allowedSources.includes(source));
-      
-      if (validSources.length > 0) {
+
+      // "For You" sinyali: CATEGORY_MATCH veya TRENDING istendiğinde keşif source'larına genişlet
+      const isForYouRequest =
+        validSources.includes(FeedSource.CATEGORY_MATCH) ||
+        validSources.includes(FeedSource.TRENDING);
+
+      if (isForYouRequest) {
+        feedWhere.source = { in: forYouSources };
+      } else if (validSources.length > 0) {
         feedWhere.source = { in: validSources };
       }
     }
