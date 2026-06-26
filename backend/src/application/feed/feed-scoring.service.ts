@@ -54,7 +54,7 @@ export class FeedScoringService {
     RECENCY: {
       HOURS_48: 10,
       DAYS_14: 5,
-      OLD: 0,
+      OLD: 2, // MVP: eski postların da feed'e girmesi için 0 yerine taban puan
     },
     BOOST: {
       MIN: 5,
@@ -437,7 +437,8 @@ export class FeedScoringService {
     if (hoursOld <= 48) {
       return this.WEIGHTS.RECENCY.HOURS_48;
     }
-    if (hoursOld <= 14 * 24) {
+    // MVP: 14 gün yerine 90 günlük pencere; bu aralıktaki postlar hâlâ "yeni" sayılır
+    if (hoursOld <= 90 * 24) {
       return this.WEIGHTS.RECENCY.DAYS_14;
     }
     return this.WEIGHTS.RECENCY.OLD;

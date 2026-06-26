@@ -17,7 +17,7 @@ export class TrustBackfillWorker {
 
   // Configurable parameters
   private readonly MAX_POSTS_TO_BACKFILL = 50; // Max 50 post geriye dönük işle
-  private readonly SCORE_THRESHOLD = 5; // Minimum score to add to feed
+  private readonly SCORE_THRESHOLD = 0; // MVP: eşik 0 (bkz. feed-distribution.worker)
 
   constructor() {
     this.prisma = getPrisma();

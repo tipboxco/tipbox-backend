@@ -23,9 +23,10 @@ export class FeedCleanupService {
   // Configurable thresholds - MVP için optimize edildi
   private readonly CONFIG = {
     MAX_FEEDS_PER_USER: 1000, // 2000'den 1000'e düşürüldü (MVP)
-    UNSEEN_CLEANUP_THRESHOLD: 2.5,
-    SEEN_CLEANUP_THRESHOLD: 1.5,
-    TIME_WINDOW_DAYS: 14,
+    // MVP: düşük skorlu feed'ler de görünür kalsın diye eşikler gevşetildi
+    UNSEEN_CLEANUP_THRESHOLD: 1.0,
+    SEEN_CLEANUP_THRESHOLD: 0.5,
+    TIME_WINDOW_DAYS: 90, // recency penceresiyle uyumlu (14 -> 90)
     BATCH_SIZE: 1000,
   };
 
