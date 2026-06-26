@@ -42,7 +42,9 @@ export class FeedDistributionWorker {
 
   // Konfigürasyon
   private readonly CHUNK_SIZE = 500; // Her batch'te 500 feed kaydı
-  private readonly SCORE_THRESHOLD = 5; // Minimum score
+  // MVP: az kullanıcı/etkileşim olduğu için eşik 0'a çekildi; böylece eski postlar da
+  // (recency=0) tüm kullanıcıların feed'ine dağıtılır. Sıralama yine relevanceScore'a göre kalır.
+  private readonly SCORE_THRESHOLD = 0; // Minimum score
   private readonly CONCURRENT_CHUNKS = 3; // Aynı anda max 3 chunk işle
   private readonly MAX_RETRIES = 3; // Başarısız chunk için max retry
   private readonly RETRY_DELAY = 5000; // Retry arası 5 saniye
