@@ -16,9 +16,14 @@ import { RewardSourceType } from '../../domain/reward/reward-source-type.enum';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
+import { CacheService } from '../../infrastructure/cache/cache.service';
 import logger from '../../infrastructure/logger/logger';
 
 const router = express.Router();
+const cache = new CacheService();
+
+const BALANCE_SYNC_TTL_SECONDS = 30;
+const balanceSyncThrottleKey = (walletId: string) => `balance-sync-throttle:${walletId}`;
 const walletService = new WalletService();
 const tipsBalanceService = new TipsBalanceService();
 const transactionService = new TransactionService();
@@ -819,12 +824,15 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  // Contract → DB sync: her GET /balance çağrısında tetiklenir (smartAccountAddress varsa)
+  // Contract → DB sync: throttle ile en fazla 30 saniyede bir tetiklenir
   const sdk = getWalletProvider();
   if (sdk.isConfigured() && wallet.smartAccountAddress) {
-    const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
-    if (!syncResult.success) {
-      logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
+    const shouldSync = await cache.setNX(balanceSyncThrottleKey(wallet.id), '1', BALANCE_SYNC_TTL_SECONDS);
+    if (shouldSync) {
+      const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
+      if (!syncResult.success) {
+        logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
+      }
     }
   }
 
