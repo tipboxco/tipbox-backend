@@ -7,9 +7,21 @@ import { getDailyRewardConfig } from '../../infrastructure/config/daily-reward.c
 import { invalidateWalletCache } from '../../infrastructure/cache/cache-invalidation';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { getWalletProvider } from './provider/wallet-provider.factory';
 import logger from '../../infrastructure/logger/logger';
 
+const TIPS_DECIMALS = parseInt(process.env.TIPS_TOKEN_DECIMALS || '18', 10);
 const DAILY_REWARD_KEY = (userId: string) => `daily-reward:${userId}`;
+
+function extractTxHash(receipt: unknown): string | undefined {
+  if (!receipt || typeof receipt !== 'object') return undefined;
+  const r = receipt as Record<string, unknown>;
+  const inner = (r as { receipt?: { transactionHash?: string } }).receipt;
+  const candidates = [r.transactionHash, r.transaction_hash, inner?.transactionHash].filter(
+    (v): v is string => typeof v === 'string' && v.length > 0,
+  );
+  return candidates[0];
+}
 
 export class DailyRewardService {
   constructor(
@@ -30,7 +42,6 @@ export class DailyRewardService {
     if (!acquired) return;
 
     try {
-      // Kullanıcının gerçek smart wallet'ını bul (sendTip ile aynı çözümleme)
       const recipientWallet = await this.walletRepo.findPreferredForReceivingByUserId(userId);
       if (!recipientWallet) {
         // Wallet yok — sonraki girişte tekrar denesin
@@ -38,13 +49,12 @@ export class DailyRewardService {
         return;
       }
 
-      // Mock/CUSTOM cüzdanlar hariç — gerçek Thirdweb cüzdanı yoksa ödül verilmez
+      // Mock/CUSTOM cüzdanlar hariç
       if (recipientWallet.provider === WalletProvider.CUSTOM) {
         await this.cache.delete(rewardKey);
         return;
       }
 
-      // Kaynak kullanıcıyı bul
       const sourceUser = await this.userRepo.findByEmail(config.sourceUserEmail);
       if (!sourceUser) {
         logger.warn({ email: config.sourceUserEmail }, 'daily reward: kaynak kullanıcı bulunamadı');
@@ -52,15 +62,98 @@ export class DailyRewardService {
         return;
       }
 
+      const sdk = getWalletProvider();
+      const now = new Date();
+      const amountWei = BigInt(Math.round(config.amount * 10 ** TIPS_DECIMALS));
+
+      // ── ON-CHAIN PATH ──────────────────────────────────────────────────────
+      if (sdk.isConfigured() && recipientWallet.smartAccountAddress) {
+        const result = await sdk.transferToAddress(
+          sourceUser.id,
+          amountWei,
+          recipientWallet.smartAccountAddress,
+        );
+
+        if (!result.success) {
+          logger.error(
+            {
+              error: result.error,
+              contractError: result.contractError,
+              sourceUserId: sourceUser.id,
+              recipientUserId: userId,
+              recipientSmartAccount: recipientWallet.smartAccountAddress,
+            },
+            'daily reward: on-chain ERC20 transfer başarısız',
+          );
+          await this.cache.delete(rewardKey);
+          return;
+        }
+
+        const txHash = extractTxHash(result.receipt) ?? null;
+
+        await this.prisma.$transaction(async (tx) => {
+          await tx.wallet.update({
+            where: { id: recipientWallet.id },
+            data: { balance: { increment: config.amount } },
+          });
+
+          await tx.transaction.create({
+            data: {
+              walletId: recipientWallet.id,
+              actionType: TransactionActionType.DEPOSIT,
+              status: TransactionStatus.CONFIRMED,
+              amount: config.amount,
+              fromAddress: result.smartAccountAddress ?? null,
+              toAddress: recipientWallet.smartAccountAddress,
+              txHash,
+              metadata: {
+                source: 'daily_reward',
+                senderUserId: sourceUser.id,
+                intervalHours: config.intervalSeconds / 3600,
+              },
+              provider: 'thirdweb',
+              confirmedAt: now,
+            },
+          });
+        });
+
+        invalidateWalletCache(userId).catch(() => {});
+        invalidateWalletCache(sourceUser.id).catch(() => {});
+
+        logger.info(
+          {
+            sourceUserId: sourceUser.id,
+            recipientUserId: userId,
+            recipientSmartAccount: recipientWallet.smartAccountAddress,
+            amount: config.amount,
+            txHash,
+            intervalHours: config.intervalSeconds / 3600,
+          },
+          'daily reward on-chain başarıyla tamamlandı',
+        );
+        return;
+      }
+
+      // smartAccountAddress yok → sonraki girişe ertele (smart account oluşunca çalışır)
+      if (sdk.isConfigured() && !recipientWallet.smartAccountAddress) {
+        logger.warn(
+          { recipientUserId: userId, walletId: recipientWallet.id },
+          'daily reward: smartAccountAddress yok, sonraki girişe ertelendi',
+        );
+        await this.cache.delete(rewardKey);
+        return;
+      }
+
+      // ── DB-ONLY FALLBACK (SDK yapılandırılmamış) ───────────────────────────
+      logger.warn({ recipientUserId: userId }, 'daily reward: SDK yapılandırılmamış, DB-only fallback');
+
       const sourceWallets = await this.walletRepo.findByUserId(sourceUser.id);
       if (sourceWallets.length === 0) {
         logger.warn({ sourceUserId: sourceUser.id }, 'daily reward: kaynak wallet bulunamadı');
         await this.cache.delete(rewardKey);
         return;
       }
-
-      const sourceWallet =
-        sourceWallets.find((w) => w.isConnected) ?? sourceWallets[0];
+      const sourceWallet = sourceWallets.find((w) => w.isConnected) ?? sourceWallets[0];
 
       if (sourceWallet.getAvailableBalance() < config.amount) {
         logger.error(
@@ -69,20 +162,17 @@ export class DailyRewardService {
             available: sourceWallet.getAvailableBalance(),
             required: config.amount,
           },
-          'daily reward: kaynak wallet yetersiz bakiye',
+          'daily reward: kaynak wallet yetersiz bakiye (DB-only)',
         );
         await this.cache.delete(rewardKey);
         return;
       }
-
-      const now = new Date();
 
       await this.prisma.$transaction(async (tx) => {
         const deductResult = await tx.wallet.updateMany({
           where: { id: sourceWallet.id, balance: { gte: config.amount } },
           data: { balance: { increment: -config.amount } },
         });
-
         if (deductResult.count === 0) {
           throw new Error('daily reward: kaynak bakiye yetersiz (race condition)');
         }
@@ -118,10 +208,7 @@ export class DailyRewardService {
             amount: config.amount,
             fromAddress: sourceWallet.publicAddress,
             toAddress: recipientWallet.smartAccountAddress ?? recipientWallet.publicAddress,
-            metadata: {
-              source: 'daily_reward',
-              senderUserId: sourceUser.id,
-            },
+            metadata: { source: 'daily_reward', senderUserId: sourceUser.id },
             provider: 'backend',
             confirmedAt: now,
           },
@@ -135,14 +222,12 @@ export class DailyRewardService {
         {
           sourceUserId: sourceUser.id,
           recipientUserId: userId,
-          recipientWalletId: recipientWallet.id,
           amount: config.amount,
           intervalHours: config.intervalSeconds / 3600,
         },
-        'daily login reward başarıyla tamamlandı',
+        'daily reward DB-only tamamlandı',
       );
     } catch (err) {
-      // Transfer başarısız — cooldown key'i sil, sonraki girişte tekrar denesin
       await this.cache.delete(rewardKey).catch(() => {});
       throw err;
     }
