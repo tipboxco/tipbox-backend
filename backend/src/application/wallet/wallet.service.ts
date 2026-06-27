@@ -410,9 +410,11 @@ export class WalletService {
     });
 
     if (isFirstWallet) {
-      new WelcomeDepositService()
-        .grant(userId, wallet.id)
-        .catch((err) => logger.error({ err, userId }, 'welcome deposit başarısız'));
+      try {
+        await new WelcomeDepositService().grant(userId, wallet.id);
+      } catch (err) {
+        logger.error({ err, userId }, 'welcome deposit başarısız');
+      }
     }
 
     return wallet;

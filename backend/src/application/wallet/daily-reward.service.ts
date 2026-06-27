@@ -2,6 +2,7 @@ import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
+import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { getDailyRewardConfig } from '../../infrastructure/config/daily-reward.config';
 import { invalidateWalletCache } from '../../infrastructure/cache/cache-invalidation';
 import { CacheService } from '../../infrastructure/cache/cache.service';
@@ -37,8 +38,8 @@ export class DailyRewardService {
         return;
       }
 
-      if (!recipientWallet.hasSmartAccount()) {
-        // Sadece EOA var, smart account yok — ödül verilmez, sonraki girişte denesin
+      // Mock/CUSTOM cüzdanlar hariç — gerçek Thirdweb cüzdanı yoksa ödül verilmez
+      if (recipientWallet.provider === WalletProvider.CUSTOM) {
         await this.cache.delete(rewardKey);
         return;
       }
