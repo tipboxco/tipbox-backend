@@ -806,25 +806,11 @@ router.post(
       }
     }
 
-    // Support both new field names (selectedDurationId) and old field names (step1Duration). Duration, location, purpose zorunlu.
+    // Süre/konum/amaç UI'dan kaldırıldı — artık OPSIYONEL. Verilirse çözülür, yoksa null kalır.
+    // (Eski alan adları da desteklenir: step1Duration, selectedCondition, selectedFrequency.)
     const rawDurationId = req.body.selectedDurationId || req.body.step1Duration || req.body.selectedDuration || null;
     const rawLocationId = req.body.selectedLocationId || req.body.selectedCondition || req.body.selectedLocation || null;
     const rawPurposeId = req.body.selectedPurposeId || req.body.selectedFrequency || req.body.selectedPurpose || null;
-
-    const hasDuration = rawDurationId != null && String(rawDurationId).trim() !== '';
-    const hasLocation = rawLocationId != null && String(rawLocationId).trim() !== '';
-    const hasPurpose = rawPurposeId != null && String(rawPurposeId).trim() !== '';
-    if (!hasDuration || !hasLocation || !hasPurpose) {
-      return res.status(400).json({
-        success: false,
-        message: 'duration, location and purpose are required. Send selectedDurationId, selectedLocationId (localization), selectedPurposeId (or legacy names: step1Duration, selectedLocation, selectedPurpose).',
-        fields: {
-          duration: !hasDuration ? 'missing' : 'provided',
-          location: !hasLocation ? 'missing' : 'provided',
-          purpose: !hasPurpose ? 'missing' : 'provided',
-        },
-      });
-    }
 
     // Resolve option IDs (name to UUID conversion handled in service layer)
     const resolvedIds = await postService.resolveExperienceOptionIds({
