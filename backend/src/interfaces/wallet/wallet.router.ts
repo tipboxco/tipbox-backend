@@ -885,6 +885,61 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /api/wallets/balance/sync:
+ *   post:
+ *     summary: Contract'tan bakiye senkronize et (pull-to-refresh)
+ *     description: Smart account adresindeki TIPS bakiyesini contract'tan okuyup DB'yi günceller.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Güncel bakiye
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.post('/balance/sync', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getPreferredWalletForBalance(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, message: 'No wallet found', balance: 0, currency: 'TIPS', locked: 0, available: 0 });
+  }
+
+  const sdk = getWalletProvider();
+  if (!sdk.isConfigured()) {
+    logger.warn({ userId, message: 'balance/sync: wallet provider yapılandırılmamış, DB değerleri dönülüyor' });
+  } else if (!wallet.smartAccountAddress) {
+    logger.warn({ walletId: wallet.id, message: 'balance/sync: smartAccountAddress yok, DB değerleri dönülüyor' });
+  } else {
+    const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
+    if (!syncResult.success) {
+      logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'balance/sync: chain sync başarısız, DB değerleri dönülüyor' });
+    }
+  }
+
+  const { balance: balanceFromDb, lockedBalance: lockedFromDb } = await walletService.getBalance(wallet.id);
+  const balance = balanceFromDb ?? 0;
+  const locked = lockedFromDb ?? 0;
+  const available = Math.max(0, balance - locked);
+
+  return res.json({
+    balance,
+    currency: 'TIPS',
+    locked,
+    available,
+    pendingTips: locked,
+    synced: sdk.isConfigured() && !!wallet.smartAccountAddress,
+  });
+}));
+
+/**
+ * @openapi
  * /api/wallets/create:
  *   post:
  *     summary: Kullanıcı için yeni wallet oluştur (Thirdweb Wallet Connect zorunlu)
