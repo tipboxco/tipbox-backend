@@ -3124,8 +3124,8 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
   const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const replies = await userService.getUserReplies(id, { cursor, limit });
-  return res.json(replies);
+  const questions = await userService.getUserQuestions(id, { cursor, limit });
+  return res.json(questions);
 }));
 
 /**

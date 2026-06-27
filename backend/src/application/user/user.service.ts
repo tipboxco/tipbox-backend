@@ -2972,6 +2972,130 @@ export class UserService {
     };
   }
 
+  /**
+   * Kullanıcının SORDUĞU soruları (kendi QUESTION post'ları) listeler.
+   * Profildeki "Questions" sekmesi bunu kullanır.
+   * Not: Kullanıcının başkalarının sorularına yazdığı cevaplar için getUserReplies'a bakın.
+   */
+  async getUserQuestions(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<PaginatedResult<FeedItem>> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: Prisma.ContentPostWhereInput = {
+      userId,
+      type: ContentPostType.QUESTION,
+      ...(cursor ? { id: { lt: cursor } } : {}),
+    };
+
+    const posts = await this.prisma.contentPost.findMany({
+      where: whereClause,
+      include: {
+        question: true,
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    const userBase = await this.getUserBase(userId);
+    const ownedProducts = await this.prisma.inventory.findMany({
+      where: { userId },
+      select: { productId: true },
+    });
+    const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
+
+    // Batch fetch images from PostMedia
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    const results = await Promise.all(
+      posts.map(async (post) => {
+        const stats = await this.getPostStats(String(post.id));
+        const contextType = this.mapContextType(post);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
+        const images = postMediaMap.get(post.id) || [];
+
+        return {
+          id: String(post.id),
+          type: 'question' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          title: post.title,
+          content: post.body,
+          isBoosted: false,
+          images,
+        };
+      })
+    );
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor =
+      hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
   async getUserReplies(
     userId: string,
     options?: { cursor?: string; limit?: number }
@@ -3040,7 +3164,7 @@ export class UserService {
         const stats = await this.getPostStats(String(comment.postId));
         const commentPost = comment.post;
         const contextType = this.mapContextType(commentPost);
-        const contextData = this.buildContextDataFromPost(commentPost, ownedProductIds);
+        const contextData = await this.buildContextDataFromPost(commentPost, ownedProductIds);
         return {
           id: String(comment.id),
           type: 'question' as const,
@@ -3600,7 +3724,7 @@ export class UserService {
           fetcher = this.getUserTips(userId, { limit: perSourceLimit });
           break;
         case 'question':
-          fetcher = this.getUserReplies(userId, { limit: perSourceLimit });
+          fetcher = this.getUserQuestions(userId, { limit: perSourceLimit });
           break;
         case 'experience':
           fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
