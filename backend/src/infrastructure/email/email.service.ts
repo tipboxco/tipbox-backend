@@ -236,11 +236,49 @@ export class EmailService {
     }
   }
 
+  /**
+   * RFC 2047 "encoded-word" for non-ASCII header values (ör. Subject'teki Türkçe karakterler).
+   * Saf ASCII değerler aynen döner. Aksi halde mail istemcisinde mojibake olmaması için
+   * UTF-8 karakter sınırlarında parçalanıp her parça 75 karakter limitinin altında encode edilir.
+   */
+  private encodeMimeHeader(value: string): string {
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]*$/.test(value)) {
+      return value; // ASCII -> encode gerekmez
+    }
+    const words: string[] = [];
+    let chunk = '';
+    let bytes = 0;
+    const flush = (): void => {
+      if (!chunk) return;
+      words.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf-8').toString('base64')}?=`);
+      chunk = '';
+      bytes = 0;
+    };
+    for (const ch of value) {
+      const chBytes = Buffer.byteLength(ch, 'utf-8');
+      // her encoded-word kaynağı <= 30 byte => base64 <= 40 char, 75 limitinin güvenli altında
+      if (bytes + chBytes > 30) flush();
+      chunk += ch;
+      bytes += chBytes;
+    }
+    flush();
+    return words.join(' ');
+  }
+
   private createEmailMessage(options: EmailOptions): string {
+    // RFC 2047: encoded-word tırnak içine alınmaz; bu yüzden From'da ASCII ise tırnaklı,
+    // değilse encode edilmiş (tırnaksız) biçim kullanılır.
+    const encodedFromName = this.encodeMimeHeader(this.fromName);
+    const fromHeader =
+      encodedFromName === this.fromName
+        ? `From: "${this.fromName}" <${this.fromEmail}>`
+        : `From: ${encodedFromName} <${this.fromEmail}>`;
+
     const message = [
-      `From: "${this.fromName}" <${this.fromEmail}>`,
+      fromHeader,
       `To: ${options.to}`,
-      `Subject: ${options.subject}`,
+      `Subject: ${this.encodeMimeHeader(options.subject)}`,
       'Content-Type: text/html; charset=utf-8',
       '',
       options.html,
