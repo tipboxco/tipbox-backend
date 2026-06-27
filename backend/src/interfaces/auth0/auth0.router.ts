@@ -11,6 +11,7 @@ import { validateBody } from '../../infrastructure/middleware/validation.middlew
 import { LoginSchema, RegisterSchema } from '../auth/auth.schemas';
 import { authRateLimiter, loginRateLimiter } from '../../infrastructure/middleware/rate-limit.middleware';
 import axios from 'axios';
+import { DailyRewardService } from '../../application/wallet/daily-reward.service';
 
 const router = Router();
 const userRepo = new UserPrismaRepository();
@@ -579,6 +580,11 @@ router.post('/email', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
       });
     }
 
+    // Günlük giriş ödülü — fire-and-forget
+    new DailyRewardService()
+      .grantLoginReward(user.id)
+      .catch((err) => logger.error({ err, userId: user.id }, 'daily reward başarısız'));
+
     // Profil ve token bilgilerini al
     const { fullName, avatarUrl } = await getUserProfileData(user.id, decoded.name, decoded.picture);
     const { backendToken, backendRefreshToken } = await generateBackendTokens(user, req);
@@ -835,6 +841,11 @@ router.get('/token', requiresAuth(), asyncHandler(async (req: Request, res: Resp
         message: 'Email adresiniz doğrulanmamış. Doğrulama kodu gönderildi.'
       });
     }
+
+    // Günlük giriş ödülü — fire-and-forget
+    new DailyRewardService()
+      .grantLoginReward(user.id)
+      .catch((err) => logger.error({ err, userId: user.id }, 'daily reward başarısız'));
 
     // Google ile login olduysa, session'dan gelen picture ile aktif avatar'ı değiştir
     // Not: Bu davranış kullanıcının önceki avatar seçimini override eder.
