@@ -70,15 +70,13 @@ class WorkerManager {
       await this.tipSendWorker.start();
       logger.info('TipSendWorker started');
 
-      // Provision wallets worker'ı başlat (walletsız kullanıcılara wallet + welcome deposit)
-      logger.info('ProvisionWalletsWorker started');
-
       // Feed cleanup scheduler'ı başlat (günlük job schedule et)
       await this.feedCleanupScheduler.scheduleDaily();
       logger.info('FeedCleanupScheduler started');
 
-      // Provision wallets scheduler'ı başlat (günlük 04:00)
+      // Provision wallets scheduler'ı başlat (günlük 04:00) + startup'ta hemen bir kez çalıştır
       await this.provisionWalletsScheduler.scheduleDaily();
+      await this.provisionWalletsScheduler.triggerNow();
       logger.info('ProvisionWalletsScheduler started');
 
       // Support request auto-complete scheduler'ı başlat (her saat başı job schedule et)

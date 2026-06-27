@@ -58,6 +58,35 @@ export class ProvisionWalletsScheduler {
     }
   }
 
+  /**
+   * Hemen bir kez çalıştırır. Tarih bazlı jobId ile aynı gün tekrar tetiklenmez
+   * (server aynı gün birden fazla restart atsa bile tek çalışır).
+   */
+  async triggerNow(): Promise<void> {
+    const today = new Date().toISOString().slice(0, 10); // "2026-06-27"
+    const jobId = `provision-wallets-startup-${today}`;
+
+    // Aynı gün zaten queue'da ya da işlenmiş mi?
+    const existing = await this.queue.getJob(jobId);
+    if (existing) {
+      logger.info({ message: 'provision-wallets startup job bugün zaten çalıştı, atlandı', jobId });
+      return;
+    }
+
+    await this.queue.add(
+      'provision-wallets-startup',
+      { type: 'provision-all' },
+      {
+        jobId,
+        removeOnComplete: true,
+        removeOnFail: false,
+        attempts: 2,
+      },
+    );
+
+    logger.info({ message: 'provision-wallets startup job eklendi', jobId });
+  }
+
   async close(): Promise<void> {
     await this.queue.close();
     logger.info({ message: 'ProvisionWalletsScheduler closed' });
