@@ -19,6 +19,7 @@ import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { ExperienceContent } from '../../interfaces/feed/feed.dto';
+import { FeedService } from '../feed/feed.service';
 import {
   asProfileUpdate,
   asProfileUpdateMany,
@@ -4089,6 +4090,15 @@ export class UserService {
         .catch((err) => {
           logger.warn('Failed to increment PROFILE_COMPLETE progress', { userId, error: getErrorMessage(err) });
         });
+
+      // Yeni kullanıcı feed'ini arka planda başlat (cold-start çözümü)
+      const feedService = new FeedService();
+      feedService.initializeNewUserFeed(userId).catch((err) => {
+        logger.warn('Failed to initialize new user feed after profile setup', {
+          userId,
+          error: getErrorMessage(err),
+        });
+      });
 
       return updatedUser;
     });
