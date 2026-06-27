@@ -2249,70 +2249,11 @@ export class UserService {
     const userBase = await this.getUserBase(userId);
     const results: FeedItem[] = [];
 
-    // 1. Inventory'den experience'ları çek (eski sistem)
-    const inventories = await this.prisma.inventory.findMany({
-      where: { userId },
-      include: {
-        product: {
-          include: {
-            group: {
-              include: {
-                subCategory: {
-                  include: {
-                    mainCategory: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        media: true,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-    });
-
-    for (const inv of inventories) {
-      // ProductExperience artık kullanılmıyor, boş array kullan
-      const invRecord = inv as unknown as InventoryLike;
-      const experiences = this.buildExperienceSections(
-        [],
-        invRecord.experienceSummary ?? null,
-      );
-
-      const tags = await this.collectProductTags(String(inv.productId));
-      const images = (invRecord.media || [])
-        .map((m: { mediaUrl: string | null }) => {
-          const mediaPath = m.mediaUrl;
-          if (mediaPath) {
-            return resolveMediaUrl(mediaPath);
-          }
-          return null;
-        })
-        .filter((url: string | null) => url !== null);
-
-      const contextData = this.buildContextDataFromInventory(invRecord);
-
-      results.push({
-        id: String(inv.id),
-        type: 'experience' as const,
-        user: userBase,
-        // Legacy inventory-based experience'lar için mock istatistikler gösterme.
-        // Gerçek like/comment/share/bookmark verisi olmadığı için hepsini 0 döndürüyoruz.
-        stats: {
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          bookmarks: 0,
-        },
-        createdAt: inv.createdAt.toISOString(),
-        contextType: ContextType.PRODUCT,
-        contextData,
-        content: experiences,
-        tags,
-        images,
-      });
-    }
+    // NOT: Eski "inventory tablosundan experience" kaynağı (Section 1) kaldırıldı.
+    // Artık her deneyim bir ContentPost (EXPERIENCE) olarak saklanıyor; envanter kayıtlarını
+    // ayrıca 'experience' postu gibi göstermek (a) ContentPost ile ÇİFT listelenmeye ve
+    // (b) UUID envanter id'siyle silinememeye (DELETE /posts/:id 404) yol açıyordu. Ürün
+    // envanterde kalmaya devam eder, yalnızca ayrı bir gönderi olarak listelenmez.
 
     // 2. ContentPost tablosundan EXPERIENCE tipindeki gönderileri çek
     const experiencePosts = await this.prisma.contentPost.findMany({
@@ -3742,7 +3683,7 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flatMap((chunk) => {
+    const mergedRaw = chunks.flatMap((chunk) => {
       if (chunk && 'items' in chunk && Array.isArray(chunk.items)) {
         return chunk.items as FeedItem[];
       }
@@ -3750,6 +3691,16 @@ export class UserService {
         return chunk as FeedItem[];
       }
       return [] as FeedItem[];
+    });
+
+    // Dedup: 'feed' ve 'experience' card type'ları aynı fetcher'ı (getUserReviews) çağırdığından
+    // experience gönderileri iki kez gelebilir. Aynı id'yi tek sefer tut.
+    const seenIds = new Set<string>();
+    const merged = mergedRaw.filter((item) => {
+      const itemId = String(item?.id ?? '');
+      if (!itemId || seenIds.has(itemId)) return false;
+      seenIds.add(itemId);
+      return true;
     });
 
     const resolveTimestamp = (item: FeedItem): number => {

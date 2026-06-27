@@ -860,53 +860,29 @@ router.post(
       eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
-    // Validate required fields (duration, location, purpose zorunlu). Resolution başarısızsa kabul edilen değerleri döndür.
+    // Zorunlu alanlar: contextType, contextId, content, experience (array), status.
+    // Süre/konum/amaç UI'dan kaldırıldı — artık opsiyonel (validasyon dışı).
+    // experienceSnippetId de zorunlu DEĞİL (AI split başarısızsa kullanıcı metniyle oluşturulur).
     if (
       !request.contextType ||
       !request.contextId ||
-      !request.selectedDurationId ||
-      !request.selectedLocationId ||
-      !request.selectedPurposeId ||
       !request.content ||
       (typeof request.content === 'string' && request.content.trim() === '') ||
       !Array.isArray(request.experience) ||
       request.experience.length === 0
-      // experienceSnippetId zorunlu DEĞİL: AI split başarısız olduğunda (ör. Gemini rate limit)
-      // kullanıcının kendi metniyle (experience array) gönderi oluşturulabilmeli.
     ) {
-      const missingResolution =
-        !request.selectedDurationId ||
-        !request.selectedLocationId ||
-        !request.selectedPurposeId;
-      const body: Record<string, unknown> = {
+      return res.status(400).json({
         success: false,
         message:
-          'Required fields: contextType, contextId, selectedDurationId (duration), selectedLocationId (location), selectedPurposeId (purpose), content, experience (array), status, experienceSnippetId. Sent values for duration/location/purpose must match an option name or UUID.',
+          'Required fields: contextType, contextId, content, experience (array), status.',
         received: {
           contextType: request.contextType,
           contextId: request.contextId,
-          selectedDurationId: request.selectedDurationId ? 'provided' : 'missing',
-          selectedLocationId: request.selectedLocationId ? 'provided' : 'missing',
-          selectedPurposeId: request.selectedPurposeId ? 'provided' : 'missing',
           content: request.content ? 'provided' : 'missing',
           experience: Array.isArray(request.experience) ? `array(${request.experience.length})` : typeof request.experience,
           status: request.status ?? 'missing',
-          experienceSnippetId: request.experienceSnippetId ? 'provided' : 'missing',
         },
-      };
-      if (missingResolution) {
-        try {
-          const options = await postService.getExperienceOptions();
-          body.availableOptions = {
-            duration: options.durations.map((d) => d.name),
-            location: options.locations.map((l) => l.name),
-            purpose: options.purposes.map((p) => p.name),
-          };
-        } catch {
-          // ignore
-        }
-      }
-      return res.status(400).json(body);
+      });
     }
 
     // status zorunlu ve sadece 'own' (I owned) veya 'tested' (I tried) kabul et
