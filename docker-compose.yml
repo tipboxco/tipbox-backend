@@ -222,7 +222,9 @@ services:
         reservations:
           memory: 16M
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      # 127.0.0.1 kullan: container içinde localhost ::1'e (IPv6) çözülüyor, nginx ise
+      # sadece IPv4 (listen 80) dinlediği için localhost ile bağlantı reddediliyor.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 5
