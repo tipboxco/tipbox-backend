@@ -43,7 +43,6 @@ async function main() {
       SELECT 1 FROM wallets w
       WHERE w.user_id = u.id
         AND w.provider != 'CUSTOM'
-        AND w.smart_account_address IS NOT NULL
     )
     ORDER BY u.created_at ASC
   `;
