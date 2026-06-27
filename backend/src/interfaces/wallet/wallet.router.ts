@@ -819,10 +819,9 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  // Contract → DB sync: pasif (WALLET_BALANCE_SYNC_ENABLED=true yapılırsa çalışır)
-  const balanceSyncEnabled = process.env.WALLET_BALANCE_SYNC_ENABLED === 'true';
+  // Contract → DB sync: her GET /balance çağrısında tetiklenir (smartAccountAddress varsa)
   const sdk = getWalletProvider();
-  if (balanceSyncEnabled && sdk.isConfigured() && wallet.smartAccountAddress) {
+  if (sdk.isConfigured() && wallet.smartAccountAddress) {
     const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
     if (!syncResult.success) {
       logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
@@ -863,9 +862,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     }
 
     if (attempt.success) {
-      if (balanceSyncEnabled) {
-        await walletService.syncWalletBalanceFromChain(wallet.id);
-      }
+      await walletService.syncWalletBalanceFromChain(wallet.id);
       const after = await walletService.getBalance(wallet.id);
       balance = after.balance ?? 0;
       locked = after.lockedBalance ?? 0;
