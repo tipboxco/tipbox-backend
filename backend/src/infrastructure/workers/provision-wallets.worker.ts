@@ -62,13 +62,15 @@ export class ProvisionWalletsWorker {
       return { processed: 0, created: 0, skipped: 0, failed: 0 };
     }
 
-    // smartAccountAddress'i olmayan tüm kullanıcılar (hiç wallet yok VEYA mock wallet var)
+    // Gerçek (CUSTOM olmayan) Thirdweb wallet + smartAccountAddress'i olmayan tüm kullanıcılar.
+    // CUSTOM provider mock/sahte kayıtlardır — smart_account_address dolu olsa bile ele alınır.
     const users = await this.prisma.$queryRaw<UserRow[]>`
       SELECT u.id, u.email
       FROM users u
       WHERE NOT EXISTS (
         SELECT 1 FROM wallets w
         WHERE w.user_id = u.id
+          AND w.provider != 'CUSTOM'
           AND w.smart_account_address IS NOT NULL
       )
       ORDER BY u.created_at ASC
