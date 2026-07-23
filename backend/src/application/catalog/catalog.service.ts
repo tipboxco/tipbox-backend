@@ -1962,6 +1962,9 @@ export class CatalogService {
       // Önce arama terimiyle eşleşen product'ları bul
       // ⚠️ KRİTİK: Sadece product name, description ve brand name'de arama yapılmalı
       // Product group veya kategori adı ile eşleşme YAPILMAMALI
+      // Not: Ürünler katalog hiyerarşisine categoryId ile bağlıdır (Category level=2 → product group,
+      // parent level=1 → sub category, parent.parent level=0 → main category).
+      // Legacy groupId/ProductGroup ilişkisi sync tarafından doldurulmadığı için kullanılmaz.
       const matchingProducts = await prisma.product.findMany({
         where: {
           // Sadece ürün adı, açıklama ve marka adında arama
@@ -1970,20 +1973,24 @@ export class CatalogService {
             { description: { contains: searchTrimmed, mode: 'insensitive' } },
             { brand: { name: { contains: searchTrimmed, mode: 'insensitive' } } },
           ],
-          // ⚠️ KRİTİK: Sadece groupId'si olan product'ları al (group'u olmayan product'ları atla)
-          groupId: { not: null },
+          // ⚠️ KRİTİK: Sadece kataloğa bağlı product'ları al (kategorisi olmayan product'ları atla)
+          categoryId: { not: null },
         },
-        include: {
-          brand: {
+        select: {
+          id: true,
+          name: true,
+          imageUrl: true,
+          categoryId: true,
+          category: {
             select: {
+              id: true,
               name: true,
-            },
-          },
-          group: {
-            include: {
-              subCategory: {
-                include: {
-                  mainCategory: {
+              thumbnail: true,
+              parent: {
+                select: {
+                  id: true,
+                  name: true,
+                  parent: {
                     select: {
                       id: true,
                       name: true,
@@ -1994,6 +2001,8 @@ export class CatalogService {
             },
           },
         },
+        // Güvenlik sınırı: kısa arama terimlerinde tüm tabloyu belleğe almayı engelle
+        take: 500,
       });
 
       // ⚠️ KRİTİK: Aynı productId'ye sahip ürünlerin birden fazla group'ta görünmesini engelle
@@ -2022,8 +2031,8 @@ export class CatalogService {
       >();
 
       for (const product of matchingProducts) {
-        // ⚠️ KRİTİK: Group'u olmayan product'ları atla
-        if (!product.group) continue;
+        // ⚠️ KRİTİK: Kataloğa bağlı olmayan product'ları atla
+        if (!product.category) continue;
 
         // ⚠️ KRİTİK: Bu productId daha önce işlendiyse atla (aynı ürün farklı gruplarda görünmemeli)
         if (processedProductIds.has(product.id)) {
@@ -2031,21 +2040,16 @@ export class CatalogService {
           continue;
         }
 
-        const groupId = product.group.id;
-        const subCategory = product.group.subCategory;
-        const mainCategory = subCategory?.mainCategory;
-
-        // ⚠️ KRİTİK: Product'ın groupId'si ile eşleşmeli
-        if (product.groupId !== groupId) {
-          logger.warn(`Product ${product.id} groupId mismatch: ${product.groupId} vs ${groupId}`);
-          continue;
-        }
+        // Hiyerarşi: category (level=2, product group) → parent (level=1, sub) → parent.parent (level=0, main)
+        const groupId = product.category.id;
+        const subCategory = product.category.parent;
+        const mainCategory = subCategory?.parent;
 
         if (!productGroupsMap.has(groupId)) {
           productGroupsMap.set(groupId, {
             productGroupId: groupId,
-            productGroupName: product.group.name,
-            productGroupImage: resolveMediaUrl(product.group.imageUrl),
+            productGroupName: product.category.name,
+            productGroupImage: resolveMediaUrl(product.category.thumbnail),
             subCategoryId: subCategory?.id || '',
             subCategoryName: subCategory?.name || '',
             categoryId: mainCategory?.id || '',
