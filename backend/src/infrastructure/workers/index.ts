@@ -4,9 +4,11 @@ import { FeedDistributionWorker } from './feed-distribution.worker';
 import { TrustBackfillWorker } from './trust-backfill.worker';
 import { SupportRequestAutoCompleteWorker } from './support-request-auto-complete.worker';
 import { TipSendWorker } from './tip-send.worker';
+import { ProvisionWalletsWorker } from './provision-wallets.worker';
 import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
 import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
 import { SupportRequestAutoCompleteScheduler } from '../scheduler/support-request-auto-complete.scheduler';
+import { ProvisionWalletsScheduler } from '../scheduler/provision-wallets.scheduler';
 import { getTransactionProcessor } from './transaction-processor';
 import logger from '../logger/logger';
 
@@ -17,9 +19,11 @@ class WorkerManager {
   private trustBackfillWorker: TrustBackfillWorker;
   private supportRequestAutoCompleteWorker: SupportRequestAutoCompleteWorker;
   private tipSendWorker: TipSendWorker;
+  private provisionWalletsWorker: ProvisionWalletsWorker;
   private feedCleanupScheduler: FeedCleanupScheduler;
   private trustBackfillScheduler: TrustBackfillScheduler;
   private supportRequestAutoCompleteScheduler: SupportRequestAutoCompleteScheduler;
+  private provisionWalletsScheduler: ProvisionWalletsScheduler;
   private transactionProcessor: ReturnType<typeof getTransactionProcessor>;
 
   constructor() {
@@ -29,9 +33,11 @@ class WorkerManager {
     this.trustBackfillWorker = new TrustBackfillWorker();
     this.supportRequestAutoCompleteWorker = new SupportRequestAutoCompleteWorker();
     this.tipSendWorker = new TipSendWorker();
+    this.provisionWalletsWorker = new ProvisionWalletsWorker();
     this.feedCleanupScheduler = new FeedCleanupScheduler();
     this.trustBackfillScheduler = new TrustBackfillScheduler();
     this.supportRequestAutoCompleteScheduler = new SupportRequestAutoCompleteScheduler();
+    this.provisionWalletsScheduler = new ProvisionWalletsScheduler();
     this.transactionProcessor = getTransactionProcessor();
   }
 
@@ -68,6 +74,11 @@ class WorkerManager {
       await this.feedCleanupScheduler.scheduleDaily();
       logger.info('FeedCleanupScheduler started');
 
+      // Provision wallets scheduler'ı başlat (günlük 04:00) + startup'ta hemen bir kez çalıştır
+      await this.provisionWalletsScheduler.scheduleDaily();
+      await this.provisionWalletsScheduler.triggerNow();
+      logger.info('ProvisionWalletsScheduler started');
+
       // Support request auto-complete scheduler'ı başlat (her saat başı job schedule et)
       await this.supportRequestAutoCompleteScheduler.scheduleHourly();
       logger.info('SupportRequestAutoCompleteScheduler started');
@@ -96,9 +107,11 @@ class WorkerManager {
       await this.trustBackfillWorker.stop();
       await this.supportRequestAutoCompleteWorker.stop();
       await this.tipSendWorker.stop();
+      await this.provisionWalletsWorker.stop();
       await this.feedCleanupScheduler.close();
       await this.trustBackfillScheduler.close();
       await this.supportRequestAutoCompleteScheduler.close();
+      await this.provisionWalletsScheduler.close();
       this.transactionProcessor.stop();
 
       logger.info('All workers stopped successfully');

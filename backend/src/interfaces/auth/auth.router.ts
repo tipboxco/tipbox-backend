@@ -12,6 +12,7 @@ import {
   authRateLimiter,
   verificationRateLimiter,
 } from '../../infrastructure/middleware/rate-limit.middleware';
+import { DailyRewardService } from '../../application/wallet/daily-reward.service';
 import {
   LoginSchema,
   RegisterSchema,
@@ -172,6 +173,11 @@ router.post('/login', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
       error: error instanceof Error ? error.message : String(error),
     });
   });
+
+  // Günlük giriş ödülü — fire-and-forget
+  new DailyRewardService()
+    .grantLoginReward(user.id)
+    .catch((err) => logger.error({ err, userId: user.id }, 'daily reward başarısız'));
 
   // Response
   const loginData = {

@@ -73,6 +73,9 @@ export const CACHE_KEYS = {
   // Auth related
   TOKEN_BLACKLIST: (token: string) => `blacklist:${token}`,
   LOGIN_ATTEMPTS: (email: string) => `login-attempts:${email}`,
+
+  // Daily login reward cooldown
+  DAILY_REWARD: (userId: string) => `daily-reward:${userId}`,
   
   // Static data
   STATIC_CATEGORIES: () => `static:categories`,

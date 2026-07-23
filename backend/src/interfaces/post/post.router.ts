@@ -806,25 +806,11 @@ router.post(
       }
     }
 
-    // Support both new field names (selectedDurationId) and old field names (step1Duration). Duration, location, purpose zorunlu.
+    // Süre/konum/amaç UI'dan kaldırıldı — artık OPSIYONEL. Verilirse çözülür, yoksa null kalır.
+    // (Eski alan adları da desteklenir: step1Duration, selectedCondition, selectedFrequency.)
     const rawDurationId = req.body.selectedDurationId || req.body.step1Duration || req.body.selectedDuration || null;
     const rawLocationId = req.body.selectedLocationId || req.body.selectedCondition || req.body.selectedLocation || null;
     const rawPurposeId = req.body.selectedPurposeId || req.body.selectedFrequency || req.body.selectedPurpose || null;
-
-    const hasDuration = rawDurationId != null && String(rawDurationId).trim() !== '';
-    const hasLocation = rawLocationId != null && String(rawLocationId).trim() !== '';
-    const hasPurpose = rawPurposeId != null && String(rawPurposeId).trim() !== '';
-    if (!hasDuration || !hasLocation || !hasPurpose) {
-      return res.status(400).json({
-        success: false,
-        message: 'duration, location and purpose are required. Send selectedDurationId, selectedLocationId (localization), selectedPurposeId (or legacy names: step1Duration, selectedLocation, selectedPurpose).',
-        fields: {
-          duration: !hasDuration ? 'missing' : 'provided',
-          location: !hasLocation ? 'missing' : 'provided',
-          purpose: !hasPurpose ? 'missing' : 'provided',
-        },
-      });
-    }
 
     // Resolve option IDs (name to UUID conversion handled in service layer)
     const resolvedIds = await postService.resolveExperienceOptionIds({
@@ -874,53 +860,29 @@ router.post(
       eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
-    // Validate required fields (duration, location, purpose zorunlu). Resolution başarısızsa kabul edilen değerleri döndür.
+    // Zorunlu alanlar: contextType, contextId, content, experience (array), status.
+    // Süre/konum/amaç UI'dan kaldırıldı — artık opsiyonel (validasyon dışı).
+    // experienceSnippetId de zorunlu DEĞİL (AI split başarısızsa kullanıcı metniyle oluşturulur).
     if (
       !request.contextType ||
       !request.contextId ||
-      !request.selectedDurationId ||
-      !request.selectedLocationId ||
-      !request.selectedPurposeId ||
       !request.content ||
       (typeof request.content === 'string' && request.content.trim() === '') ||
       !Array.isArray(request.experience) ||
       request.experience.length === 0
-      // experienceSnippetId zorunlu DEĞİL: AI split başarısız olduğunda (ör. Gemini rate limit)
-      // kullanıcının kendi metniyle (experience array) gönderi oluşturulabilmeli.
     ) {
-      const missingResolution =
-        !request.selectedDurationId ||
-        !request.selectedLocationId ||
-        !request.selectedPurposeId;
-      const body: Record<string, unknown> = {
+      return res.status(400).json({
         success: false,
         message:
-          'Required fields: contextType, contextId, selectedDurationId (duration), selectedLocationId (location), selectedPurposeId (purpose), content, experience (array), status, experienceSnippetId. Sent values for duration/location/purpose must match an option name or UUID.',
+          'Required fields: contextType, contextId, content, experience (array), status.',
         received: {
           contextType: request.contextType,
           contextId: request.contextId,
-          selectedDurationId: request.selectedDurationId ? 'provided' : 'missing',
-          selectedLocationId: request.selectedLocationId ? 'provided' : 'missing',
-          selectedPurposeId: request.selectedPurposeId ? 'provided' : 'missing',
           content: request.content ? 'provided' : 'missing',
           experience: Array.isArray(request.experience) ? `array(${request.experience.length})` : typeof request.experience,
           status: request.status ?? 'missing',
-          experienceSnippetId: request.experienceSnippetId ? 'provided' : 'missing',
         },
-      };
-      if (missingResolution) {
-        try {
-          const options = await postService.getExperienceOptions();
-          body.availableOptions = {
-            duration: options.durations.map((d) => d.name),
-            location: options.locations.map((l) => l.name),
-            purpose: options.purposes.map((p) => p.name),
-          };
-        } catch {
-          // ignore
-        }
-      }
-      return res.status(400).json(body);
+      });
     }
 
     // status zorunlu ve sadece 'own' (I owned) veya 'tested' (I tried) kabul et

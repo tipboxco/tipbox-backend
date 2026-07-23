@@ -13,6 +13,7 @@ import {
   getWalletProvider,
 } from './provider/wallet-provider.factory';
 import { invalidateWalletCache } from '../../infrastructure/cache/cache-invalidation';
+import { WelcomeDepositService } from './welcome-deposit.service';
 
 export class WalletService {
   constructor(
@@ -371,6 +372,7 @@ export class WalletService {
     }
     // Aynı adres zaten var mı kontrol et
     const existingWallets = await this.walletRepo.findByUserId(userId);
+    const isFirstWallet = existingWallets.length === 0;
     const existing = existingWallets.find(w => w.publicAddress.toLowerCase() === publicAddress.toLowerCase());
 
     let wallet: Wallet;
@@ -406,6 +408,14 @@ export class WalletService {
     ).catch(error => {
       logger.error('Error sending wallet connected notification:', error);
     });
+
+    if (isFirstWallet) {
+      try {
+        await new WelcomeDepositService().grant(userId, wallet.id);
+      } catch (err) {
+        logger.error({ err, userId }, 'welcome deposit başarısız');
+      }
+    }
 
     return wallet;
   }

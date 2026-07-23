@@ -16,9 +16,14 @@ import { RewardSourceType } from '../../domain/reward/reward-source-type.enum';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
+import { CacheService } from '../../infrastructure/cache/cache.service';
 import logger from '../../infrastructure/logger/logger';
 
 const router = express.Router();
+const cache = new CacheService();
+
+const BALANCE_SYNC_TTL_SECONDS = 30;
+const balanceSyncThrottleKey = (walletId: string) => `balance-sync-throttle:${walletId}`;
 const walletService = new WalletService();
 const tipsBalanceService = new TipsBalanceService();
 const transactionService = new TransactionService();
@@ -819,13 +824,15 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  // Contract → DB sync: pasif (WALLET_BALANCE_SYNC_ENABLED=true yapılırsa çalışır)
-  const balanceSyncEnabled = process.env.WALLET_BALANCE_SYNC_ENABLED === 'true';
+  // Contract → DB sync: throttle ile en fazla 30 saniyede bir tetiklenir
   const sdk = getWalletProvider();
-  if (balanceSyncEnabled && sdk.isConfigured() && wallet.smartAccountAddress) {
-    const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
-    if (!syncResult.success) {
-      logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
+  if (sdk.isConfigured() && wallet.smartAccountAddress) {
+    const shouldSync = await cache.setNX(balanceSyncThrottleKey(wallet.id), '1', BALANCE_SYNC_TTL_SECONDS);
+    if (shouldSync) {
+      const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
+      if (!syncResult.success) {
+        logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
+      }
     }
   }
 
@@ -863,9 +870,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     }
 
     if (attempt.success) {
-      if (balanceSyncEnabled) {
-        await walletService.syncWalletBalanceFromChain(wallet.id);
-      }
+      await walletService.syncWalletBalanceFromChain(wallet.id);
       const after = await walletService.getBalance(wallet.id);
       balance = after.balance ?? 0;
       locked = after.lockedBalance ?? 0;
@@ -880,6 +885,61 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     locked,
     available,
     pendingTips: locked,
+  });
+}));
+
+/**
+ * @openapi
+ * /api/wallets/balance/sync:
+ *   post:
+ *     summary: Contract'tan bakiye senkronize et (pull-to-refresh)
+ *     description: Smart account adresindeki TIPS bakiyesini contract'tan okuyup DB'yi günceller.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Güncel bakiye
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.post('/balance/sync', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getPreferredWalletForBalance(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, message: 'No wallet found', balance: 0, currency: 'TIPS', locked: 0, available: 0 });
+  }
+
+  const sdk = getWalletProvider();
+  if (!sdk.isConfigured()) {
+    logger.warn({ userId, message: 'balance/sync: wallet provider yapılandırılmamış, DB değerleri dönülüyor' });
+  } else if (!wallet.smartAccountAddress) {
+    logger.warn({ walletId: wallet.id, message: 'balance/sync: smartAccountAddress yok, DB değerleri dönülüyor' });
+  } else {
+    const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
+    if (!syncResult.success) {
+      logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'balance/sync: chain sync başarısız, DB değerleri dönülüyor' });
+    }
+  }
+
+  const { balance: balanceFromDb, lockedBalance: lockedFromDb } = await walletService.getBalance(wallet.id);
+  const balance = balanceFromDb ?? 0;
+  const locked = lockedFromDb ?? 0;
+  const available = Math.max(0, balance - locked);
+
+  return res.json({
+    balance,
+    currency: 'TIPS',
+    locked,
+    available,
+    pendingTips: locked,
+    synced: sdk.isConfigured() && !!wallet.smartAccountAddress,
   });
 }));
 

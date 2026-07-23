@@ -19,6 +19,7 @@ import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { ExperienceContent } from '../../interfaces/feed/feed.dto';
+import { FeedService } from '../feed/feed.service';
 import {
   asProfileUpdate,
   asProfileUpdateMany,
@@ -2248,70 +2249,11 @@ export class UserService {
     const userBase = await this.getUserBase(userId);
     const results: FeedItem[] = [];
 
-    // 1. Inventory'den experience'ları çek (eski sistem)
-    const inventories = await this.prisma.inventory.findMany({
-      where: { userId },
-      include: {
-        product: {
-          include: {
-            group: {
-              include: {
-                subCategory: {
-                  include: {
-                    mainCategory: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        media: true,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-    });
-
-    for (const inv of inventories) {
-      // ProductExperience artık kullanılmıyor, boş array kullan
-      const invRecord = inv as unknown as InventoryLike;
-      const experiences = this.buildExperienceSections(
-        [],
-        invRecord.experienceSummary ?? null,
-      );
-
-      const tags = await this.collectProductTags(String(inv.productId));
-      const images = (invRecord.media || [])
-        .map((m: { mediaUrl: string | null }) => {
-          const mediaPath = m.mediaUrl;
-          if (mediaPath) {
-            return resolveMediaUrl(mediaPath);
-          }
-          return null;
-        })
-        .filter((url: string | null) => url !== null);
-
-      const contextData = this.buildContextDataFromInventory(invRecord);
-
-      results.push({
-        id: String(inv.id),
-        type: 'experience' as const,
-        user: userBase,
-        // Legacy inventory-based experience'lar için mock istatistikler gösterme.
-        // Gerçek like/comment/share/bookmark verisi olmadığı için hepsini 0 döndürüyoruz.
-        stats: {
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          bookmarks: 0,
-        },
-        createdAt: inv.createdAt.toISOString(),
-        contextType: ContextType.PRODUCT,
-        contextData,
-        content: experiences,
-        tags,
-        images,
-      });
-    }
+    // NOT: Eski "inventory tablosundan experience" kaynağı (Section 1) kaldırıldı.
+    // Artık her deneyim bir ContentPost (EXPERIENCE) olarak saklanıyor; envanter kayıtlarını
+    // ayrıca 'experience' postu gibi göstermek (a) ContentPost ile ÇİFT listelenmeye ve
+    // (b) UUID envanter id'siyle silinememeye (DELETE /posts/:id 404) yol açıyordu. Ürün
+    // envanterde kalmaya devam eder, yalnızca ayrı bir gönderi olarak listelenmez.
 
     // 2. ContentPost tablosundan EXPERIENCE tipindeki gönderileri çek
     const experiencePosts = await this.prisma.contentPost.findMany({
@@ -2972,6 +2914,130 @@ export class UserService {
     };
   }
 
+  /**
+   * Kullanıcının SORDUĞU soruları (kendi QUESTION post'ları) listeler.
+   * Profildeki "Questions" sekmesi bunu kullanır.
+   * Not: Kullanıcının başkalarının sorularına yazdığı cevaplar için getUserReplies'a bakın.
+   */
+  async getUserQuestions(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<PaginatedResult<FeedItem>> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: Prisma.ContentPostWhereInput = {
+      userId,
+      type: ContentPostType.QUESTION,
+      ...(cursor ? { id: { lt: cursor } } : {}),
+    };
+
+    const posts = await this.prisma.contentPost.findMany({
+      where: whereClause,
+      include: {
+        question: true,
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    const userBase = await this.getUserBase(userId);
+    const ownedProducts = await this.prisma.inventory.findMany({
+      where: { userId },
+      select: { productId: true },
+    });
+    const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
+
+    // Batch fetch images from PostMedia
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    const results = await Promise.all(
+      posts.map(async (post) => {
+        const stats = await this.getPostStats(String(post.id));
+        const contextType = this.mapContextType(post);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
+        const images = postMediaMap.get(post.id) || [];
+
+        return {
+          id: String(post.id),
+          type: 'question' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          title: post.title,
+          content: post.body,
+          isBoosted: false,
+          images,
+        };
+      })
+    );
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor =
+      hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
   async getUserReplies(
     userId: string,
     options?: { cursor?: string; limit?: number }
@@ -3040,7 +3106,7 @@ export class UserService {
         const stats = await this.getPostStats(String(comment.postId));
         const commentPost = comment.post;
         const contextType = this.mapContextType(commentPost);
-        const contextData = this.buildContextDataFromPost(commentPost, ownedProductIds);
+        const contextData = await this.buildContextDataFromPost(commentPost, ownedProductIds);
         return {
           id: String(comment.id),
           type: 'question' as const,
@@ -3600,7 +3666,7 @@ export class UserService {
           fetcher = this.getUserTips(userId, { limit: perSourceLimit });
           break;
         case 'question':
-          fetcher = this.getUserReplies(userId, { limit: perSourceLimit });
+          fetcher = this.getUserQuestions(userId, { limit: perSourceLimit });
           break;
         case 'experience':
           fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
@@ -3617,7 +3683,7 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flatMap((chunk) => {
+    const mergedRaw = chunks.flatMap((chunk) => {
       if (chunk && 'items' in chunk && Array.isArray(chunk.items)) {
         return chunk.items as FeedItem[];
       }
@@ -3625,6 +3691,16 @@ export class UserService {
         return chunk as FeedItem[];
       }
       return [] as FeedItem[];
+    });
+
+    // Dedup: 'feed' ve 'experience' card type'ları aynı fetcher'ı (getUserReviews) çağırdığından
+    // experience gönderileri iki kez gelebilir. Aynı id'yi tek sefer tut.
+    const seenIds = new Set<string>();
+    const merged = mergedRaw.filter((item) => {
+      const itemId = String(item?.id ?? '');
+      if (!itemId || seenIds.has(itemId)) return false;
+      seenIds.add(itemId);
+      return true;
     });
 
     const resolveTimestamp = (item: FeedItem): number => {
@@ -3965,6 +4041,15 @@ export class UserService {
         .catch((err) => {
           logger.warn('Failed to increment PROFILE_COMPLETE progress', { userId, error: getErrorMessage(err) });
         });
+
+      // Yeni kullanıcı feed'ini arka planda başlat (cold-start çözümü)
+      const feedService = new FeedService();
+      feedService.initializeNewUserFeed(userId).catch((err) => {
+        logger.warn('Failed to initialize new user feed after profile setup', {
+          userId,
+          error: getErrorMessage(err),
+        });
+      });
 
       return updatedUser;
     });

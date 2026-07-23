@@ -48,9 +48,10 @@ export interface InventoryExperienceRequest {
 
 export interface CreateInventoryRequest {
   productId: string;
-  selectedDurationId: string;
-  selectedLocationId: string;
-  selectedPurposeId: string;
+  // Süre/konum/amaç UI'dan kaldırıldı — opsiyonel/nullable (verilmezse null saklanır).
+  selectedDurationId?: string | null;
+  selectedLocationId?: string | null;
+  selectedPurposeId?: string | null;
   content: string;
   experience: InventoryExperienceRequest[];
   status: ExperienceStatus;

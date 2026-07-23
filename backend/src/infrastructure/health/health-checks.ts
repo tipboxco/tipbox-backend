@@ -1,3 +1,4 @@
+import * as v8 from 'v8';
 import { getPrisma } from '../repositories/prisma.client';
 import CacheService from '../cache/cache.service';
 import logger from '../logger/logger';
@@ -115,18 +116,23 @@ export async function checkRedisHealth(): Promise<HealthCheckResult> {
  */
 export function checkMemoryHealth(): HealthCheckResult {
   const memoryUsage = process.memoryUsage();
-  
+
   // MB cinsinden
   const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
   const rssMB = Math.round(memoryUsage.rss / 1024 / 1024);
-  
-  // Heap usage yüzdesi
-  const heapUsagePercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
-  
+
+  // Heap doluluk oranını gerçek heap limitine (--max-old-space-size) göre hesapla.
+  // heapTotal V8 tarafından tembel büyütüldüğü için heapUsed/heapTotal yanıltıcıdır
+  // (limit çok yüksek olsa bile sürekli ~%100 görünür). heap_size_limit gerçek tavandır.
+  const heapLimit = v8.getHeapStatistics().heap_size_limit;
+  const heapLimitMB = Math.round(heapLimit / 1024 / 1024);
+  const heapUsagePercent = (memoryUsage.heapUsed / heapLimit) * 100;
+
   const details = {
     heapUsedMB,
     heapTotalMB,
+    heapLimitMB,
     rssMB,
     heapUsagePercent: Math.round(heapUsagePercent),
   };

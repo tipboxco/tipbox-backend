@@ -101,17 +101,7 @@ router.post(
       errors.push('productId is required');
     }
 
-    if (!body.selectedDurationId || typeof body.selectedDurationId !== 'string') {
-      errors.push('selectedDurationId is required');
-    }
-
-    if (!body.selectedLocationId || typeof body.selectedLocationId !== 'string') {
-      errors.push('selectedLocationId is required');
-    }
-
-    if (!body.selectedPurposeId || typeof body.selectedPurposeId !== 'string') {
-      errors.push('selectedPurposeId is required');
-    }
+    // Süre/konum/amaç UI'dan kaldırıldı — artık OPSIYONEL (verilmezse null kalır).
 
     // owned (own) ise content opsiyonel: boş/eksikse backend Gemini ile Experience metni üretir
     if (typeof body.content !== 'string') {
@@ -162,24 +152,10 @@ router.post(
       purposeId: body.selectedPurposeId,
     });
 
+    // Süre/konum/amaç opsiyonel — çözülemezse null geçer (zorunlu değil).
     const selectedDurationId = resolvedIds.durationId;
     const selectedLocationId = resolvedIds.locationId;
     const selectedPurposeId = resolvedIds.purposeId;
-
-    // Validation: Ensure all IDs were successfully resolved
-    if (!selectedDurationId || !selectedLocationId || !selectedPurposeId) {
-      const missingFields = [];
-      if (!selectedDurationId) missingFields.push('selectedDurationId');
-      if (!selectedLocationId) missingFields.push('selectedLocationId');
-      if (!selectedPurposeId) missingFields.push('selectedPurposeId');
-      
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to resolve experience option IDs',
-        missingFields,
-        hint: 'Sent values for duration/location/purpose must match an option name or UUID. Use GET /posts/experience/options to see available options.',
-      });
-    }
 
     const created = await inventoryService.createInventoryItem(String(userId), {
       ...body,
