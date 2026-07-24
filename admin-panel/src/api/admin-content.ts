@@ -193,6 +193,7 @@ export async function updateContentPost(
     productGroupId: string | null;
     productId: string | null;
     eventId: string | null;
+    images: string[];
   }>
 ) {
   return patch<AdminContentPostListItem>(`${prefix}/content/posts/${id}`, body);

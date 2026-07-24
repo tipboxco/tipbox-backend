@@ -128,6 +128,8 @@ export const AdminContentPostUpdateSchema = z.object({
   productGroupId: z.string().uuid().nullable().optional(),
   productId: z.string().nullable().optional(),
   eventId: z.string().nullable().optional(),
+  // Post görselleri: verildiğinde mevcut medya tamamen bu listeyle değiştirilir
+  images: z.array(z.string().min(1).max(2048)).max(10).optional(),
 });
 
 export const AdminContentCommentsQuerySchema = z.object({

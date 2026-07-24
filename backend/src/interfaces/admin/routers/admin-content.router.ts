@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
@@ -867,6 +868,8 @@ router.patch(
       categoryId?: string | null;
       productGroupId?: string | null;
       productId?: string | null;
+      eventId?: string | null;
+      images?: string[];
     };
     const post = await prisma.contentPost.findUnique({ where: { id } });
     if (!post) throw new NotFoundError('Post bulunamadı');
@@ -880,18 +883,44 @@ router.patch(
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId;
     if (body.productGroupId !== undefined) updateData.productGroupId = body.productGroupId;
     if (body.productId !== undefined) updateData.productId = body.productId;
-    await prisma.$transaction([
-      prisma.contentPost.update({ where: { id }, data: updateData }),
+    if (body.eventId !== undefined) updateData.eventId = body.eventId;
+
+    const changedFields = [
+      ...Object.keys(updateData),
+      ...(body.images !== undefined ? ['images'] : []),
+    ];
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    if (Object.keys(updateData).length > 0) {
+      ops.push(prisma.contentPost.update({ where: { id }, data: updateData }));
+    }
+    // images verildiyse mevcut medyayı tamamen değiştir (post sahibinin userId'siyle)
+    if (body.images !== undefined) {
+      ops.push(prisma.postMedia.deleteMany({ where: { postId: id } }));
+      if (body.images.length > 0) {
+        ops.push(
+          prisma.postMedia.createMany({
+            data: body.images.map((imageUrl, index) => ({
+              postId: id,
+              userId: post.userId,
+              mediaUrl: imageUrl,
+              orderIndex: index,
+            })),
+          })
+        );
+      }
+    }
+    ops.push(
       prisma.adminLog.create({
         data: {
           adminId,
           action: 'CONTENT_POST_UPDATE',
-          description: `postId: ${id}, fields: ${Object.keys(updateData).join(',')}`,
+          description: `postId: ${id}, fields: ${changedFields.join(',')}`,
           entityType: 'content_post',
           entityId: 0,
         },
-      }),
-    ]);
+      })
+    );
+    await prisma.$transaction(ops);
     const updated = await prisma.contentPost.findUnique({
       where: { id },
       include: {

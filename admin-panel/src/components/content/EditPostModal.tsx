@@ -17,6 +17,7 @@ import UserSearchSelect from '../UserSearchSelect';
 import ProductSearchSelect from '../ProductSearchSelect';
 import CategorySearchSelect from '../CategorySearchSelect';
 import EventSearchSelect from '../EventSearchSelect';
+import ImageUploadList from './ImageUploadList';
 import {
   updateContentPost,
   transferPostOwner,
@@ -33,11 +34,19 @@ interface EditPostModalProps {
   onSuccess: () => void;
 }
 
+/** Post medyasını orderIndex sırasıyla düz URL listesine çevirir. */
+function mediaToImages(post: AdminContentPostDetailResponse): string[] {
+  return [...(post.media ?? [])]
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((m) => m.mediaUrl);
+}
+
 function EditPostModal({ open, post, onClose, onSuccess }: EditPostModalProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [transferUserId, setTransferUserId] = useState<string | null>(null);
   const [transferConfirmOpen, setTransferConfirmOpen] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (open && post) {
@@ -50,9 +59,23 @@ function EditPostModal({ open, post, onClose, onSuccess }: EditPostModalProps) {
         subCategoryId: post.subCategoryId || undefined,
         eventId: post.eventId || undefined,
       });
+      setImages(mediaToImages(post));
       setTransferUserId(null);
     }
   }, [open, post, form]);
+
+  /** Boş satırlar atılmış güncel görsel listesi; orijinalden farklıysa döner, değilse null. */
+  const getChangedImages = (): string[] | null => {
+    const cleaned = images.map((u) => u.trim()).filter((u) => u.length > 0);
+    const original = mediaToImages(post);
+    if (
+      cleaned.length === original.length &&
+      cleaned.every((u, i) => u === original[i])
+    ) {
+      return null;
+    }
+    return cleaned;
+  };
 
   const handleSubmit = async () => {
     try {
@@ -90,6 +113,11 @@ function EditPostModal({ open, post, onClose, onSuccess }: EditPostModalProps) {
       const newEventId = values.eventId || null;
       if (newEventId !== (post.eventId || null)) {
         updates.eventId = newEventId;
+      }
+
+      const changedImages = getChangedImages();
+      if (changedImages !== null) {
+        updates.images = changedImages;
       }
 
       // Update post fields if anything changed
@@ -136,6 +164,9 @@ function EditPostModal({ open, post, onClose, onSuccess }: EditPostModalProps) {
       const newEventId = values.eventId || null;
       if (newEventId !== (post.eventId || null)) updates.eventId = newEventId;
 
+      const changedImages = getChangedImages();
+      if (changedImages !== null) updates.images = changedImages;
+
       if (Object.keys(updates).length > 0) {
         await updateContentPost(post.id, updates);
       }
@@ -175,6 +206,13 @@ function EditPostModal({ open, post, onClose, onSuccess }: EditPostModalProps) {
           <Form.Item name="body" label="Body">
             <TextArea rows={6} placeholder="Post content" maxLength={100000} showCount />
           </Form.Item>
+
+          <Divider />
+
+          {/* Images */}
+          <div style={{ marginBottom: 16 }}>
+            <ImageUploadList images={images} onChange={setImages} />
+          </div>
 
           <Divider />
 
